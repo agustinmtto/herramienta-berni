@@ -1,0 +1,49 @@
+[00:00] Bueno, señor, sí, me parece perfecto. O sea, el resumen está claro, hacer el documento de
+[00:05] decir que para empezar vemos a ver qué tal funciona y si funciona lo replicamos con otros.
+[00:09] Luego ver un poco a ver qué hacemos para los novatos, sobre todo, bueno,
+[00:13] para los experimentados, ya lo tenemos más de la mano, pero para novatos hay que ver qué tal
+[00:17] funciona eso, prestar alguna buena idea. El tema era herramienta, ya he visto que me has
+[00:21] puesto por el discord que te parece que se puede hacer, que lo vas a poder sacar y al final,
+[00:28] bueno, los colores si eso te los doy o con los html, los propios de los otros,
+[00:33] sabes, de las landings que ya hacemos, ya, claro, tocha gpt te lo hace y sobre todo al final lo que
+[00:39] tiene que hacer la idea es hacer un pequeño formulario, que eso si quieres lo podemos montar
+[00:45] juntos, es decir, queremos que nos diga su nombre, que nos ponga... Bueno, quizá eso tiene que ir
+[00:53] al final para mandarle el diagnóstico, o sea, lo que queremos es que la gente responda varias
+[01:00] preguntas para que nos dea nosotros información y luego mandarle el diagnóstico pero quedarnos
+[01:07] con sus datos. ¿Por qué? Porque habrá mucha gente que pondrá tonterías y pondrá que tiene 100
+[01:12] dólares y habrá gente que igual pone que tiene 100.000, a que tiene 100.000 le mandaremos
+[01:17] un mensaje. Entonces, el formulario prediagnóstico tiene que tener información para hacer un buen
+[01:24] diagnóstico y tiene que tener el nombre y el teléfono, pero igual es mejor poner el nombre
+[01:30] y el teléfono al final, después de las preguntas. ¿Qué preguntas tenemos que hacer para dar un buen
+[01:35] diagnóstico? Bueno, tenemos que dar primero cantidad de capital, yo le preguntaría su perfil de
+[01:41] riesgo, si busca ser muy agresivo, agresivo, moderado, conservador o muy conservador. Y luego,
+[01:51] pues no sé si en formato texto que nos ponga su porfolio, cuánto tiene líquido y tal,
+[01:58] hacerle preguntas de ese estilo o darle nosotros como una tabla y que nos ponga, sabes, como que
+[02:04] rellenes, como si fuera bitcoin, ¿qué porcentaje tienes? El USD en dólares, ¿cuánto porcentaje
+[02:11] tienes? En Ethereum ¿qué porcentaje tienes? En Alcoins ¿qué porcentaje tienes? Y pomen notas
+[02:17] cuáles son o algo así. De tal forma que tengamos esa información, a mí lo que más me interesa
+[02:24] es por un lado que el cliente reciba algo de valor, por ejemplo, si dice que es conservador y
+[02:30] tiene muy poco bitcoin, hacerlo saber, pero sobre todo la gente que nos ponga cuánto tiene líquido en
+[02:39] USD como hacerle ver en plan, hostia, tienes el 40% en dólares o el 60% en dólares, tu mayor riesgo
+[02:47] es quedarte fuera por las condiciones actuales, como ponerle prisa por la parte de cuántos
+[02:51] dólares tienes y luego el hacerle ver que por lo general esos porfolios no están adecuados
+[02:58] con quienes son ellos como inversor. Por ejemplo, si tienen muchas alcohíes diferentes, decirle,
+[03:02] oye, mira, tienes 10 alcohíes diferentes, no tiene ningún sentido. Si tiene, por ejemplo,
+[03:07] todo en Ethereum o mitad Ethereum, mitad XRP, pues, digamos, darle un diagnóstico de que eso en
+[03:14] realidad no es correcto. Y bueno, ya te digo, al final es generarles esa duda de tanto de los
+[03:22] dólares que tienen fuera, porque también es más fácil venderle al que tiene dólares,
+[03:26] al que está 100% invertido, es mucho más difícil, porque sí, le puedes vender la recomposición del
+[03:32] porfolio, pero es mucho más complicado. Entonces, me centraría sobre todo en saber exactamente cuánto
+[03:41] dinero tiene disponible a la persona. Entonces, lo podemos preguntar aparte cuántos dólares
+[03:47] tienes disponibles aparte de este porfolio o que nos lo ponga dentro del porfolio o hacer
+[03:51] y que es una pregunta después de qué aportación mensual tienes pensado hacer o cuánto tienes
+[03:57] disponible para invertir en los próximos 12 meses, dólares. Sé que es un poco largo el audio,
+[04:03] pero te voy tirando ideas para que vayas visualizando. Al final, lo que yo quiero saber es eso. La
+[04:08] cantidad total de capital y lo que me pongan en la, digamos, en la consultoría, digamos,
+[04:14] en el diagnóstico, me da absolutamente igual. Lo que pasa es que le tiene que valer la pena,
+[04:18] que diga, hostia, he puesto aquí mis datos y me han dado cualquier basura. No, quiero que le valga
+[04:23] la pena. Y yo que sé, quizá incluso podemos grabar algún vídeo y que mande ese vídeo también
+[04:29] como regalo. Sabes, al final de todo, que le mandemos el diagnóstico, que nos genere clau o
+[04:34] todo lo que sea, se le mande al correo o, no sé, se imagino que al correo, a la que pediré
+[04:39] también el correo. Y dentro del correo que haya un vídeo que lo grabo yo y ahí es,
+[04:45] es genérico para todo el mundo igual, pero doy algo como único que solo lo doy ahí. ¿Sabes? No sé qué te parece.
