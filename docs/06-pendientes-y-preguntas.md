@@ -6,7 +6,7 @@
 |---|---|---|---|---|
 | 1 | **Definir las preguntas finales** (psicológicas, orden, fricción) | BLOQUEA el JSON y la IA | Berni | Pendiente — prometió "en estos días" |
 | 2 | **Formato JSON final** `pregunta/respuesta` | BLOQUEA la integración con Supabase | Equipo dev (con Berni las preguntas) | Boceto en `03-especificacion.md` |
-| 3 | **Validar branch de Supabase como entorno dev** | Riesgo para testear sin tocar producción | Agustín / Miled | Por confirmar |
+| 3 | ~~Validar branch de Supabase como entorno dev~~ | Resuelto en `docs/08` §1.1: se descarta la branch de Supabase (cobra compute); se usa **Supabase local (CLI + Docker)** con migrations | Agustín / Miled | ✅ Cerrado |
 | 4 | **Módulo de leads dentro del sistema del negocio** (nueva entrada menú lateral, reporte filtrable) — ¿lo hacemos nosotros o lo hacen ellos? | Duda abierta | Por definir con Miled |
 | 5 | Benchmark del **quiz funnel de Ramiro** (grabar pantalla, extraer preguntas/flujo) | Alimenta diseño de preguntas | Lisandro | Por confirmar si se hizo |
 | 6 | Host de videos + embed trackeable (duración vista) | Requiere definir player (Loom/u otro con eventos) | Miled / dev | Abierto |
@@ -15,7 +15,9 @@
 | 9 | Videos segmentados de Berni (3–4 por rango de capital) | Dependencia de contenido | Berni | Pendiente |
 | 10 | Entorno dev/producción dentro del negocio (hoy solo producción + local) | Coordinar branch/PR | Miled | Acordado armarlo |
 
-## Roadmap sugerido
+## Roadmap
+
+El roadmap vivo (modelo de trabajo + fases) está en **`docs/08-roadmap.md`** — es la referencia autoritativa. El esbozo original a continuación se conserva como contexto:
 
 **Fase 1 — Infraestructura de captación (sin IA):**
 Sustituir el índice del prototipo por aplicación real (Next.js o estático deployado según convenga con el repo del negocio) y el tracking completo (session_id, tiempos por pregunta, dropoffs, UTMs). JSON → Supabase (branch dev).

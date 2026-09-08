@@ -16,6 +16,7 @@ Herramienta de captación (lead magnet) para el negocio de Berni (Metacrypto Clu
 | `docs/05-prototipo.md` | Qué hace el prototipo actual y su camino a "quitar mock" | Migrar/implementar |
 | `docs/06-pendientes-y-preguntas.md` | Bloqueantes, próximas acciones, roadmap, métricas | Al planear sprints |
 | `docs/07-scm-gestion-configuracion.md` | Nombrado de archivos, estructura del repo, branches, formato de commits, prácticas | Antes de cualquier commit/PR |
+| `docs/08-roadmap.md` | Modelo de trabajo (Supabase local + Docker, migrations, feature branches, PRs) y fases de implementación | Al planear/implementar cualquier fase |
 
 Fuentes primarias (si hace falta el detalle crudo): `Transcripcion_Reunion.md` y `transcripcion_audio.md` en la raíz.
 

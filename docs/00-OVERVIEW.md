@@ -58,3 +58,5 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 | `04-design-system.md` | Colores, tipografía, componentes (fuente de verdad visual) |
 | `05-prototipo.md` | Descripción del prototipo `index.html` y cómo migrarlo |
 | `06-pendientes-y-preguntas.md` | Todo lo que falta definir + acciones de cada persona |
+| `07-scm-gestion-configuracion.md` | Nombrado, estructura del repo, branches, commits |
+| `08-roadmap.md` | Modelo de trabajo (Supabase local + Docker, migrations, PRs) y fases de implementación |

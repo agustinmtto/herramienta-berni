@@ -4,7 +4,7 @@ Reglas obligatorias sobre el ciclo de vida del repo: nombrado de archivos, estru
 
 ## 1. Nombrado de archivos
 
-- **Documentación (`docs/`):** `NN-nombre-kebab-case.md` — prefijo numérico de dos dígitos marcando el orden de lectura (consistente con `00-OVERVIEW.md` … `06-pendientes-y-preguntas.md`). El siguiente doc nuevo es `07-…`.
+- **Documentación (`docs/`):** `NN-nombre-kebab-case.md` — prefijo numérico de dos dígitos marcando el orden de lectura (consistente con `00-OVERVIEW.md` … `08-roadmap.md`). Un doc nuevo usa el siguiente número libre.
   - Si hay que congelar una versión, archivar en `docs/archive/` con sufijo `-vX.Y-YYYYMMDD.md`; **no renombrar el archivo vivo**, porque los índices y referencias apuntan al mismo nombre.
 - **Código:** `kebab-case` para archivos/paths; `camelCase` para identificadores JS/TS; `PascalCase` para clases/componentes.
 - **Assets (imágenes, video, fuentes):** `contexto-descripcion.ext` (ej. `landing-hero-fondo.webp`), minúsculas, sin espacios ni acentos.
