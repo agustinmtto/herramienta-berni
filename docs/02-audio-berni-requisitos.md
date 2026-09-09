@@ -12,7 +12,7 @@ Fuente: `transcripcion_audio.md` (audio de WhatsApp, 4 sept 2026, ~5 min). Es la
 2. **Perfil de riesgo** — muy agresivo / agresivo / moderado / conservador / muy conservador.
 3. **Composición del portfolio** — formato tipo tabla: % Bitcoin, % USD/stables, % %, una línea de notas. Alternativa: campo de texto libre donde lo describa.
 
-## Psicología / ganchos del diagnóstico (para el motor de IA)
+## Psicología / ganchos del diagnóstico (para el motor determinístico)
 
 - **Dólares parados:** "hay que ponerle prisa" por el tema de cuántos dólares tiene. Riesgo de "quedarse fuera" por las condiciones actuales → presión de urgencia.
 - **Desajuste perfil/portfolio:** "por regla general esos porfolios no están adecuados a quiénes son como inversores".
@@ -35,4 +35,4 @@ Berni valida la docencia de metodología: empezar con un caso ("hacer el documen
 El prototipo `index.html` ya traduce esto a preguntas y reglas:
 - Capital invertido, liquidez disponible, aportación mensual, perfil de riesgo, experiencia, distribución de portfolio (tabla sumando 100%), nº de altcoins, preocupación (texto libre), contacto al final.
 - Motor mock: detecta desajuste perfil-exposición, dispersión de altcoins, liquidez parada como "coste de oportunidad" y hunde el gancho de "quedarte fuera".
-- Al migrar a IA, este motor mock define el **tono y estructura esperada** del diagnóstico generado (secciones 1–5 + plan de acción numerado).
+- Este motor define el **tono y estructura esperada** del diagnóstico final por algoritmo determinístico (secciones 1–5 + plan de acción numerado). No hay IA: se clasifica/regla directamente sobre las respuestas (todas de opción múltiple).

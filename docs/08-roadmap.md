@@ -27,7 +27,7 @@ Resumen del flujo acordado:
 
 | Paso | Acción | Nota |
 |---|---|---|
-| Accesos | Miled da acceso al proyecto Supabase (lectura basta para el dump) y al repo GitHub del negocio | La key de Anthropic la gestiona el negocio (secrets nunca en repo, `docs/07` §5) |
+| Accesos | Miled da acceso al proyecto Supabase (lectura basta para el dump) y al repo GitHub del negocio | Secrets de servicio en variables de entorno, nunca en repo (`docs/07` §5) |
 | Extraer schema | `supabase link --project-ref <ref>` → `supabase db pull` (alternativa: `pg_dump --schema-only`) | Genera la migration **baseline** (`<ts>_remote_schema.sql`); sin datos |
 | Init local | `supabase init` + `supabase start` | Studio `:54323` · API `:54321` · DB `:54322` |
 | Seed | `supabase/seed.sql` con leads/sesiones de prueba | No reinventar data a mano en cada `db reset` |
@@ -62,9 +62,9 @@ Por funcionalidad/responsabilidad (no por carpetas):
 |---|---|---|
 | DB / modelo de datos | Migrations: leads, respuestas, sesiones, tracking; RLS; índices | - |
 | Wizard + UI | Migrar prototipo → Next.js con el design system (`docs/04`) | - |
-| Tracking | `session_id`, tiempos por pregunta, dropoff, UTMs, eventos | - |
-| Motor IA | Prompt (tono/ganchos de `docs/03` §4), llamada a Claude, salida estructurada | - |
-| Entrega | PDF por email (Resend), video thank-you, alerta lead caliente | - |
+| Tracking | `session_id` + dropoff (hasta qué pregunta llega el lead) | - |
+| Motor determinístico | Reglas/algoritmo sobre las respuestas (tono/ganchos de `docs/03` §4), salida estructurada | - |
+| Entrega | Pantalla final de video (3 videos: 2 genéricos + 1 variable por pregunta final, mapeo config-driven), alerta lead caliente | - |
 | Módulo de leads (admin) | Entrada en menú lateral + reporte filtrable | - |
 
 ## 3. Fases
@@ -78,29 +78,28 @@ Por funcionalidad/responsabilidad (no por carpetas):
 
 **Salida:** ambos devs levantan el sistema completo en local (`supabase start` + `npm run dev`).
 
-### Fase 1 — Captación sin IA
-**Objetivo:** wizard real, datos a Supabase y tracking completo, con el diagnóstico aún mock (el prototipo sigue siendo referencia de comportamiento).
+### Fase 1 — Captación
+**Objetivo:** wizard real, datos a Supabase y tracking mínimo, con el diagnóstico determinístico del prototipo (el prototipo sigue siendo referencia de comportamiento).
 - [ ] Wizard en Next.js con las preguntas actuales del prototipo (mientras Berni define las definitivas — bloqueante #1 de `docs/06`; el JSON agnóstico hace el swap barato)
-- [ ] Migrations: tablas de leads/respuestas/sesiones/eventos + flag `hot_lead` (> 10.000 USD, bloqueante #8)
+- [ ] Migrations: tablas de leads/respuestas/sesiones + flag `hot_lead` (> 10.000 USD, bloqueante #8)
 - [ ] `POST` del JSON agnóstico (`docs/03` §2) al terminar el wizard
-- [ ] Tracking: `session_id`, tiempos por pregunta, dropoff, UTMs (`docs/03` §6)
+- [ ] Tracking: `session_id` + dropoff (hasta qué pregunta llega el lead) (`docs/03` §6)
 
 **Salida:** una sesión completa en local queda persistida y reproducible por `session_id`.
 
-### Fase 2 — Diagnóstico con IA
-- [ ] Prompt con tono/secciones/ganchos obligatorios (`docs/03` §4), salida estructurada para pantalla y PDF
-- [ ] Reemplazo del motor determinístico (`buildDiagnosis`) por llamada a Claude (API del negocio)
-- [ ] Manejo de errores: timeout/reintento y fallback si la IA falla
+### Fase 2 — Motor determinístico definitivo
+- [ ] Migrar/reglas del diagnóstico al producto real: algoritmo determinístico sobre las respuestas (tono/secciones/ganchos de `docs/03` §4), salida estructurada para pantalla (y PDF si corresponde)
+- [ ] Recalibrar reglas cuando Berni entregue las preguntas definitivas
 
-**Salida:** diagnóstico real generado por IA, visible en local.
+**Salida:** diagnóstico determinístico real, visible en local.
 
 ### Fase 3 — Entrega y triaje
-- [ ] PDF del diagnóstico por email vía Resend + UTMs/pixel de apertura
-- [ ] Video de Berni en thank-you page según rango de capital + player trackeable (depende del bloqueante #6: host de videos)
+- [ ] **Pantalla final de video** (`docs/03` §9): espacio de video tras los datos; una pregunta final determina cuál de 3 videos se muestra (2 genéricos + 1 variable por respuesta) — mapeo config-driven
+- [ ] Host del player + embed trackeable (depende del bloqueante #6; videos de Berni — sub-pendiente del #11)
 - [ ] Alerta al triaje para lead caliente (notificación en el sistema)
 - [ ] Módulo de leads en el sistema (menú lateral, reporte filtrable — bloqueante #4, definir con Miled quién lo hace)
 
-**Salida:** flujo punta a punta funcionando en local: wizard → IA → email → video → alerta → reporte.
+**Salida:** flujo punta a punta funcionando en local: wizard → diagnóstico → pantalla final de video → alerta → reporte.
 
 ### Fase 4 — Producción y lanzamiento orgánico
 - [ ] Revisión integrada final: todo merged a main, probado en local punta a punta
@@ -138,5 +137,5 @@ A/B de formatos (largo vs. pop-up de continuación, orden de preguntas), anális
 | Supabase cobra compute por branches | Local Docker = cero branches de DB; solo producción del negocio |
 | Berni tarda con las preguntas definitivas | Fase 1 con preguntas del prototipo; JSON agnóstico permite el swap sin refactor |
 | Migrations destructivas sobre tablas del negocio | Review obligatoria de Miled en el PR de release; nunca `drop` sin migración inversa |
-| Secrets (Supabase/Anthropic/Resend) | Solo variables de entorno, nunca en repo (`docs/07` §5) |
+| Secrets (Supabase/Resend) | Solo variables de entorno, nunca en repo (`docs/07` §5) |
 líneas 3-141

@@ -6,7 +6,7 @@ Archivo único: HTML + CSS + JS inline (~530 líneas). És descartable como cód
 
 1. **Hero** — landing: eyebrow, h1 ("Tu portfolio cripto, bajo la lupa"), chips (personalizado / 2 minutos / gratis), CTA dorado, nota de confianza.
 2. **Wizard** — una pregunta por pantalla: índice `[01]`, título Oswald, hint Sora, opciones/lista; nav Anterior/Siguiente; barra de progreso + contador.
-3. **Analizando** — 5 pasos "IA" animados (perfil → portfolio → desajustes → liquidez → plan).
+3. **Analizando** — 5 pasos animados (perfil → portfolio → desajustes → liquidez → plan).
 4. **Resultado** — 5 secciones (situación real, desajuste principal, coste de la liquidez, plan de acción, video regalo) + CTA de llamada.
 
 ## Preguntas actuales (state: `{capital, cash, monthly, risk, experience, portfolio{btc,eth,stables,alt,fiat}, altcoins, concern, name, phone, email, consent}`)
@@ -23,9 +23,9 @@ Archivo único: HTML + CSS + JS inline (~530 líneas). És descartable como cód
 | 8 | concern | texto libre (280 chars, opcional) |
 | 9 | contact | nombre + teléfono + email + consentimiento |
 
-## Motor mock (`buildDiagnosis`)
+## Motor de reglas (`buildDiagnosis`) — casi producto final
 
-Aproxima el futuro diagnóstico con IA. Reglas implementadas (mantener como comportamiento objetivo):
+Es el motor **determinístico** que se llevará al producto real (no hay IA). Reglas implementadas (mantener como comportamiento objetivo):
 
 - `hotLead` = cash ≥ umbral (25k mock) **o** capital ≥ 100k → log en consola (en producción: flag al backend; **umbral real decidido = 10.000 USD**).
 - `exposureMismatch`: perfil conservador (idx ≥ 3) con mucha exposición (alt + 0.5·eth > 30) → warning "tu cartera y tu perfil están peleados".
@@ -38,6 +38,7 @@ Aproxima el futuro diagnóstico con IA. Reglas implementadas (mantener como comp
 
 - `CONFIG.ctaUrl` — Calendly/WhatsApp real.
 - `CONFIG.videoUrl` — video regalo.
-- Diagnóstico **IA real** (Claude vía API del negocio) en vez de mock.
+- Diagnóstico determinístico definitivo: recalibrar reglas cuando Berni entregue las preguntas finales.
+- Pantalla final de video (`docs/03` §9): espacio de video tras los datos; pregunta final → 1 de 3 videos (2 genéricos + 1 variable). Falta pregunta de segmentación y videos.
 - Envío de lead real a Supabase del negocio (hoy solo `console.info`).
 - Umbral de lead caliente: alinear con 10.000.

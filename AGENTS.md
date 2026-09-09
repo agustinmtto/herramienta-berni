@@ -23,9 +23,9 @@ Fuentes primarias (si hace falta el detalle crudo): `Transcripcion_Reunion.md` y
 ## Decisiones firmes (no re-abrir)
 
 - **Integración por código** con el stack del negocio (Supabase + Next.js, branch + PR). Go High Level fue evaluado y descartado; queda solo como CRM/agendas del negocio.
-- La IA corre con la **API del negocio** (Anthropic); el diagnóstico deja de ser determinístico.
-- Datos de contacto **al final** del wizard; Berni diseña las preguntas (enfoque psicológico) — **pendiente crítico**.
-- Diagnóstico: **PDF por email** + **video de Berni según capital** en la thank-you page, con UTMs de tracking.
+- **Sin IA**: clasificación de leads y diagnóstico **determinísticos** por algoritmo (las respuestas son todas de opción múltiple).
+- Tracking mínimo: la métrica clave es **hasta qué pregunta llega el lead** (si termina el cuestionario o no).
+- **Final del flujo (TBD)**: aún no se sabe si el diagnóstico se muestra en el HTML de la página o si se toca un botón de "enviar mensaje por WhatsApp"; tampoco las preguntas. Se construye la estructura de forma que al tenerlas solo haya que cambiar la última parte y las preguntas.
 - Lead caliente = capital **> 10.000 USD** → llamada de triaje.
 
 ## Estructura del repo

@@ -7,10 +7,9 @@ Versión unificada a partir del prototipo + decisiones de la reunión. Los cambi
 - Landing + wizard de preguntas + pantalla "analizando" + resultado (diagnóstico) → **front propio**, diseñado con el design system de Metacrypto (§04).
 - Al finalizar el wizard:
   - `POST` de **JSON agnóstico** a la API del negocio (Supabase + Next.js en su repo, vía branch/PR).
-  - Diagnóstico mostrado en pantalla, generado por **Claude (API del negocio)** — se reemplaza el motor determinístico mock.
-  - Thank-you page: **video de Berni** segmentado por capital + CTA a agenda.
-  - **PDF del diagnóstico por email** (Resend del negocio).
-- Tracking: eventos de sesión, tiempo por pregunta, abandonos, UTMs, apertura/cliqueo del email, visualización del video.
+  - Diagnóstico mostrado por pantalla, generado por **algoritmo determinístico** (mismo enfoque que `buildDiagnosis` del prototipo: reglas sobre las respuestas, todas de opción múltiple).
+  - **Pantalla final de video**: después de los datos de contacto, una pregunta determina qué video se muestra (opción 1 → video 1, opción 2 → video 2, ...) en un espacio reservado para el reproductor. **3 videos en total: dos genéricos + uno que varía según la respuesta del usuario.**
+- Tracking: **mínimo requerido — hasta qué pregunta llega el lead** (si termina el cuestionario o no). Lo demás (UTMs, tiempos) es opcional/ampliable.
 
 ## 2. Formato de datos (JSON a definir con Berni)
 
@@ -42,32 +41,28 @@ Estructura de la reunión (a conservar como restricciones duales):
 
 Las **preguntas actuales del prototipo** (capital, liquidez, aportación, riesgo, experiencia, portfolio, altcoins, preocupación, contacto) sirven de base de trabajo mientras Berni no emita las definitivas.
 
-## 4. Motor de diagnóstico (IA)
+## 4. Motor de diagnóstico (determinístico, sin IA)
 
-- Reemplazar el motor determinístico (`buildDiagnosis` en `index.html`) por llamada a la API propiedad del negocio.
-- Tono, secciones y ganchos obligatorios del prompt (derivados del audio + prototipo):
+- **No hay IA.** El diagnóstico se genera con un **algoritmo determinístico** sobre las respuestas (todas de opción múltiple). El `buildDiagnosis` del prototipo es la base y define el tono/estructura objetivo.
+- El cualquier caso, tono, secciones y ganchos obligatorios del diagnóstico (derivados del audio + prototipo):
   1. "Tu situación real" — espejar las respuestas con números.
   2. "El desajuste principal" — perfil declarado vs. exposición real / dispersión de altcoins.
   3. "El coste de tu liquidez parada" — riesgo de "quedarse fuera" (gancho prioritario).
   4. "Tu plan de acción" — pasos concretos numerados.
-  5. Video/C-regalo + CTA a llamada estratégica.
-- A mano: el PDF enviado por email debe replicar la misma calidad ("que valga la pena").
-- Detectar **lead caliente**: capital > 10.000 USD → flag en el JSON para alerta de triaje.
+  5. Cierre + **pantalla final de video**: un espacio de video cuya selección depende de una pregunta final (segmentación). Mapeo: opción elegida → video. Ver §9.
+- Detectar **lead caliente**: capital > 10.000 USD → flag en el JSON para alerta de triaje (regla determinística sobre la respuesta de capital).
 
 ## 5. Integración con el sistema del negocio
 
 - Repo del negocio (Next.js + Supabase): incorporar la herramienta como **módulo nuevo** (entrada en menú lateral con reporte de leads filtrable), trabajo en **branch** → PR.
-- Entorno dev: se propone branch de Supabase como entorno de desarrollo (validar que funciona y controlar compute usage).
+- Entorno dev: Supabase local (CLI + Docker) con migrations (decidido en `docs/08` §1.1).
 - Leads con flag caliente → notificación al triaje.
-- PDF por email vía **Resend** (ya lo usan) + tracking de apertura por UTMs.
 
-## 6. Tracking (requisito fuerte del negocio)
+## 6. Tracking (mínimo requerido)
 
-- Cada interacción en el wizard: tiempos por pregunta, scrolls, clicks, dropoffs: en qué pregunta cae cada sesión.
-- UTMs en el link de Berni (Instagram) → atribución de fuente.
-- Email de diagnóstico con pixel/UTM (clicker) para apertura/cliqueo.
-- Video embed trackeable con la duración vista (por ej. Loom o un player con eventos).
-- Sesión reproducible vía `session_id`; ideal para futuras automatizaciones de outreach.
+- **Métrica clave: hasta qué pregunta llega el lead** — si termina el cuestionario o en cuál abandona (`dropoff_question`).
+- Opcional/ampliable a futuro: UTMs, tiempo por pregunta, aperturas de email, video. No es requisito de lanzamiento.
+- Sesión identificable vía `session_id` (permite reproducir y ampliar tracking después).
 
 ## 7. Legal / compliance
 
@@ -78,3 +73,12 @@ Las **preguntas actuales del prototipo** (capital, liquidez, aportación, riesgo
 
 - No se integra con Go High Level vía webhook (fue evaluado y descartado en favor de la integración con código).
 - No se construye un nuevo sistema de CRM; se integra en el que existe.
+
+## 9. Pantalla final de video
+
+- Es la **última pantalla** del flujo, después de los datos de contacto y del diagnóstico.
+- Contiene un **espacio reservado para video** (player embedeable, host por definir).
+- Una **pregunta final** decide qué video se muestra: opción 1 → video 1, opción 2 → video 2, etc.
+- **3 videos en total**: dos genéricos + uno que **varía según lo que elija el usuario** (segmentación dinámica).
+- El mapeo opción→video es config-driven (no hardcodeado), para poder cambiar preguntas/videos sin tocar código.
+- Pendiente: quiénes graban los videos (Berni), qué pregunta los segmenta, host del player.

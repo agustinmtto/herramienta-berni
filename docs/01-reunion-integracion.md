@@ -4,6 +4,8 @@ Fuente: `Transcripcion_Reunion.md` (transcripción completa en la raíz del repo
 
 Participantes: **Berni Pérez** (dueño del negocio), **Miled Gassibe** (cerebro técnico/operativo del negocio), **Lisandro Pecchenino** y **Agustín Maretto** (equipo que desarrolla la herramienta).
 
+> **Nota posterior a la reunión:** transcripción fiel de lo hablado. Décisiones posteriores: diagnóstico determinístico sin IA, tracking limitado a la métrica mínima (hasta qué pregunta llega el lead) y **pantalla final de video** (3 videos: 2 genéricos + 1 variable según pregunta final). Las decisiones vigentes están en `docs/00-OVERVIEW.md` y `docs/03-especificacion.md`.
+
 ## 1. Alcance y flujo pactado
 
 - La herramienta es un **workflow**, no un sistema aparte: los datos deben caer en la **misma base** que usa el negocio (evitar dos bases con problemas de integridad).

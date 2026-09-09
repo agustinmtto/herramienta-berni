@@ -6,27 +6,27 @@
 
 ## Objetivo
 
-Herramienta de captación de leads (lead magnet / quiz funnel): una landing con un wizard de preguntas → el lead responde → recibe un **diagnóstico personalizado de su portfolio cripto** generado con IA → el lead deja sus datos de contacto → los datos entran al sistema del negocio → si es lead caliente (capital > 10.000 USD), un triaje lo llama **en caliente**.
+Herramienta de captación de leads (lead magnet / quiz funnel): una landing con un wizard de preguntas → el lead responde → recibe un **diagnóstico personalizado de su portfolio cripto generado con un algoritmo determinístico** (todas las respuestas son de opción múltiple) → según cómo termina el flujo (TBD, ver abajo) el lead deja sus datos o contacta → los datos entran al sistema del negocio → si es lead caliente (capital > 10.000 USD), un triaje lo llama **en caliente**.
 
 ## El flujo de negocio (punta a punta)
 
 1. Berni publica en Instagram (orgánico, primero): *"comenta 'X' y te mando la herramienta"*.
 2. El lead abre el link de la herramienta → landing + wizard.
 3. El wizard hace preguntas (capital, perfil de riesgo, portfolio, miedos...). **Datos de contacto al final** (decisión clave).
-4. Al terminar → pantalla de análisis → diagnóstico por pantalla + **video de Berni personalizado según el capital** (en la thank-you page) + **PDF por email**.
+4. Al terminar → pantalla de análisis → diagnóstico por pantalla → **pantalla final de video**: una pregunta determina qué video se muestra (opción 1 → video 1, opción 2 → video 2, etc.). **3 videos en total: dos genéricos + uno que varía según lo que elija el usuario.**
 5. Las respuestas llegan como **JSON agnóstico** (`pregunta/respuesta`) a la base del negocio.
 6. Lead caliente (capital > 10.000 USD) → alerta al triaje → llamada rápida.
-7. Tracking completo: UTMs, tiempo por pregunta, abandono, apertura de emails, visualización del video.
+7. Tracking mínimo: **hasta qué pregunta llega el lead** (dropoff / finalización). UTMs opcional.
 
 ## Decisiones ya tomadas (reunión con el negocio)
 
 | Tema | Decisión |
 |---|---|
 | Integración | ~~Go High Level~~ → **código propio integrado en su stack: Supabase + GitHub** (branch + PR). Fue la decisión final pese a que en la reunión se evaluó GHL |
-| IA | Se usa la **API propia del negocio** (Anthropic/Claude). El diagnóstico ya NO es determinístico |
-| Preguntas | Las define **Berni** (enfoque psicológico: generar duda / vacío de conocimiento). Aún no definidas |
-| Datos de contacto | Al **final** del wizard, como requisito para recibir el diagnóstico |
-| Diagnóstico | **PDF por email** + **video en thank-you page** según segmento de capital |
+| Clasificación/diagnóstico | ~~IA~~ → **determinístico por algoritmo** (respuestas todas de opción múltiple). El motor por reglas del prototipo es la base |
+| Preguntas | Las define **Berni** (enfoque psicológico: generar duda / vacío de conocimiento). Aún no definidas — BLOQUEANTE principal |
+| Final del flujo | **Pantalla final de video**: tras los datos, una pregunta determina cuál de los **3 videos** se muestra (2 genéricos + 1 variable según la respuesta del usuario). Pendiente: definir la pregunta de segmentación y grabar los videos |
+| Tracking | Mínimo: **hasta qué pregunta llega el lead** (si termina el cuestionario o no). Puede ampliarse luego |
 | Lead caliente | Capital **> 10.000 USD** → llamada de triaje rápida |
 | Lanzamiento | Primero orgánico (testeo), si funciona → publicidad |
 
@@ -42,10 +42,10 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 
 ## Estado actual
 
-- ✅ Prototipo funcional en `index.html` (landing + wizard + diagnóstico mock con reglas JS, sin IA)
+- ✅ Prototipo funcional en `index.html` (landing + wizard + diagnóstico con reglas JS determinísticas — base del motor final)
 - ✅ Design system extraído de landings del negocio
 - ✅ Reunión de integración realizada (ver `01-reunion-integracion.md`)
-- ⏳ Pendiente: preguntas de Berni → JSON final, entorno dev en Supabase, PRD para Miled
+- ⏳ Pendiente: preguntas de Berni → JSON final, decisión del final del flujo (HTML vs. WhatsApp), entorno dev en Supabase, PRD para Miled
 
 ## Mapa de esta documentación
 
