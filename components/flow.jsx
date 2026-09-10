@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { wizardConfig, questions, progressFor } from "../lib/question-config";
 import { buildDiagnosis } from "../lib/engine";
 
-const SCREENS = { HERO: "hero", WIZARD: "wizard", SEGMENT: "segment", ANALYZING: "analyzing", RESULT: "result", VIDEO: "video" };
+const SCREENS = { HERO: "hero", WIZARD: "wizard", SEGMENT: "segment", ANALYZING: "analyzing", FINAL: "final" };
 
 export default function Flow() {
   const [screen, setScreen] = useState(SCREENS.HERO);
@@ -23,26 +23,23 @@ export default function Flow() {
   const question = questions[qIndex];
   const answered = Object.keys(answers).filter((k) => k !== "contact").length;
 
-  const pick = (option) => {
-    const next = { ...answers, [question.id]: { answer: option.label, title: question.title, tags: option.tags } };
-    next[question.id].tags = option.tags;
-    setAnswers(next);
-  };
-  const move = (delta) => setQIndex((i) => Math.max(0, Math.min(i + delta, contact)));
-
   const startWizard = () => {
     setStarted(true);
     setScreen(SCREENS.WIZARD);
   };
 
-  const submitContact = async (form) => {
+  const pick = (option) => {
+    setAnswers({ ...answers, [question.id]: { answer: option.label, tags: option.tags } });
+  };
+  const move = (delta) => setQIndex((i) => Math.max(0, Math.min(i + delta, contact)));
+
+  const submitContact = (form) => {
     setContactError(null);
     if (!form.name.length || !form.email.length || !form.consent) {
-      setContactError("Completá nombre, email y aceptá el consentimiento para poder enviarte el diagnóstico.");
+      setContactError("Completá nombre, email y aceptá recibir el diagnóstico.");
       return;
     }
-    const merged = { ...answers, contact: { name: form.name, email: form.email, consent: true } };
-    setAnswers(merged);
+    setAnswers({ ...answers, contact: { name: form.name, email: form.email, consent: true } });
     setScreen(SCREENS.SEGMENT);
   };
 
@@ -73,17 +70,14 @@ export default function Flow() {
       return;
     }
     if (!sent) {
-      sendLead(buildPayload());
+      sendLead(buildPayload(false));
       setSent(true);
     }
-    setScreen(SCREENS.RESULT);
+    setScreen(SCREENS.FINAL);
   };
-
-  const finishResult = () => setScreen(SCREENS.VIDEO);
 
   function buildPayload(abandoned = false) {
     if (abandoned) {
-      // Partial payload: only what the lead answered so far.
       const partial = questions
         .filter((q) => q.type !== "contact" && answers[q.id])
         .map((q) => ({ pregunta: q.title, respuesta: answers[q.id].answer }));
@@ -117,7 +111,7 @@ export default function Flow() {
   }
 
   const diagnosis = useMemo(() => {
-    if (screen !== SCREENS.RESULT && screen !== SCREENS.VIDEO) return null;
+    if (screen !== SCREENS.FINAL) return null;
     const lead = questions.map((q) => {
       const cur = answers[q.id];
       return { type: q.type || "option", title: q.title, answer: cur ? cur.answer : null, tags: cur ? cur.tags : [] };
@@ -130,11 +124,11 @@ export default function Flow() {
     const onLeave = () => {
       if (sent || !started) return;
       const inWizard = screen === SCREENS.WIZARD;
-      const runProgress = [SCREENS.WIZARD, SCREENS.SEGMENT, SCREENS.ANALYZING, SCREENS.RESULT].includes(screen);
+      const runProgress = [SCREENS.WIZARD, SCREENS.SEGMENT, SCREENS.ANALYZING].includes(screen);
       if (runProgress) {
         const payload = buildPayload(true);
         payload.signals.dropoff_question = inWizard && question ? question.title : wizardConfig.segmentQuestion.title;
-        navigator.sendBeacon("api/lead", JSON.stringify(payload));
+        navigator.sendBeacon("/api/lead", JSON.stringify(payload));
       }
     };
     window.addEventListener("pagehide", onLeave);
@@ -149,8 +143,8 @@ export default function Flow() {
           {wizardConfig.brand.titleStart} <em>{wizardConfig.brand.titleEm}</em>
         </h1>
         <p className="hero-sub">
-          Respondé unas preguntas sobre tu situación y te armamos un diagnóstico con lo que hoy no está funcionando
-          y qué hacer al respecto.
+          Respondé unas preguntas sobre tu situación y recibí un diagnóstico de lo que no está funcionando y qué
+          hacer al respecto.
         </p>
         <div className="chip-row">
           {wizardConfig.brand.chips.map((c) => (
@@ -170,10 +164,8 @@ export default function Flow() {
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${progressFor(answered, contact)}%` }} />
           </div>
-          <div className="progress-label">{`[0${Math.max(qIndex + 1)}] ${answered + 1} / ${contact + 1}`}</div>
         </div>
 
-        <span className="q-index">{`PREGUNTA 0${answered + 1}`}</span>
         <h2 className="q-title">{question.title}</h2>
         {question.hint && <p className="q-hint">{question.hint}</p>}
 
@@ -193,11 +185,7 @@ export default function Flow() {
               </button>
             ))}
             {answers[question.id] && (
-              <button
-                className="btn-gold opt-next"
-                type="button"
-                onClick={() => (qIndex === contact ? null : move(1))}
-              >
+              <button className="btn-gold opt-next" type="button" onClick={() => move(1)}>
                 Siguiente
               </button>
             )}
@@ -216,7 +204,6 @@ export default function Flow() {
   if (screen === SCREENS.SEGMENT) {
     return (
       <main className="page-shell wizard-section">
-        <span className="q-index">ÚLTIMA PREGUNTA</span>
         <h2 className="q-title">{wizardConfig.segmentQuestion.title}</h2>
         <div className="opt-list">
           {wizardConfig.segmentQuestion.options.map((option, i) => (
@@ -245,55 +232,70 @@ export default function Flow() {
           {steps.map((s, i) => (
             <div className="step" key={s}>
               <span>{s.toUpperCase()}</span>
-              <span className={
-                i === analyzing ? "state-active" : i < analyzing ? "state-done" : "state-pending"
-              }>
+              <span className={i === analyzing ? "state-active" : i < analyzing ? "state-done" : "state-pending"}>
                 {i === analyzing ? "procesando..." : i < analyzing ? "✓ listo" : "en cola"}
               </span>
             </div>
           ))}
         </div>
-        <Timer key={analyzing} advance={advanceAnalysis} />
+        <AnalysisTimer step={analyzing} onDone={advanceAnalysis} />
       </main>
     );
   }
 
-  if (screen === SCREENS.RESULT && diagnosis) {
+  if (screen === SCREENS.FINAL && diagnosis) {
+    const mappedVideo = wizardConfig.videos.items.find(
+      (v) => v.id === wizardConfig.segmentQuestion.options[segIndex || 0].video
+    );
     return (
       <main className="page-shell result-section">
         <div className="result-head">
-          <span className="eyebrow">Tu diagnóstico</span>
-          <h2>Tu portfolio, <em>bajo la lupa</em></h2>
+          <span className="eyebrow">Auditoría · Metacrypto Club</span>
+          <h2>Mi portfolio <em>bajo la lupa</em></h2>
         </div>
-        {diagnosis.sections.map((sec, i) => (
-          <div className="section-block" key={sec.title}>
-            <h3>{`0${i + 1} · ${sec.title}`}</h3>
-            {sec.body && <Callout tone={sec.body.kind} text={sec.body.text} />}
-            {sec.items && (
-              <ol className="plan-list">
-                {sec.items.map((it) => (
-                  <li key={it}>{it}</li>
-                ))}
-              </ol>
-            )}
-          </div>
-        ))}
-        <div className="final-cta">
-          <p>{wizardConfig.finalCta.text}</p>
-          <button className="btn-gold" type="button" onClick={finishResult} disabled={sending}>
-            {sending ? "Enviando..." : "Ver el video de regalo"}
-          </button>
-        </div>
-      </main>
-    );
-  }
 
-  if (screen === SCREENS.VIDEO && diagnosis) {
-    const video = wizardConfig.videos.items.find((v) => v.id === wizardConfig.segmentQuestion.options[segIndex || 0].video);
-    return (
-      <main className="page-shell video-section">
-        <span className="eyebrow">Tunel final</span>
-        <VideoBox video={video} />
+        <div className="section-block">
+          <h3>Tu problema principal</h3>
+          <Callout tone={diagnosis.sections[1].body.kind} text={diagnosis.sections[1].body.text} />
+        </div>
+
+        <div className="section-block">
+          <h3>El coste de tu liquidez parada</h3>
+          <Callout tone={diagnosis.sections[2].body.kind} text={diagnosis.sections[2].body.text} />
+        </div>
+
+        <div className="section-block">
+          <h3>Tu plan de acción</h3>
+          <ol className="plan-list">
+            {diagnosis.sections[3].items.map((it) => (
+              <li key={it}>{it}</li>
+            ))}
+          </ol>
+        </div>
+
+        <div className="metric-block">
+          <h3>Tu métrica norte</h3>
+          <p>Capital con plan estructurado + despliegue del dinero parado.</p>
+        </div>
+
+        <div className="recursos-head">
+          <span className="eyebrow">Tus recursos para resolverlo</span>
+          <p>Todo lo que necesitás para ejecutar el plan, sin pagar nada.</p>
+        </div>
+
+        <div className="video-grid">
+          {wizardConfig.videos.items.map((v) => (
+            <div className={`video-card${mappedVideo && v.id === mappedVideo.id ? " featured" : ""}`} key={v.id}>
+              <div className="video-box">
+                <span className="video-tag">{v.id === mappedVideo?.id ? "Tu problema específico" : "Recurso"}</span>
+                <div className="play-circle">▶</div>
+                <div className="video-label">{v.label}</div>
+              </div>
+              <p className="video-desc">{v.label}</p>
+            </div>
+          ))}
+        </div>
+
         <div className="final-cta">
           <p>{wizardConfig.finalCta.text}</p>
           <a className="btn-gold" href={wizardConfig.finalCta.url || "#"} style={{ alignSelf: "center" }}>
@@ -312,23 +314,21 @@ function Callout({ tone, text }) {
   return <div className={`section-callout ${tone || "info"}`}>{text}</div>;
 }
 
-function VideoBox({ video }) {
-  return (
-    <>
-      <div className="video-box">
-        <div className="play-circle">▶</div>
-        <span className="video-placeholder-tag">placeholder · sin video hosteado</span>
-      </div>
-      <div className="video-caption">{video ? video.label : ""}</div>
-    </>
-  );
-}
-
-function Timer({ advance, key }) {
+function AnalysisTimer({ step, onDone }) {
+  const doneRef = useRef(false);
   useEffect(() => {
-    const t = setTimeout(advance, 950);
-    return () => clearTimeout(t);
-  }, [advance]);
+    doneRef.current = false;
+    const t = setTimeout(() => {
+      if (!doneRef.current) {
+        doneRef.current = true;
+        onDone();
+      }
+    }, 950);
+    return () => {
+      doneRef.current = true;
+      clearTimeout(t);
+    };
+  }, [step, onDone]);
   return null;
 }
 
@@ -346,16 +346,12 @@ function ContactForm({ onSubmit, error }) {
         <input id="w-email" type="email" value={form.email} onChange={update("email")} autoComplete="email" />
       </div>
       <label className="opt" style={{ cursor: "pointer" }}>
-        <input
-          type="checkbox"
-          checked={form.consent}
-          onChange={(e) => setForm({ ...form, consent: e.target.checked })}
-        />
-        Acepto recibir mi diagnóstico por email
+        <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
+        Acepto recibir mi diagnóstico
       </label>
       {error && <div className="contact-error">{error}</div>}
       <button className="btn-gold opt-next" type="button" onClick={() => onSubmit(form)}>
-        Enviar
+        Ver mi diagnóstico
       </button>
     </div>
   );

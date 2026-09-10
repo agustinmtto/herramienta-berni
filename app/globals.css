@@ -390,25 +390,86 @@ h1, h2, h3 {
   font-size: 1.4rem;
 }
 
-.video-placeholder-tag {
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+}
+
+.video-card { display: flex; flex-direction: column; gap: 10px; }
+
+.video-card.featured .video-box { border-color: var(--gold); box-shadow: 0 0 24px rgba(225, 202, 113, 0.12); }
+
+.video-box {
+  border: 1px solid var(--gold-line);
+  border-radius: 14px;
+  aspect-ratio: 16 / 9;
+  background:
+    radial-gradient(80% 70% at 50% 20%, rgba(225, 202, 113, 0.12), transparent 70%),
+    linear-gradient(180deg, #101010, #060606);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.video-tag {
   position: absolute;
-  top: 14px;
-  right: 16px;
+  top: 12px;
+  left: 14px;
+  border: 1px solid var(--gold-line);
+  border-radius: 999px;
+  padding: 3px 10px;
   font-family: var(--font-mono), monospace;
-  color: var(--text-faint);
-  font-size: 0.65rem;
-  letter-spacing: 0.2em;
+  color: var(--gold);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
-.video-caption {
+.play-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold);
+  font-size: 1.2rem;
+}
+
+.video-label, .video-desc {
   font-family: var(--font-mono), monospace;
   color: var(--text-dim);
-  font-size: 0.75rem;
-  letter-spacing: 0.2em;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   text-align: center;
 }
+
+.metric-block {
+  border: 1px solid var(--gold-line);
+  border-radius: 14px;
+  padding: 22px 24px;
+  background: var(--gold-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metric-block h3 { color: var(--gold); font-size: 1rem; }
+.metric-block p { color: var(--text-dim); font-size: 0.95rem; }
+
+.recursos-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: center;
+  margin-top: 8px;
+}
+
+.recursos-head p { color: var(--text-dim); font-size: 0.92rem; }
 
 @keyframes rise {
   from { opacity: 0; transform: translateY(22px); }
