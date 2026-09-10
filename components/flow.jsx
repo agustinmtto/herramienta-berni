@@ -35,11 +35,26 @@ export default function Flow() {
 
   const submitContact = (form) => {
     setContactError(null);
-    if (!form.name.length || !form.email.length || !form.consent) {
-      setContactError("Completá nombre, email y aceptá recibir el diagnóstico.");
+    const contact = {
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      consent: form.consent,
+    };
+    if (!contact.name || !contact.email || !contact.phone || !contact.consent) {
+      setContactError("Completá nombre, email, teléfono y aceptá recibir el diagnóstico.");
       return;
     }
-    setAnswers({ ...answers, contact: { name: form.name, email: form.email, consent: true } });
+    if (!/.+@.+\..+/.test(contact.email)) {
+      setContactError("Ingresá un email válido.");
+      return;
+    }
+    const phoneDigits = contact.phone.replace(/\D/g, "");
+    if (phoneDigits.length < 8 || phoneDigits.length > 15) {
+      setContactError("Ingresá un teléfono válido con código de país.");
+      return;
+    }
+    setAnswers({ ...answers, contact });
     setScreen(SCREENS.SEGMENT);
   };
 
@@ -103,6 +118,7 @@ export default function Flow() {
       lead: {
         name: answers.contact ? answers.contact.name : "",
         email: answers.contact ? answers.contact.email : "",
+        phone: answers.contact ? answers.contact.phone : "",
         consent: Boolean(answers.contact),
       },
       signals: { dropoff_question: null, finished_at: new Date().toISOString() },
@@ -339,7 +355,7 @@ function AnalysisTimer({ step, onDone }) {
 }
 
 function ContactForm({ onSubmit, error }) {
-  const [form, setForm] = useState({ name: "", email: "", consent: false });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", consent: false });
   const update = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   return (
     <div className="contact-grid">
@@ -351,9 +367,21 @@ function ContactForm({ onSubmit, error }) {
         <label htmlFor="w-email">Email</label>
         <input id="w-email" type="email" value={form.email} onChange={update("email")} autoComplete="email" />
       </div>
+      <div className="field">
+        <label htmlFor="w-phone">Teléfono (WhatsApp)</label>
+        <input
+          id="w-phone"
+          type="tel"
+          value={form.phone}
+          onChange={update("phone")}
+          autoComplete="tel"
+          inputMode="tel"
+          placeholder="+54 9 3585 000000"
+        />
+      </div>
       <label className="opt" style={{ cursor: "pointer" }}>
         <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
-        Acepto recibir mi diagnóstico
+        Acepto recibir mi diagnóstico y que me contacten por email, teléfono o WhatsApp
       </label>
       {error && <div className="contact-error">{error}</div>}
       <button className="btn-gold opt-next" type="button" onClick={() => onSubmit(form)}>
