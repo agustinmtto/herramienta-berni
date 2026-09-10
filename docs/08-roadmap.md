@@ -1,6 +1,6 @@
 # Roadmap de implementación
 
-Cómo pasamos del prototipo (`index.html`) al producto integrado en el stack del negocio (Supabase + Next.js). Los requisitos viven en `docs/03-especificacion.md` (fuente de verdad); este doc define el **cómo**: entornos, ramas, migraciones, división de trabajo y fases. Cualquier cambio de requisitos se edita primero en `docs/03` y se refleja aquí.
+Cómo pasamos del prototipo (`prototipos/index.html`) al producto integrado en el stack del negocio (Supabase + Next.js). Los requisitos viven en `docs/03-especificacion.md` (fuente de verdad); este doc define el **cómo**: entornos, ramas, migraciones, división de trabajo y fases. Cualquier cambio de requisitos se edita primero en `docs/03` y se refleja aquí.
 
 ## 1. Modelo de trabajo
 
@@ -80,26 +80,30 @@ Por funcionalidad/responsabilidad (no por carpetas):
 
 ### Fase 1 — Captación
 **Objetivo:** wizard real, datos a Supabase y tracking mínimo, con el diagnóstico determinístico del prototipo (el prototipo sigue siendo referencia de comportamiento).
-- [ ] Wizard en Next.js con las preguntas actuales del prototipo (mientras Berni define las definitivas — bloqueante #1 de `docs/06`; el JSON agnóstico hace el swap barato)
-- [ ] Migrations: tablas de leads/respuestas/sesiones + flag `hot_lead` (> 10.000 USD, bloqueante #8)
-- [ ] `POST` del JSON agnóstico (`docs/03` §2) al terminar el wizard
-- [ ] Tracking: `session_id` + dropoff (hasta qué pregunta llega el lead) (`docs/03` §6)
+- [x] Wizard en Next.js con preguntas genéricas config-driven (mientras Berni define las definitivas — bloqueante #1 de `docs/06`; el swap es barato: solo `lib/question-config.js`) — branch `feature/wizard-mvp`
+- [x] `POST` del JSON agnóstico (`docs/03` §2) — stub con validación (`app/api/lead`); falta apuntar a Supabase del negocio
+- [x] Tracking: `session_id` + dropoff por `sendBeacon` (`docs/03` §6)
+- [x] Suite de tests en `test/` (`npm test`, unit + integración + seguridad)
+- [ ] Migrations: tablas de leads/respuestas/sesiones + flag `hot_lead` (> 10.000 USD, bloqueante #8) — requiere Fase 0
+- [ ] Deploy en Netlify (conectar repo) y merge del PR
 
-**Salida:** una sesión completa en local queda persistida y reproducible por `session_id`.
+**Salida (parcial):** flujo completo funcionando en local (pantallas wizard → segmentación → análisis → final única diagnóstico+videos) con lead visible en logs del endpoint.
 
 ### Fase 2 — Motor determinístico definitivo
-- [ ] Migrar/reglas del diagnóstico al producto real: algoritmo determinístico sobre las respuestas (tono/secciones/ganchos de `docs/03` §4), salida estructurada para pantalla (y PDF si corresponde)
+- [x] Motor determinístico stub (`lib/engine.js`) con reglas por tags sobre opciones múltiples, 4 secciones canónicas (`docs/03` §4)
 - [ ] Recalibrar reglas cuando Berni entregue las preguntas definitivas
 
 **Salida:** diagnóstico determinístico real, visible en local.
 
 ### Fase 3 — Entrega y triaje
-- [ ] **Pantalla final de video** (`docs/03` §9): espacio de video tras los datos; una pregunta final determina cuál de 3 videos se muestra (2 genéricos + 1 variable por respuesta) — mapeo config-driven
-- [ ] Host del player + embed trackeable (depende del bloqueante #6; videos de Berni — sub-pendiente del #11)
+- [x] **Pantalla final única** (`docs/03` §9): diagnóstico + grid de 3 video-cards placeholders (2 genéricos + 1 destacado según pregunta de segmentación) — mapeo config-driven
+- [x] PDF dev-only por botón (`docs/03` §9.1) para afinar diseño
+- [ ] PDF por email vía Resend + tracking de apertura (bloqueante #12) y quitar botón dev
+- [ ] Videos reales de Berni + host del player + embed trackeable (sub-pendiente del #11)
 - [ ] Alerta al triaje para lead caliente (notificación en el sistema)
 - [ ] Módulo de leads en el sistema (menú lateral, reporte filtrable — bloqueante #4, definir con Miled quién lo hace)
 
-**Salida:** flujo punta a punta funcionando en local: wizard → diagnóstico → pantalla final de video → alerta → reporte.
+**Salida:** flujo punta a punta funcionando en local: wizard → diagnóstico → entrega (video + PDF) → alerta → reporte.
 
 ### Fase 4 — Producción y lanzamiento orgánico
 - [ ] Revisión integrada final: todo merged a main, probado en local punta a punta

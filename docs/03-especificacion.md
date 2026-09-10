@@ -74,11 +74,14 @@ Las **preguntas actuales del prototipo** (capital, liquidez, aportación, riesgo
 - No se integra con Go High Level vía webhook (fue evaluado y descartado en favor de la integración con código).
 - No se construye un nuevo sistema de CRM; se integra en el que existe.
 
-## 9. Pantalla final de video
+## 9. Pantalla final (implementado en MVP)
 
-- Es la **última pantalla** del flujo, después de los datos de contacto y del diagnóstico.
-- Contiene un **espacio reservado para video** (player embedeable, host por definir).
-- Una **pregunta final** decide qué video se muestra: opción 1 → video 1, opción 2 → video 2, etc.
-- **3 videos en total**: dos genéricos + uno que **varía según lo que elija el usuario** (segmentación dinámica).
-- El mapeo opción→video es config-driven (no hardcodeado), para poder cambiar preguntas/videos sin tocar código.
-- Pendiente: quiénes graban los videos (Berni), qué pregunta los segmenta, host del player.
+- Es la **última pantalla** del flujo, y es **única**: diagnóstico + videos en la misma página (referencia visual: el caso de la Screencap con "tu problema principal" + "plan de acción" + "tus recursos para resolverlo").
+- Después de los datos de contacto hay una **pregunta de segmentación** que determina qué video se destaca: opción 1 → video 1, opción 2 → video 2, etc. (2 genéricos + 1 variable según la respuesta).
+- El diagnóstico se muestra en secciones: problema principal (callout), coste de la liquidez parada, plan de acción numerado, métrica norte, y grid de 3 video-cards (placeholder 16:9, mapeo opción→video **config-driven** en `lib/question-config.js`).
+- El orden de la pregunta que segmenta puede cambiar cuando Berni defina las preguntas reales; solo cambia config.
+
+### 9.1 PDF del diagnóstico (parcial)
+
+- **Hoy (desarrollo):** botón "Descargar PDF — solo desarrollo" (`lib/pdf.js`, jsPDF + html2canvas) que genera el PDF del sheet completo con el mismo estilo, A4 paginado. Sirve para afinar el diseño sin depender del email.
+- **Después (producción):** envío del PDF por email vía **Resend** del negocio + tracking de apertura; quitar el botón dev.
