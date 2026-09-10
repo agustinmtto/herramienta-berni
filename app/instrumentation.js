@@ -1,4 +1,5 @@
-// Server startup logging — docs/03 §6: traceability in the terminal.
+// Log de arranque del servidor — docs/03 §6: trazabilidad en la terminal.
+// Next lo llama una vez al boot; imprime modo, versión de Node y qué módulos hay activos.
 export async function register() {
   const ts = new Date().toISOString().slice(11, 19);
   console.log(`\n[${ts}] ── metacrypto diagnostic tool ─────────────────────────`);
