@@ -42,6 +42,8 @@ export default function Flow() {
       email: form.email.trim(),
       phone: form.phone.trim(),
       consent: form.consent,
+      // Honeypot: hidden field, humans never fill it (docs/09-security).
+      website: (form.website || "").trim(),
     };
     if (!contact.name || !contact.email || !contact.phone || !contact.consent) {
       setContactError("Completá nombre, email, teléfono y aceptá recibir el diagnóstico.");
@@ -122,6 +124,7 @@ export default function Flow() {
         email: answers.contact ? answers.contact.email : "",
         phone: answers.contact ? answers.contact.phone : "",
         consent: Boolean(answers.contact),
+        website: answers.contact ? answers.contact.website : "",
       },
       signals: { dropoff_question: null, finished_at: new Date().toISOString() },
       answers: payloadAnswers,
@@ -146,7 +149,10 @@ export default function Flow() {
       if (runProgress) {
         const payload = buildPayload(true);
         payload.signals.dropoff_question = inWizard && question ? question.title : wizardConfig.segmentQuestion.title;
-        navigator.sendBeacon("/api/lead", JSON.stringify(payload));
+        navigator.sendBeacon(
+          "/api/lead",
+          new Blob([JSON.stringify(payload)], { type: "application/json" })
+        );
       }
     };
     window.addEventListener("pagehide", onLeave);
@@ -374,7 +380,7 @@ function AnalysisTimer({ step, onDone }) {
 }
 
 function ContactForm({ onSubmit, error }) {
-  const [form, setForm] = useState({ name: "", email: "", phone: "", consent: false });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", consent: false, website: "" });
   const update = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   return (
     <div className="contact-grid">
@@ -398,9 +404,21 @@ function ContactForm({ onSubmit, error }) {
           placeholder="+54 9 3585 000000"
         />
       </div>
+      {/* Honeypot — hidden from humans, bots that autofill it get discarded (docs/09-security). */}
+      <div className="hp-field" style={{ position: "absolute", left: "-9999px", top: 0, height: 0, overflow: "hidden" }} aria-hidden="true">
+        <label htmlFor="w-website">No completar</label>
+        <input
+          id="w-website"
+          tabIndex={-1}
+          autoComplete="off"
+          value={form.website}
+          onChange={update("website")}
+        />
+      </div>
       <label className="opt" style={{ cursor: "pointer" }}>
         <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
-        Acepto recibir mi diagnóstico y que me contacten por email, teléfono o WhatsApp
+        Acepto recibir mi diagnóstico por email y que Metacrypto Club me contacte por email, teléfono o WhatsApp con
+        base en mis respuestas
       </label>
       {error && <div className="contact-error">{error}</div>}
       <button className="btn-gold opt-next" type="button" onClick={() => onSubmit(form)}>
