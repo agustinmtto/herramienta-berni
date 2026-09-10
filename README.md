@@ -11,6 +11,7 @@ Lead magnet para el negocio de Berni (Metacrypto Club, cripto): landing con wiza
 - ✅ JSON agnóstico `pregunta/respuesta` → `POST /api/lead` (stub con validación de seguridad; Supabase del negocio cuando estén los accesos)
 - ✅ Tracking mínimo: `session_id` + **hasta qué pregunta llega el lead** (dropoff por `sendBeacon`)
 - ✅ PDF dev-only con el estilo de la page (`lib/pdf.js`) para refinar el diseño sin el email
+- 🚧 Entrega WhatsApp en desarrollo: teléfono obligatorio, CTA al `+54 9 3585 401429`, mensaje con respuestas y PDF base personalizado por nombre
 - ✅ Tests: `test/` — unitarios + integración + seguridad (17/17)
 - ⏳ **Pendiente crítico:** Berni define las preguntas finales (blocker #1) → swap en `lib/question-config.js`
 - ⏳ Accesos a Supabase del negocio (Fase 0), deploy en Netlify, PDF por email real (Resend), videos reales
@@ -41,7 +42,7 @@ components/
 lib/
   question-config.js    # PREGUNTAS + videos + CTA (swap aquí las de Berni, sin tocar código)
   engine.js             # motor determinístico: reglas por tags → diagnóstico
-  pdf.js                # generador PDF dev-only (jsPDF + html2canvas)
+  pdf.js                # generador PDF desde el documento HTML (jsPDF + html2canvas)
 test/
   unit.config-engine.test.mjs    # unitarios de config/engine/progress
   integration.api.test.mjs       # integración + seguridad contra servidor real

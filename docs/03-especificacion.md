@@ -10,6 +10,9 @@ Versión unificada a partir del prototipo + decisiones de la reunión. Los cambi
   - Diagnóstico mostrado por pantalla, generado por **algoritmo determinístico** (mismo enfoque que `buildDiagnosis` del prototipo: reglas sobre las respuestas, todas de opción múltiple).
   - **Pantalla final de video**: después de los datos de contacto, una pregunta determina qué video se muestra (opción 1 → video 1, opción 2 → video 2, ...) en un espacio reservado para el reproductor. **3 videos en total: dos genéricos + uno que varía según la respuesta del usuario.**
 - Tracking: **mínimo requerido — hasta qué pregunta llega el lead** (si termina el cuestionario o no). Lo demás (UTMs, tiempos) es opcional/ampliable.
+- Contacto: nombre, email y **teléfono obligatorios** al final del wizard, además del consentimiento.
+- CTA final: abre WhatsApp al número del negocio (`+54 9 3585 401429`) con el nombre y todas las respuestas del lead precargadas en el mensaje.
+- Entrega transitoria: documento HTML breve con contenido fijo, personalizado solo con el nombre, descargable como PDF. El diagnóstico/PDF completamente personalizado queda para una iteración posterior.
 
 ## 2. Formato de datos (JSON a definir con Berni)
 
@@ -67,6 +70,7 @@ Las **preguntas actuales del prototipo** (capital, liquidez, aportación, riesgo
 ## 7. Legal / compliance
 
 - Consentimiento explícito para recibir diagnóstico y comunicaciones; opción de baja.
+- El consentimiento debe contemplar el contacto por email, teléfono y WhatsApp.
 - Disclaimer: "documento educativo, no constituye asesoramiento financiero personalizado".
 
 ## 8. Fuera de alcance (ya validado)
@@ -80,8 +84,13 @@ Las **preguntas actuales del prototipo** (capital, liquidez, aportación, riesgo
 - Después de los datos de contacto hay una **pregunta de segmentación** que determina qué video se destaca: opción 1 → video 1, opción 2 → video 2, etc. (2 genéricos + 1 variable según la respuesta).
 - El diagnóstico se muestra en secciones: problema principal (callout), coste de la liquidez parada, plan de acción numerado, métrica norte, y grid de 3 video-cards (placeholder 16:9, mapeo opción→video **config-driven** en `lib/question-config.js`).
 - El orden de la pregunta que segmenta puede cambiar cuando Berni defina las preguntas reales; solo cambia config.
+- El cierre usa el texto "Si quieres recibir el diagnóstico completo de tu portafolio, escríbenos por WhatsApp." y el botón "Escríbenos".
+- El enlace usa `wa.me/5493585401429` y un mensaje generado en cliente con el nombre, las respuestas del wizard y la respuesta de segmentación. Email y teléfono no se repiten dentro del mensaje.
+- Mobile-first: a partir de 640 px hacia abajo, CTA a ancho completo, videos en una columna, controles táctiles de al menos 44 px y contenido sin desbordes desde 320 px.
 
-### 9.1 PDF del diagnóstico (parcial)
+### 9.1 Documento HTML y PDF del diagnóstico (transitorio)
 
-- **Hoy (desarrollo):** botón "Descargar PDF — solo desarrollo" (`lib/pdf.js`, jsPDF + html2canvas) que genera el PDF del sheet completo con el mismo estilo, A4 paginado. Sirve para afinar el diseño sin depender del email.
-- **Después (producción):** envío del PDF por email vía **Resend** del negocio + tracking de apertura; quitar el botón dev.
+- **Esta etapa:** componente HTML semántico, breve y con el design system de Metacrypto. Su contenido es fijo para todos los perfiles y solo personaliza el nombre del lead.
+- `lib/pdf.js` captura exclusivamente ese documento con jsPDF + html2canvas y genera un PDF A4, independiente del ancho del teléfono.
+- El botón visible dice "Descargar diagnóstico PDF". No incluye videos ni el CTA dentro del archivo.
+- **Después:** convertir el documento en un diagnóstico completamente personalizado y enviarlo por email vía **Resend** del negocio con tracking de apertura.

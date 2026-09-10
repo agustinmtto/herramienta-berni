@@ -84,6 +84,7 @@ Por funcionalidad/responsabilidad (no por carpetas):
 - [x] `POST` del JSON agnóstico (`docs/03` §2) — stub con validación (`app/api/lead`); falta apuntar a Supabase del negocio
 - [x] Tracking: `session_id` + dropoff por `sendBeacon` (`docs/03` §6)
 - [x] Suite de tests en `test/` (`npm test`, unit + integración + seguridad)
+- [ ] Captura de teléfono obligatoria en contacto + payload/API
 - [ ] Migrations: tablas de leads/respuestas/sesiones + flag `hot_lead` (> 10.000 USD, bloqueante #8) — requiere Fase 0
 - [ ] Deploy en Netlify (conectar repo) y merge del PR
 
@@ -98,6 +99,8 @@ Por funcionalidad/responsabilidad (no por carpetas):
 ### Fase 3 — Entrega y triaje
 - [x] **Pantalla final única** (`docs/03` §9): diagnóstico + grid de 3 video-cards placeholders (2 genéricos + 1 destacado según pregunta de segmentación) — mapeo config-driven
 - [x] PDF dev-only por botón (`docs/03` §9.1) para afinar diseño
+- [ ] CTA a WhatsApp con mensaje generado desde todas las respuestas
+- [ ] Documento HTML/PDF base, fijo salvo por el nombre, y ajustes mobile-first
 - [ ] PDF por email vía Resend + tracking de apertura (bloqueante #12) y quitar botón dev
 - [ ] Videos reales de Berni + host del player + embed trackeable (sub-pendiente del #11)
 - [ ] Alerta al triaje para lead caliente (notificación en el sistema)

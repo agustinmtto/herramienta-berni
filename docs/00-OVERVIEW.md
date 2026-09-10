@@ -13,7 +13,7 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 1. Berni publica en Instagram (orgánico, primero): *"comenta 'X' y te mando la herramienta"*.
 2. El lead abre el link de la herramienta → landing + wizard.
 3. El wizard hace preguntas (capital, perfil de riesgo, portfolio, miedos...). **Datos de contacto al final** (decisión clave).
-4. Al terminar → pantalla de análisis → **pantalla final única**: diagnóstico por pantalla + sección "tus recursos" con **3 videos placeholders** (2 genéricos + 1 variable según una pregunta de segmentación) + CTA. En desarrollo hay un botón para descargar el mismo diagnóstico como PDF (el envío por email real será vía Resend del negocio, cuando esté integrado).
+4. Al terminar → pantalla de análisis → **pantalla final única**: diagnóstico por pantalla + sección "tus recursos" con **3 videos placeholders** (2 genéricos + 1 variable según una pregunta de segmentación) + CTA a WhatsApp. El CTA abre una conversación con las respuestas precargadas. En esta etapa también se descarga un PDF base, igual para todos salvo por el nombre del lead; la personalización completa y el envío por email quedan para una iteración posterior.
 5. Las respuestas llegan como **JSON agnóstico** (`pregunta/respuesta`) a la base del negocio.
 6. Lead caliente (capital > 10.000 USD) → alerta al triaje → llamada rápida.
 7. Tracking mínimo: **hasta qué pregunta llega el lead** (dropoff / finalización). UTMs opcional.
@@ -28,6 +28,8 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 | Final del flujo | **Pantalla final de video**: tras los datos, una pregunta determina cuál de los **3 videos** se muestra (2 genéricos + 1 variable según la respuesta del usuario). Pendiente: definir la pregunta de segmentación y grabar los videos |
 | Tracking | Mínimo: **hasta qué pregunta llega el lead** (si termina el cuestionario o no). Puede ampliarse luego |
 | Lead caliente | Capital **> 10.000 USD** → llamada de triaje rápida |
+| Contacto y CTA | Nombre + email + teléfono al final; CTA a WhatsApp `+54 9 3585 401429` con las respuestas precargadas |
+| PDF transitorio | Documento HTML breve y fijo, personalizado solo con el nombre del lead, descargable como PDF |
 | Lanzamiento | Primero orgánico (testeo), si funciona → publicidad |
 
 ## Stack del negocio (donde integramos)
@@ -47,7 +49,7 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 - **Suite de tests** en `test/` (unit + integración, 17/17)
 - ✅ Design system extraído de landings del negocio
 - ✅ Reunión de integración realizada (ver `01-reunion-integracion.md`)
-- ⏳ Pendiente: preguntas de Berni → swap en `lib/question-config.js`, acceso Supabase del negocio (Fase 0), merge del PR #1, deploy Netlify, PDF por email real, videos reales
+- ⏳ Pendiente: preguntas de Berni → swap en `lib/question-config.js`, acceso Supabase del negocio (Fase 0), deploy Netlify, PDF por email real, videos reales
 
 ## Mapa de esta documentación
 
