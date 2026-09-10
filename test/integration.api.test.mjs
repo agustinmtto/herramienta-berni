@@ -30,7 +30,7 @@ async function reachable() {
   }
 }
 
-before({ timeout: 120_000 }, async () => {
+before(async () => {
   if (!existsSync(join(ROOT, ".next"))) {
     throw new Error("Run `npm run build` before executing integration tests");
   }
@@ -44,7 +44,7 @@ before({ timeout: 120_000 }, async () => {
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error("next start did not come up in time");
-});
+}, { timeout: 120_000 });
 
 after(() => {
   if (server) server.kill();

@@ -79,6 +79,14 @@ test("progress: never reaches 100 before the end", () => {
   }
 });
 
+test("config: final delivery has WhatsApp destination and static document", () => {
+  assert.equal(wizardConfig.finalCta.whatsappNumber, "5493585401429");
+  assert.equal(wizardConfig.finalCta.button, "Escríbenos");
+  assert.equal(wizardConfig.diagnosisDocument.pillars.length, 3);
+  assert.ok(wizardConfig.diagnosisDocument.actions.length >= 3);
+  assert.match(wizardConfig.diagnosisDocument.disclaimer, /no constituye asesoramiento financiero/i);
+});
+
 test("whatsapp: message includes lead name, answers and segment", () => {
   const message = buildWhatsAppMessage({
     name: "Ana",
