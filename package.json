@@ -2,10 +2,14 @@
   "name": "herramienta-berni",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "test": "node --test test/*.test.mjs",
+    "test:unit": "node --test test/unit.config-engine.test.mjs",
+    "test:api": "node --test test/integration.api.test.mjs"
   },
   "dependencies": {
     "next": "^15.5.5",
