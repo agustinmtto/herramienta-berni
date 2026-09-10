@@ -249,10 +249,15 @@ export default function Flow() {
     );
     return (
       <main className="page-shell result-section">
-        <div className="result-head">
-          <span className="eyebrow">Auditoría · Metacrypto Club</span>
-          <h2>Mi portfolio <em>bajo la lupa</em></h2>
-        </div>
+        <button className="pdf-btn" type="button" onClick={() => import("../lib/pdf").then((m) => m.downloadDiagnosisPdf())}>
+          Descargar PDF — solo desarrollo
+        </button>
+
+        <div className="diagnosis-sheet" id="diagnosis-sheet">
+          <div className="result-head">
+            <span className="eyebrow">Auditoría · Metacrypto Club</span>
+            <h2>Mi portfolio <em>bajo la lupa</em></h2>
+          </div>
 
         <div className="section-block">
           <h3>Tu problema principal</h3>
@@ -301,6 +306,7 @@ export default function Flow() {
           <a className="btn-gold" href={wizardConfig.finalCta.url || "#"} style={{ alignSelf: "center" }}>
             {wizardConfig.finalCta.button}
           </a>
+        </div>
         </div>
       </main>
     );

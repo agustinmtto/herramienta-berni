@@ -354,6 +354,28 @@ h1, h2, h3 {
 
 .final-cta p { color: var(--text-dim); }
 
+.diagnosis-sheet {
+  background: #000;
+  padding: 8px;
+}
+
+.pdf-btn {
+  align-self: center;
+  margin-bottom: 4px;
+  background: none;
+  border: 1px dashed var(--gold-line);
+  color: var(--text-dim);
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.pdf-btn:hover { border-color: var(--gold); color: var(--gold); }
+
 .video-section {
   max-width: 720px;
   margin: 0 auto;
