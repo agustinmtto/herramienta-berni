@@ -17,12 +17,12 @@ Reglas obligatorias sobre el ciclo de vida del repo: nombrado de archivos, estru
 
 ```
 docs/                # documentación viva (spec-first: cambiar aquí, luego codificar)
-referencia/          # material de terceros/uso interno: NO es código, no se limpia ni refactoriza
+prototipos/referencia/          # material de terceros/uso interno: NO es código, no se limpia ni refactoriza
 scripts/             # utilidades (transcribe.py, etc.)
-index.html           # prototipo: referencia; no es base de la implementación real
+prototipos/index.html           # prototipo: referencia; no es base de la implementación real
 ```
 
-- Nunca borrar material de `referencia/` ni las transcripciones: son fuente primaria.
+- Nunca borrar material de `prototipos/referencia/` ni las transcripciones: son fuente primaria.
 - Agregar/quitar archivos requiere actualizar los índices (`AGENTS.md` y la tabla de `docs/00-OVERVIEW.md`) en el mismo cambio.
 
 **R:** los índices viven mencionados por ruta; mover archivos sin actualizar índice deja al siguiente agente con contexto roto.

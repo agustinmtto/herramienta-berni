@@ -14,14 +14,15 @@
 | 8 | Umbral lead caliente confirmado en 10.000 USD (prototipo usa 25k mock) | Ajustar CONFIG + backend | Equipo dev | Pendiente |
 | 9 | Videos segmentados de Berni (3–4 por rango de capital) | Dependencia de contenido (si se mantiene el video — depende del final del flujo, ver #11) | Berni | Pendiente |
 | 10 | Entorno dev/producción dentro del negocio (hoy solo producción + local) | Coordinar branch/PR | Miled | Acordado armarlo |
-| 11 | ~~Decidir el final del flujo~~ → **Resuelto**: pantalla final de video (una pregunta determina cuál de 3 videos se muestra: 2 genéricos + 1 variable por la respuesta del usuario) | Sub-pendientes: definir la pregunta de segmentación, grabar los videos, host del player | Berni / Miled | Parcialmente resuelto |
+| 11 | ~~Decidir el final del flujo~~ → **Resuelto**: pantalla final única con diagnóstico + 3 videos (2 genéricos + 1 variable por pregunta de segmentación) | Sub-pendientes: grabar los videos reales, host del player | Berni / Miled | Parcialmente resuelto |
+| 12 | **PDF por email (producción)**: el botón de descarga es dev-only; falta Resend del negocio + pixel de apertura | Entrega del diagnóstico | Miled / Equipo dev | Pendiente — depende de Fase 0 (accesos) |
 
 ## Roadmap
 
 El roadmap vivo (modelo de trabajo + fases) está en **`docs/08-roadmap.md`** — es la referencia autoritativa. El esbozo original a continuación se conserva como contexto:
 
-**Fase 1 — Infraestructura de captación:**
-Sustituir el índice del prototipo por aplicación real (Next.js o estático deployado según convenga con el repo del negocio) y el tracking mínimo (session_id + hasta qué pregunta llega el lead / dropoff). JSON → Supabase (branch dev).
+**Fase 1 — Infraestructura de captación** *(en `feature/wizard-mvp`; MVP hecho, falta Supabase real):*
+App Next.js (Netlify) con wizard config-driven + tracking mínimo (session_id + dropoff por sendBeacon). JSON → stub `POST /api/lead` con validación (Supabase del negocio cuando estén los accesos). Merge del PR #1, deploy.
 
 **Fase 2 — Motor determinístico definitivo:**
 Migrar la lógica de diagnóstico (reglas/algoritmo sobre las respuestas, todas de opción múltiple) al producto real; el prototipo define tono y estructura (ver `03-especificacion.md` §4), salida estructurada para pantalla y para el PDF.

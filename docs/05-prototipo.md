@@ -1,4 +1,4 @@
-# Prototipo actual (`index.html`)
+# Prototipo actual (`prototipos/index.html`)
 
 Archivo único: HTML + CSS + JS inline (~530 líneas). És descartable como código, pero es la **referencia de UX, textos y motor de reglas** para el producto real.
 

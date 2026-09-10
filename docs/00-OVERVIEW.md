@@ -13,7 +13,7 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 1. Berni publica en Instagram (orgánico, primero): *"comenta 'X' y te mando la herramienta"*.
 2. El lead abre el link de la herramienta → landing + wizard.
 3. El wizard hace preguntas (capital, perfil de riesgo, portfolio, miedos...). **Datos de contacto al final** (decisión clave).
-4. Al terminar → pantalla de análisis → diagnóstico por pantalla → **pantalla final de video**: una pregunta determina qué video se muestra (opción 1 → video 1, opción 2 → video 2, etc.). **3 videos en total: dos genéricos + uno que varía según lo que elija el usuario.**
+4. Al terminar → pantalla de análisis → **pantalla final única**: diagnóstico por pantalla + sección "tus recursos" con **3 videos placeholders** (2 genéricos + 1 variable según una pregunta de segmentación) + CTA. En desarrollo hay un botón para descargar el mismo diagnóstico como PDF (el envío por email real será vía Resend del negocio, cuando esté integrado).
 5. Las respuestas llegan como **JSON agnóstico** (`pregunta/respuesta`) a la base del negocio.
 6. Lead caliente (capital > 10.000 USD) → alerta al triaje → llamada rápida.
 7. Tracking mínimo: **hasta qué pregunta llega el lead** (dropoff / finalización). UTMs opcional.
@@ -42,10 +42,12 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 
 ## Estado actual
 
-- ✅ Prototipo funcional en `index.html` (landing + wizard + diagnóstico con reglas JS determinísticas — base del motor final)
+- **Prototipo funcional** en `prototipos/index.html` (landing + wizard + diagnóstico con reglas JS determinísticas — base del motor final)
+- **App MVP funcionando** (Next.js en `feature/wizard-mvp`): wizard con preguntas genéricas config-driven, motor determinístico stub, JSON agnóstico → `POST /api/lead` (stub con validación), tracking de dropoff, pantalla final única diagnóstico+videos, PDF dev-only
+- **Suite de tests** en `test/` (unit + integración, 17/17)
 - ✅ Design system extraído de landings del negocio
 - ✅ Reunión de integración realizada (ver `01-reunion-integracion.md`)
-- ⏳ Pendiente: preguntas de Berni → JSON final, decisión del final del flujo (HTML vs. WhatsApp), entorno dev en Supabase, PRD para Miled
+- ⏳ Pendiente: preguntas de Berni → swap en `lib/question-config.js`, acceso Supabase del negocio (Fase 0), merge del PR #1, deploy Netlify, PDF por email real, videos reales
 
 ## Mapa de esta documentación
 
@@ -56,7 +58,7 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 | `02-audio-berni-requisitos.md` | Ideas de Berni del audio de WhatsApp (qué preguntas y por qué) |
 | `03-especificacion.md` | Especificación técnica del producto: pantallas, datos, wireflow |
 | `04-design-system.md` | Colores, tipografía, componentes (fuente de verdad visual) |
-| `05-prototipo.md` | Descripción del prototipo `index.html` y cómo migrarlo |
+| `05-prototipo.md` | Descripción del prototipo `prototipos/index.html` y cómo migrarlo |
 | `06-pendientes-y-preguntas.md` | Todo lo que falta definir + acciones de cada persona |
 | `07-scm-gestion-configuracion.md` | Nombrado, estructura del repo, branches, commits |
 | `08-roadmap.md` | Modelo de trabajo (Supabase local + Docker, migrations, PRs) y fases de implementación |

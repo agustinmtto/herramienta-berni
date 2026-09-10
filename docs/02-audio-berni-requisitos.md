@@ -32,7 +32,7 @@ Berni valida la docencia de metodología: empezar con un caso ("hacer el documen
 
 ## Verificación cruzada con lo implementado en el prototipo
 
-El prototipo `index.html` ya traduce esto a preguntas y reglas:
+El prototipo `prototipos/index.html` ya traduce esto a preguntas y reglas:
 - Capital invertido, liquidez disponible, aportación mensual, perfil de riesgo, experiencia, distribución de portfolio (tabla sumando 100%), nº de altcoins, preocupación (texto libre), contacto al final.
 - Motor mock: detecta desajuste perfil-exposición, dispersión de altcoins, liquidez parada como "coste de oportunidad" y hunde el gancho de "quedarte fuera".
 - Este motor define el **tono y estructura esperada** del diagnóstico final por algoritmo determinístico (secciones 1–5 + plan de acción numerado). No hay IA: se clasifica/regla directamente sobre las respuestas (todas de opción múltiple).
