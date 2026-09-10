@@ -36,6 +36,7 @@ Fuentes primarias (si hace falta el detalle crudo): `Transcripcion_Reunion.md` y
 app/                    # App Next.js (App Router) — ver README.md para el detalle
   layout.jsx, page.jsx, globals.css, api/lead/route.js
 components/flow.jsx     # Máquina de estados del flujo completo
+components/diagnosis-document.jsx # Documento HTML fijo usado para generar el PDF
 lib/
   question-config.js    # Preguntas/videos/CTA (swap de las preguntas de Berni aquí)
   engine.js             # Motor determinístico por tags

@@ -39,6 +39,7 @@ app/                    # app Next.js (App Router)
   api/lead/route.js     #   endpoint único POST con validación (stub de Supabase)
 components/
   flow.jsx              # máquina de estados: hero → wizard → segmentación → análisis → final
+  diagnosis-document.jsx# documento HTML fijo para el PDF, personalizado por nombre
 lib/
   question-config.js    # PREGUNTAS + videos + CTA (swap aquí las de Berni, sin tocar código)
   engine.js             # motor determinístico: reglas por tags → diagnóstico

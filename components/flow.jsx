@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { wizardConfig, questions, progressFor } from "../lib/question-config";
 import { buildDiagnosis } from "../lib/engine";
 import { buildWhatsAppUrl } from "../lib/whatsapp";
+import DiagnosisDocument from "./diagnosis-document";
 
 const SCREENS = { HERO: "hero", WIZARD: "wizard", SEGMENT: "segment", ANALYZING: "analyzing", FINAL: "final" };
 
@@ -276,8 +277,12 @@ export default function Flow() {
     });
     return (
       <main className="page-shell result-section">
-        <button className="pdf-btn" type="button" onClick={() => import("../lib/pdf").then((m) => m.downloadDiagnosisPdf())}>
-          Descargar PDF — solo desarrollo
+        <button
+          className="pdf-btn"
+          type="button"
+          onClick={() => import("../lib/pdf").then((m) => m.downloadDiagnosisPdf(answers.contact?.name))}
+        >
+          Descargar diagnóstico PDF
         </button>
 
         <div className="diagnosis-sheet" id="diagnosis-sheet">
@@ -334,6 +339,9 @@ export default function Flow() {
             {wizardConfig.finalCta.button}
           </a>
         </div>
+        </div>
+        <div className="pdf-render-host" aria-hidden="true">
+          <DiagnosisDocument name={answers.contact?.name} />
         </div>
       </main>
     );

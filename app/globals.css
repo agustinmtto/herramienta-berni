@@ -376,6 +376,124 @@ h1, h2, h3 {
 
 .pdf-btn:hover { border-color: var(--gold); color: var(--gold); }
 
+.pdf-render-host {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 760px;
+  pointer-events: none;
+}
+
+.diagnosis-document {
+  width: 760px;
+  min-height: 980px;
+  padding: 52px;
+  background:
+    radial-gradient(90% 45% at 50% 0%, var(--gold-dim), transparent 72%),
+    var(--ink);
+  color: var(--text);
+  font-family: var(--font-sora), sans-serif;
+}
+
+.doc-header {
+  padding-bottom: 30px;
+  border-bottom: 1px solid var(--gold-line);
+}
+
+.doc-eyebrow {
+  color: var(--gold);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.doc-header h1 {
+  max-width: 620px;
+  margin-top: 14px;
+  font-size: 2.8rem;
+}
+
+.doc-header p { margin-top: 14px; color: var(--text-dim); }
+.doc-header strong { color: var(--gold); }
+
+.doc-intro {
+  margin: 28px 0;
+  padding: 20px 22px;
+  border-left: 3px solid var(--gold);
+  background: var(--gold-dim);
+  font-size: 0.94rem;
+}
+
+.doc-section {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 18px;
+  margin-top: 30px;
+}
+
+.doc-index {
+  color: var(--gold);
+  font-family: var(--font-oswald), sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.doc-section h2,
+.doc-closing h2 {
+  color: var(--gold);
+  font-size: 1.3rem;
+}
+
+.doc-pillars {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.doc-pillar {
+  padding: 14px;
+  border: 1px solid var(--gold-line);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #111, #080808);
+}
+
+.doc-pillar h3 { font-size: 0.88rem; color: var(--text); }
+.doc-pillar p { margin-top: 8px; color: var(--text-dim); font-size: 0.72rem; line-height: 1.5; }
+
+.doc-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-left: 20px;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+.doc-actions li::marker { color: var(--gold); font-weight: 700; }
+
+.doc-closing {
+  margin-top: 32px;
+  padding: 20px 22px;
+  border: 1px solid var(--gold-line);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #111, #080808);
+}
+
+.doc-closing p { margin-top: 10px; color: var(--text-dim); font-size: 0.85rem; }
+
+.doc-footer {
+  margin-top: 28px;
+  padding-top: 14px;
+  border-top: 1px solid #1c1c1c;
+  color: var(--text-faint);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .video-section {
   max-width: 720px;
   margin: 0 auto;

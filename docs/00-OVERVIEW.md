@@ -47,6 +47,7 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 - **Prototipo funcional** en `prototipos/index.html` (landing + wizard + diagnóstico con reglas JS determinísticas — base del motor final)
 - **App MVP funcionando** (Next.js en `feature/wizard-mvp`): wizard con preguntas genéricas config-driven, motor determinístico stub, JSON agnóstico → `POST /api/lead` (stub con validación), tracking de dropoff, pantalla final única diagnóstico+videos, PDF dev-only
 - **Entrega WhatsApp en desarrollo** (`feature/whatsapp-delivery`): helper config-driven para mensaje y enlace `wa.me` con las respuestas del lead
+- **Documento transitorio**: componente HTML fijo, personalizado solo por nombre, usado como fuente del PDF descargable
 - **Suite de tests** en `test/` (unit + integración, 17/17)
 - ✅ Design system extraído de landings del negocio
 - ✅ Reunión de integración realizada (ver `01-reunion-integracion.md`)
