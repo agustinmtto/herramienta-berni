@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { wizardConfig, questions, progressFor } from "../lib/question-config";
 import { buildDiagnosis } from "../lib/engine";
 
@@ -14,6 +14,9 @@ export default function Flow() {
   const [analyzing, setAnalyzing] = useState(0);
   const [contactError, setContactError] = useState(null);
   const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [started, setStarted] = useState(false);
+  const sessionIdRef = useRef(typeof crypto !== "undefined" ? crypto.randomUUID() : null);
 
   const contact = questions.length - 1;
   const isContact = qIndex === contact;
@@ -27,7 +30,10 @@ export default function Flow() {
   };
   const move = (delta) => setQIndex((i) => Math.max(0, Math.min(i + delta, contact)));
 
-  const startWizard = () => setScreen(SCREENS.WIZARD);
+  const startWizard = () => {
+    setStarted(true);
+    setScreen(SCREENS.WIZARD);
+  };
 
   const submitContact = async (form) => {
     setContactError(null);
@@ -41,6 +47,7 @@ export default function Flow() {
   };
 
   const sendLead = async (payload) => {
+    if (sending) return;
     setSending(true);
     try {
       await fetch("/api/lead", {
@@ -65,18 +72,28 @@ export default function Flow() {
       setAnalyzing((s) => s + 1);
       return;
     }
-    const payload = buildPayload();
-    sendLead(payload);
+    if (!sent) {
+      sendLead(buildPayload());
+      setSent(true);
+    }
     setScreen(SCREENS.RESULT);
   };
 
-  const finishResult = async () => {
-    const payload = buildPayload();
-    sendLead(payload);
-    setScreen(SCREENS.VIDEO);
-  };
+  const finishResult = () => setScreen(SCREENS.VIDEO);
 
-  function buildPayload() {
+  function buildPayload(abandoned = false) {
+    if (abandoned) {
+      // Partial payload: only what the lead answered so far.
+      const partial = questions
+        .filter((q) => q.type !== "contact" && answers[q.id])
+        .map((q) => ({ pregunta: q.title, respuesta: answers[q.id].answer }));
+      return {
+        session_id: sessionIdRef.current,
+        lead: null,
+        signals: { dropoff_question: null, finished_at: new Date().toISOString() },
+        answers: partial,
+      };
+    }
     const payloadAnswers = questions
       .filter((q) => q.type !== "contact")
       .map((q) => ({
@@ -88,7 +105,7 @@ export default function Flow() {
       respuesta: segIndex !== null ? wizardConfig.segmentQuestion.options[segIndex].label : null,
     });
     return {
-      session_id: crypto.randomUUID(),
+      session_id: sessionIdRef.current,
       lead: {
         name: answers.contact ? answers.contact.name : "",
         email: answers.contact ? answers.contact.email : "",
@@ -107,6 +124,22 @@ export default function Flow() {
     });
     return buildDiagnosis(lead, wizardConfig.segmentQuestion.options[segIndex || 0]);
   }, [screen, answers, segIndex]);
+
+  // Dropoff tracking — docs/03 §6: the key metric is how far the lead got.
+  useEffect(() => {
+    const onLeave = () => {
+      if (sent || !started) return;
+      const inWizard = screen === SCREENS.WIZARD;
+      const runProgress = [SCREENS.WIZARD, SCREENS.SEGMENT, SCREENS.ANALYZING, SCREENS.RESULT].includes(screen);
+      if (runProgress) {
+        const payload = buildPayload(true);
+        payload.signals.dropoff_question = inWizard && question ? question.title : wizardConfig.segmentQuestion.title;
+        navigator.sendBeacon("api/lead", JSON.stringify(payload));
+      }
+    };
+    window.addEventListener("pagehide", onLeave);
+    return () => window.removeEventListener("pagehide", onLeave);
+  });
 
   if (screen === SCREENS.HERO) {
     return (
@@ -291,10 +324,11 @@ function VideoBox({ video }) {
   );
 }
 
-function Timer({ advance }) {
-  if (typeof window !== "undefined") {
-    window.setTimeout(advance, 950);
-  }
+function Timer({ advance, key }) {
+  useEffect(() => {
+    const t = setTimeout(advance, 950);
+    return () => clearTimeout(t);
+  }, [advance]);
   return null;
 }
 
