@@ -43,6 +43,7 @@ lib/
   question-config.js    # PREGUNTAS + videos + CTA (swap aquí las de Berni, sin tocar código)
   engine.js             # motor determinístico: reglas por tags → diagnóstico
   pdf.js                # generador PDF desde el documento HTML (jsPDF + html2canvas)
+  whatsapp.js           # genera mensaje y enlace wa.me con las respuestas
 test/
   unit.config-engine.test.mjs    # unitarios de config/engine/progress
   integration.api.test.mjs       # integración + seguridad contra servidor real

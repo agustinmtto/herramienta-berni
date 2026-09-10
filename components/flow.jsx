@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { wizardConfig, questions, progressFor } from "../lib/question-config";
 import { buildDiagnosis } from "../lib/engine";
+import { buildWhatsAppUrl } from "../lib/whatsapp";
 
 const SCREENS = { HERO: "hero", WIZARD: "wizard", SEGMENT: "segment", ANALYZING: "analyzing", FINAL: "final" };
 
@@ -263,6 +264,16 @@ export default function Flow() {
     const mappedVideo = wizardConfig.videos.items.find(
       (v) => v.id === wizardConfig.segmentQuestion.options[segIndex || 0].video
     );
+    const whatsappAnswers = questions
+      .filter((q) => q.type !== "contact" && answers[q.id])
+      .map((q) => ({ pregunta: q.title, respuesta: answers[q.id].answer }));
+    const segmentOption = wizardConfig.segmentQuestion.options[segIndex || 0];
+    const whatsappUrl = buildWhatsAppUrl({
+      number: wizardConfig.finalCta.whatsappNumber,
+      name: answers.contact?.name,
+      answers: whatsappAnswers,
+      segment: { pregunta: wizardConfig.segmentQuestion.title, respuesta: segmentOption.label },
+    });
     return (
       <main className="page-shell result-section">
         <button className="pdf-btn" type="button" onClick={() => import("../lib/pdf").then((m) => m.downloadDiagnosisPdf())}>
@@ -319,7 +330,7 @@ export default function Flow() {
 
         <div className="final-cta">
           <p>{wizardConfig.finalCta.text}</p>
-          <a className="btn-gold" href={wizardConfig.finalCta.url || "#"} style={{ alignSelf: "center" }}>
+          <a className="btn-gold" href={whatsappUrl} target="_blank" rel="noopener noreferrer" style={{ alignSelf: "center" }}>
             {wizardConfig.finalCta.button}
           </a>
         </div>

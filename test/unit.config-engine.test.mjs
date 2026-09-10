@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { wizardConfig, questions, progressFor } from "../lib/question-config.js";
 import { buildDiagnosis } from "../lib/engine.js";
+import { buildWhatsAppMessage, buildWhatsAppUrl } from "../lib/whatsapp.js";
 
 test("config: every question has unique id, title and options", () => {
   const ids = new Set();
@@ -76,4 +77,28 @@ test("progress: never reaches 100 before the end", () => {
     assert.ok(pct > 0 && pct <= 93, `answered ${i} => ${pct} must be in (0,93]`);
     assert.ok(pct >= progressFor(Math.max(i - 1, 1), 9), "bar is monotonic");
   }
+});
+
+test("whatsapp: message includes lead name, answers and segment", () => {
+  const message = buildWhatsAppMessage({
+    name: "Ana",
+    answers: [{ pregunta: "¿Cuál es tu perfil?", respuesta: "Moderado" }],
+    segment: { pregunta: "¿Qué te interesa?", respuesta: "Proteger lo que tengo" },
+  });
+  assert.match(message, /Nombre: Ana/);
+  assert.match(message, /¿Cuál es tu perfil\?: Moderado/);
+  assert.match(message, /¿Qué te interesa\?: Proteger lo que tengo/);
+  assert.doesNotMatch(message, /email|teléfono/i);
+});
+
+test("whatsapp: URL targets configured number and preserves accents", () => {
+  const url = buildWhatsAppUrl({
+    number: "+54 9 3585 401429",
+    name: "Álvaro",
+    answers: [],
+  });
+  const parsed = new URL(url);
+  assert.equal(parsed.hostname, "wa.me");
+  assert.equal(parsed.pathname, "/5493585401429");
+  assert.match(parsed.searchParams.get("text"), /Nombre: Álvaro/);
 });

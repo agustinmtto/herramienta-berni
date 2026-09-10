@@ -40,6 +40,7 @@ lib/
   question-config.js    # Preguntas/videos/CTA (swap de las preguntas de Berni aquí)
   engine.js             # Motor determinístico por tags
   pdf.js                # PDF dev-only
+  whatsapp.js           # Mensaje y URL wa.me con las respuestas del lead
 test/                   # Suite node:test (unit + integración + seguridad)
 prototipos/
   index.html            # Prototipo original (referencia; desechable como código)
