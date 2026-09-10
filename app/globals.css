@@ -20,6 +20,7 @@ body {
   font-family: var(--font-sora), sans-serif;
   -webkit-font-smoothing: antialiased;
   line-height: 1.6;
+  overflow-x: hidden;
 }
 
 .page-shell { min-height: 100vh; display: flex; flex-direction: column; }
@@ -77,6 +78,9 @@ h1, h2, h3 {
 }
 
 .btn-gold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: linear-gradient(180deg, #f6ecbf, #e1ca71 45%, #a8893b);
   color: #000;
   font-family: var(--font-oswald), sans-serif;
@@ -88,6 +92,9 @@ h1, h2, h3 {
   padding: 16px 34px;
   font-size: 0.95rem;
   cursor: pointer;
+  min-height: 48px;
+  text-align: center;
+  text-decoration: none;
   align-self: flex-start;
   transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
@@ -282,6 +289,7 @@ h1, h2, h3 {
 
 .result-section {
   max-width: 720px;
+  width: 100%;
   margin: 0 auto;
   padding: 10vh 24px 12vh;
   display: flex;
@@ -357,6 +365,9 @@ h1, h2, h3 {
 .diagnosis-sheet {
   background: #000;
   padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 34px;
 }
 
 .pdf-btn {
@@ -610,6 +621,95 @@ h1, h2, h3 {
 }
 
 .recursos-head p { color: var(--text-dim); font-size: 0.92rem; }
+
+@media (max-width: 640px) {
+  .hero-section {
+    padding: 9vh 18px 7vh;
+    gap: 22px;
+  }
+
+  .eyebrow {
+    font-size: 0.66rem;
+    letter-spacing: 0.26em;
+  }
+
+  .hero-sub { font-size: 0.96rem; }
+
+  .hero-section .btn-gold,
+  .final-cta .btn-gold,
+  .pdf-btn {
+    width: 100%;
+    align-self: stretch !important;
+  }
+
+  .wizard-section {
+    padding: 7vh 16px 9vh;
+    gap: 20px;
+  }
+
+  .opt {
+    min-height: 48px;
+    padding: 14px 16px;
+  }
+
+  .opt:hover { transform: none; }
+
+  .nav-back {
+    min-height: 44px;
+    padding: 12px 18px;
+  }
+
+  .analyzing-section {
+    padding: 10vh 16px;
+  }
+
+  .step {
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 15px;
+    font-size: 0.68rem;
+    letter-spacing: 0.11em;
+  }
+
+  .step span:last-child {
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  .result-section {
+    padding: 7vh 16px 9vh;
+    gap: 24px;
+  }
+
+  .diagnosis-sheet {
+    padding: 0;
+    gap: 24px;
+  }
+
+  .section-block,
+  .metric-block {
+    padding: 20px 17px;
+  }
+
+  .video-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .video-tag {
+    top: 10px;
+    left: 10px;
+    font-size: 0.56rem;
+  }
+
+  .final-cta {
+    padding: 26px 18px;
+  }
+
+  .pdf-btn {
+    min-height: 44px;
+    margin-bottom: 0;
+  }
+}
 
 @keyframes rise {
   from { opacity: 0; transform: translateY(22px); }
