@@ -26,7 +26,8 @@ Fuentes primarias (si hace falta el detalle crudo): `Transcripcion_Reunion.md` y
 - **Sin IA**: clasificación de leads y diagnóstico **determinísticos** por algoritmo (las respuestas son todas de opción múltiple).
 - Tracking mínimo: la métrica clave es **hasta qué pregunta llega el lead** (si termina el cuestionario o no).
 - **Final del flujo (decidido): pantalla final única** — diagnóstico + sección "recursos" con 3 videos (2 genéricos + 1 destacado según una pregunta de segmentación). Sin pantalla separada de resultado ni de video. Sin contador de preguntas ni índices en el wizard: solo barra de progreso "mentirosa" (1ra pregunta = 33%, trepa lento).
-- **PDF**: en desarrollo, descarga dev-only con el estilo de la page; en producción será email vía Resend del negocio.
+- **Contacto y CTA**: nombre + email + teléfono al final; CTA a WhatsApp `+54 9 3585 401429` con las respuestas precargadas.
+- **PDF transitorio**: documento HTML breve y fijo, personalizado solo con el nombre del lead; después se reemplaza por el diagnóstico completo vía Resend.
 - Lead caliente = capital **> 10.000 USD** → llamada de triaje.
 
 ## Estructura del repo
@@ -35,10 +36,12 @@ Fuentes primarias (si hace falta el detalle crudo): `Transcripcion_Reunion.md` y
 app/                    # App Next.js (App Router) — ver README.md para el detalle
   layout.jsx, page.jsx, globals.css, api/lead/route.js
 components/flow.jsx     # Máquina de estados del flujo completo
+components/diagnosis-document.jsx # Documento HTML fijo usado para generar el PDF
 lib/
   question-config.js    # Preguntas/videos/CTA (swap de las preguntas de Berni aquí)
   engine.js             # Motor determinístico por tags
   pdf.js                # PDF dev-only
+  whatsapp.js           # Mensaje y URL wa.me con las respuestas del lead
 test/                   # Suite node:test (unit + integración + seguridad)
 prototipos/
   index.html            # Prototipo original (referencia; desechable como código)

@@ -20,6 +20,14 @@ function isValidLead(payload) {
   if (typeof payload.session_id !== "string" || payload.session_id.length > 100) return "bad_session_id";
   if (payload.signals && typeof payload.signals !== "object") return "bad_signals";
   if (payload.lead !== null && payload.lead !== undefined && typeof payload.lead !== "object") return "bad_lead";
+  if (payload.lead) {
+    if (typeof payload.lead.name !== "string" || !payload.lead.name.trim() || payload.lead.name.length > 120) return "bad_name";
+    if (typeof payload.lead.email !== "string" || !/.+@.+\..+/.test(payload.lead.email) || payload.lead.email.length > 254) return "bad_email";
+    if (typeof payload.lead.phone !== "string" || payload.lead.phone.length > 40) return "bad_phone";
+    const phoneDigits = payload.lead.phone.replace(/\D/g, "");
+    if (phoneDigits.length < 8 || phoneDigits.length > 15) return "bad_phone";
+    if (payload.lead.consent !== true) return "bad_consent";
+  }
   if (!Array.isArray(payload.answers)) return "bad_answers";
   if (payload.answers.length > 64) return "too_many_answers";
   for (const a of payload.answers) {
@@ -59,7 +67,7 @@ export async function POST(request) {
     const kind = payload.lead ? "COMPLETE" : "DROPOUT";
     const kindTag = payload.lead ? `${c.green}✓ ${kind}${c.reset}` : `${c.gold}⚠ ${kind}${c.reset}`;
 
-    console.log(`${c.dim}[${ts()}]${c.reset} ${kindTag} lead ${c.gold}${payload.session_id.slice(0, 8)}…${c.reset} · ${answers.length} answers${dropped ? ` · dropped at: "${dropped}"` : ""}${payload.lead ? ` · ${payload.lead.email || "no email"}` : ""} · ${Date.now() - start}ms`);
+    console.log(`${c.dim}[${ts()}]${c.reset} ${kindTag} lead ${c.gold}${payload.session_id.slice(0, 8)}…${c.reset} · ${answers.length} answers${dropped ? ` · dropped at: "${dropped}"` : ""}${payload.lead ? ` · ${payload.lead.email || "no email"} · ${payload.lead.phone || "no phone"}` : ""} · ${Date.now() - start}ms`);
     console.debug(`${c.dim}[${ts()}] [lead-payload]${c.reset}`, JSON.stringify(payload, null, 2));
 
     return NextResponse.json({ ok: true, session_id: payload.session_id });

@@ -15,7 +15,8 @@
 | 9 | Videos segmentados de Berni (3–4 por rango de capital) | Dependencia de contenido (si se mantiene el video — depende del final del flujo, ver #11) | Berni | Pendiente |
 | 10 | Entorno dev/producción dentro del negocio (hoy solo producción + local) | Coordinar branch/PR | Miled | Acordado armarlo |
 | 11 | ~~Decidir el final del flujo~~ → **Resuelto**: pantalla final única con diagnóstico + 3 videos (2 genéricos + 1 variable por pregunta de segmentación) | Sub-pendientes: grabar los videos reales, host del player | Berni / Miled | Parcialmente resuelto |
-| 12 | **PDF por email (producción)**: el botón de descarga es dev-only; falta Resend del negocio + pixel de apertura | Entrega del diagnóstico | Miled / Equipo dev | Pendiente — depende de Fase 0 (accesos) |
+| 12 | **PDF personalizado por email (producción)**: existe un PDF base descargable; falta la versión dinámica, Resend del negocio + pixel de apertura | Entrega definitiva del diagnóstico | Miled / Equipo dev | Pendiente — depende de Fase 0 (accesos) |
+| 13 | ~~**Teléfono + CTA WhatsApp + PDF base**~~: teléfono obligatorio, mensaje con respuestas, documento fijo personalizado por nombre y responsive móvil | Entrega transitoria solicitada para el MVP | Equipo dev | ✅ Cerrado en `feature/whatsapp-delivery` |
 
 ## Roadmap
 
@@ -28,7 +29,7 @@ App Next.js (Netlify) con wizard config-driven + tracking mínimo (session_id + 
 Migrar la lógica de diagnóstico (reglas/algoritmo sobre las respuestas, todas de opción múltiple) al producto real; el prototipo define tono y estructura (ver `03-especificacion.md` §4), salida estructurada para pantalla y para el PDF.
 
 **Fase 3 — Entrega y triaje:**
-Implementar la pantalla final de video (bloqueante #11 resuelto: 3 videos, 2 genéricos + 1 variable según pregunta final); notificaciones de lead caliente al triaje, integración del módulo de leads con PR.
+Implementar la pantalla final de video (bloqueante #11 resuelto: 3 videos, 2 genéricos + 1 variable según pregunta final); CTA de WhatsApp con respuestas precargadas; PDF base; notificaciones de lead caliente al triaje e integración del módulo de leads con PR.
 
 **Fase 4 — Testeo/experimentación:**
 Primeros 1,5–2 meses = testing en orgánico. A/B de formatos (largo vs. pop-up de continuación, orden de preguntas). Con data: automatizaciones de outreach y cadencias.

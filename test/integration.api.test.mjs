@@ -16,7 +16,7 @@ let server;
 
 const validPayload = JSON.stringify({
   session_id: "sess-00000000-0000-4000-8000-000000000000",
-  lead: { name: "Test User", email: "test@example.com", consent: true },
+  lead: { name: "Test User", email: "test@example.com", phone: "+54 9 3585 000000", consent: true },
   signals: { dropoff_question: null, finished_at: new Date().toISOString() },
   answers: [{ pregunta: "¿Cuánto capital total tenés invertido en cripto?", respuesta: "5k a 15k" }],
 });
@@ -30,7 +30,7 @@ async function reachable() {
   }
 }
 
-before({ timeout: 120_000 }, async () => {
+before(async () => {
   if (!existsSync(join(ROOT, ".next"))) {
     throw new Error("Run `npm run build` before executing integration tests");
   }
@@ -44,7 +44,7 @@ before({ timeout: 120_000 }, async () => {
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error("next start did not come up in time");
-});
+}, { timeout: 120_000 });
 
 after(() => {
   if (server) server.kill();
@@ -74,6 +74,17 @@ test("security: payload that breaks the shape rejected with 422", async () => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ hola: "mundo" }),
+  });
+  assert.equal(res.status, 422);
+});
+
+test("security: completed lead without phone rejected with 422", async () => {
+  const payload = JSON.parse(validPayload);
+  delete payload.lead.phone;
+  const res = await fetch(API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
   assert.equal(res.status, 422);
 });
