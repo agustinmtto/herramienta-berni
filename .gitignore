@@ -1,12 +1,8 @@
-# Entorno de desarrollo / artefactos temporales
-.venv/
-frames/
-*.webm
-*.ogg
-*.mp3
-_proto_shot.html
-_shot.js
-
-# Python
-__pycache__/
-*.pyc
+node_modules/
+.next/
+out/
+.env
+.env.*
+*.local
+.DS_Store
+.netlify/
