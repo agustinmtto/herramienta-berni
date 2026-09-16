@@ -1,0 +1,1453 @@
+/* ================= MetaCrypto OS — design system (del prototipo) ================= */
+/* ============================================================
+   SISTEMA · dirección «Plana» — spec 2026-08-24-direccion-plana-design.md
+   TODOS los tokens viven aquí. Nada de valores sueltos más abajo: el CSS
+   anterior creció como un log y la cascada se comió decisiones enteras
+   (.kpi.accent murió, .kpis se declaró dos veces). Si algo no cuadra, se
+   cambia el layout — no se añade un token nuevo al final del fichero.
+   ============================================================ */
+:root {
+  /* ---- Fondo y superficies (oscuro: el modo de siempre del equipo) ---- */
+  --bg: #0B0D0F;
+  --bg-2: #0E1114;
+  --surface: #14181C;
+  --surface-2: #1A1F24;
+  --surface-3: #212830;
+  --border: #2A323A;
+  --border-2: #3A444E;
+
+  /* ---- Oro de marca. NUNCA toca una cifra: solo enlaces, activos y filetes ---- */
+  --gold: #E1CA71;
+  --gold-dim: #B8A458;
+  --gold-soft: rgba(225, 202, 113, 0.12);
+  --gold-line: rgba(225, 202, 113, 0.30);
+
+  /* ---- Tinta. --text-4 se sube de #4a4a4a (2,11:1, ilegible) a 4.55:1 ---- */
+  --text: #ECF0F3;
+  --text-2: #C2CBD2;
+  --text-3: #8B98A3;
+  --text-4: #76828E;
+
+  /* ---- TRES TINTAS, TRES SIGNIFICADOS, CERO SOLAPAMIENTO ----
+     Antes `.pill green` quería decir a la vez "pagada" y "fecha exacta" en
+     la misma columna de /cuotas: una cuota vencida hace 23 días lucía un
+     sello rojo y otro verde, y el ojo iba al verde.
+       --red    dinero que SALIÓ         (devolución, negativo)
+       --orange dinero que NO HA ENTRADO (cuota vencida)
+       --blue   falta un DATO            (sin USD, sin atribuir, sin fuente)
+     --green queda SOLO para texto de confirmación. Prohibido en una cifra. */
+  --red: #F0705A;
+  --red-soft: rgba(240, 112, 90, 0.12);
+  --orange: #E5A44E;
+  --orange-soft: rgba(229, 164, 78, 0.12);
+  --blue: #7FA8D4;
+  --blue-soft: rgba(127, 168, 212, 0.12);
+  --green: #5FB98A;
+  --green-soft: rgba(95, 185, 138, 0.12);
+  --purple: #a78bfa;
+  --purple-soft: rgba(167, 139, 250, 0.12);
+  --yellow: #D9C34A;
+  --yellow-soft: rgba(217, 195, 74, 0.12);
+
+  /* ---- Paleta de consultores (SE-4), solo para "quién dio la sesión / quién
+     cobra". A propósito FUERA de red/orange/blue/green: esos ya significan
+     asistencia y origen en la misma fila — reusarlos haría que el mismo color
+     mintiera dos cosas a la vez. Mismos valores que el mockup aprobado. ---- */
+  --c-manuel: #2FB6A6;
+  --c-manuel-soft: rgba(47, 182, 166, 0.18);
+  --c-manuel-line: rgba(47, 182, 166, 0.55);
+  --c-berni: #E0679A;
+  --c-berni-soft: rgba(224, 103, 154, 0.18);
+  --c-berni-line: rgba(224, 103, 154, 0.55);
+  --c-alex: #6E7FE8;
+  --c-alex-soft: rgba(110, 127, 232, 0.18);
+  --c-alex-line: rgba(110, 127, 232, 0.55);
+  --c-iker: #D48A2E;
+  --c-iker-soft: rgba(212, 138, 46, 0.18);
+  --c-iker-line: rgba(212, 138, 46, 0.55);
+  --c-dani: #9B6BD9;
+  --c-dani-soft: rgba(155, 107, 217, 0.18);
+  --c-dani-line: rgba(155, 107, 217, 0.55);
+
+  /* ---- ESCALA CERRADA. Siete tamaños, ni uno más.
+     Antes había 27 valores distintos, doce entre 9,5 y 14,5px, con medios
+     píxeles (11,8 / 12,2 / 12,8) que solo aparecen cuando alguien empuja un
+     número hasta que "cuadra" en una vista concreta. ---- */
+  --t0: 11px;   /* versalitas, etiquetas, notas al pie */
+  --t1: 13px;   /* datos de tabla, texto secundario */
+  --t2: 15px;   /* cuerpo */
+  --t3: 17px;   /* títulos de bloque */
+  --t4: 24px;   /* título de pantalla */
+  --t5: 34px;   /* cifra destacada */
+  --t6: 52px;   /* LA cifra que manda, una por pantalla */
+
+  /* ---- Ritmo. Múltiplos de 4, y una sola anchura para el dinero ---- */
+  --col-cifra: 132px;
+  --fila: 32px;
+  --fila-comoda: 40px;
+  --sidebar-w: 244px;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+}
+
+/* ---- Tema claro. El equipo trabaja en oscuro, pero un informe que se
+   imprime o se enseña en una reunión pide papel. Solo se redefinen tokens. ---- */
+:root[data-tema="claro"] {
+  --bg: #F4F5F1;
+  --bg-2: #EDEFE9;
+  --surface: #FBFBF8;
+  --surface-2: #F2F3EF;
+  --surface-3: #E9EBE5;
+  --border: #D6DBD4;
+  --border-2: #AFB8B0;
+  --gold: #7A5D0C;
+  --gold-dim: #9A7A18;
+  --gold-soft: rgba(225, 202, 113, 0.30);
+  --gold-line: rgba(122, 93, 12, 0.35);
+  --text: #14181B;
+  --text-2: #454E54;
+  --text-3: #5A646A;
+  --text-4: #6E7A80;
+  --red: #A81E0F;
+  --red-soft: rgba(168, 30, 15, 0.10);
+  --orange: #8A4B00;
+  --orange-soft: rgba(138, 75, 0, 0.10);
+  --blue: #2A5A8C;
+  --blue-soft: rgba(42, 90, 140, 0.10);
+  --green: #1B6B45;
+  --green-soft: rgba(27, 107, 69, 0.10);
+  --yellow: #8A7607;
+  --yellow-soft: rgba(138, 118, 7, 0.10);
+}
+
+/* Toda cifra del sistema, en cualquier pantalla: mismos anchos de dígito y
+   cero barrado. Un número es un número — la misma voz en la cifra de 52px,
+   en la tabla y en el recibo. */
+.cifra, .mono, .value, td.r, th.r {
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "tnum", "zero";
+}
+
+/* La acotación: la línea que explica qué es una cifra y qué no es. Máximo
+   diez en toda la app — si hay once, alguna no hacía falta. */
+.acotacion {
+  font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  font-style: italic;
+  font-size: var(--t1);
+  color: var(--text-3);
+  max-width: 52ch;
+  margin-top: 6px;
+  display: block;
+}
+
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: "Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--t2);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, select, textarea { font-family: inherit; color: inherit; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+.mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+/* Reglas BASE de las tres clases más usadas del sistema. Existían solo
+   contextualizadas (.card-head .hint, .kpi .label, .ok-box), así que en los
+   30+ sitios donde se usan sueltas salían como texto de cuerpo sin estilo —
+   incluido el mensaje de éxito al registrar una devolución y la nota que
+   explica la regla del mes. Van AQUÍ, antes de .gold/.pos/.neg, para que un
+   `class="hint gold"` gane: misma especificidad, decide el orden. */
+.hint  { font-size: var(--t1); color: var(--text-3); }
+.label { font-size: var(--t1); text-transform: uppercase; letter-spacing: .6px; color: var(--text-3); }
+.ok    { font-size: var(--t1); color: var(--green); }
+
+.gold { color: var(--gold); }
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+.muted { color: var(--text-3); }
+
+/* ===== OS shell ===== */
+.os { display: flex; height: 100dvh; overflow: hidden; }
+.osnav {
+  width: var(--sidebar-w); flex-shrink: 0; background: var(--bg-2);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto;
+}
+.osnav .brand {
+  padding: 18px 16px 16px; display: flex; align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+.osnav .brand-logo { height: 30px; width: auto; display: block; }
+.osnav .group { padding: 12px 10px 2px; }
+.osnav .group-label { font-size: var(--t0); text-transform: uppercase; letter-spacing: 1px; color: var(--text-4); padding: 6px 10px; }
+.osnav .navitem {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 10px; border-radius: 8px; color: var(--text-2); font-size: var(--t1); margin-bottom: 1px;
+}
+.osnav .navitem:hover { background: var(--surface); color: var(--text); }
+.osnav .navitem.active { background: var(--gold-soft); color: var(--gold); }
+.osnav .navitem.soon { color: var(--text-4); cursor: default; }
+.osnav .navitem.soon:hover { background: transparent; color: var(--text-4); }
+.osnav .navitem .count { font-size: var(--t0); background: var(--surface-3); color: var(--text-3); padding: 1px 7px; border-radius: 999px; }
+.osnav .navitem.active .count { background: var(--gold); color: #080808; }
+.osnav .soon-tag { font-size: var(--t0); text-transform: uppercase; letter-spacing: .5px; color: var(--text-4); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; }
+
+.os-main { flex: 1; overflow-y: auto; min-width: 0; scroll-behavior: smooth; }
+.os-main.nopad { overflow: hidden; }
+.page { padding: 26px 30px 60px; max-width: 1240px; }
+.page-head { margin-bottom: 22px; }
+.page-head h1 { font-family: "Oswald", sans-serif; font-weight: 600; font-size: var(--t4); letter-spacing: .3px; }
+.page-head p { color: var(--text-3); margin-top: 4px; font-size: var(--t1); }
+
+/* El interruptor de modo prueba/producción en /contratos. */
+.modo-contrato { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+
+/* ===== KPI tiles ===== */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; }
+.kpi-link { display: block; text-decoration: none; color: inherit; cursor: pointer; }
+#cash-collected-detalle { scroll-margin-top: 20px; }
+.kpi .label { font-size: var(--t1); text-transform: uppercase; letter-spacing: .6px; color: var(--text-3); }
+.kpi .value { font-family: "Oswald", sans-serif; font-size: var(--t4); font-weight: 600; margin-top: 8px; }
+.kpi .sub { font-size: var(--t1); color: var(--text-3); margin-top: 5px; }
+/* El destacado NO depende de ganar una guerra de especificidad: el filete
+   inferior es una propiedad que ninguna regla de tarjeta genérica toca. */
+.kpi.accent { border-color: var(--gold-line); background: linear-gradient(180deg, var(--gold-soft), var(--surface)); }
+.kpi.accent .value { border-bottom: 2px solid var(--gold-line); padding-bottom: 6px; display: inline-block; }
+
+/* ===== cards & tables ===== */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px){ .grid-2 { grid-template-columns: 1fr; } }
+/* Una columna a ancho completo: para tablas anchas (5+ columnas) que no
+   entran en la mitad de página que da .grid-2. */
+.grid-1 { display: grid; grid-template-columns: 1fr; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+/* Compras, Sesiones, Estrategias y Contratos son 4 `.card` seguidas sin nada
+   entre medio (a diferencia de otras pantallas, donde un `.page-head` separa
+   cada bloque) — sin esto quedan pegadas. Mismo defecto que hubo en
+   Comisiones, mismo arreglo: separar las boxes con un margen entre ellas. */
+.ficha > .card + .card { margin-top: 18px; }
+.card-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.card-head h2 { font-size: var(--t2); font-weight: 600; }
+/* Sin `color`: lo pone .hint. Fijarlo aquí (0,2,0) le ganaba a .gold y .neg
+   (0,1,0), así que "Ver todos →" salía gris y el subtotal de vencidas
+   también, estando ambos codificados con su color. */
+.card-head .hint { font-size: var(--t1); }
+.card-body { padding: 6px 0; }
+table.t { width: 100%; border-collapse: collapse; font-size: var(--t1); }
+table.t th { text-align: left; font-weight: 500; color: var(--text-3); font-size: var(--t0); text-transform: uppercase; letter-spacing: .5px; padding: 9px 18px; border-bottom: 1px solid var(--border); }
+table.t td { padding: 10px 18px; border-bottom: 1px solid var(--border); color: var(--text-2); }
+table.t tr:last-child td { border-bottom: none; }
+table.t td.r, table.t th.r { text-align: right; }
+/* `:not(.cliente-grupo)` es inocuo en cualquier tabla que no use esa clase
+   (todas menos /contratos) — el hover normal de fila sigue igual en todas
+   partes. En /contratos, deja afuera la celda de Cliente (rowSpan) para que
+   el hover de UNA fila no tiña el nombre compartido del grupo entero; ver
+   `tbody:has(...)` más abajo, que sí lo hace a propósito al pasar por el
+   nombre. */
+table.t tr:hover td:not(.cliente-grupo) { background: var(--surface-2); }
+.fila-clic { cursor: pointer; }
+table.t tr.fila-clic:hover td { background: var(--surface-2); }
+
+/* Agrupación de /contratos por cliente: la celda con rowSpan (Cliente) y el
+   hover que pinta el grupo entero. Cada cliente es su propio <tbody> — ver
+   app/(os)/contratos/page.tsx. */
+table.t td.cliente-grupo { vertical-align: middle; font-weight: 600; color: var(--text); cursor: default; }
+table.t tbody:has(td.cliente-grupo:hover) td { background: var(--surface-2); }
+
+/* Tag de Tipo en /contratos. NO reusa `.badge.tier` (tier de suscripción) ni
+   `.badge.coach` (insignia de coach) — esas dos ya significan otra cosa en
+   otras pantallas (Sidebar.tsx / conv-meta). */
+.badge.tipo-nueva { color: var(--text-2); border-color: var(--border-2); }
+.badge.tipo-ampliacion { color: var(--text-2); border-color: var(--border-2); background: var(--surface-3); }
+
+/* ---- La cinta de la esquina de una fila de /contratos ----
+   Dorada = este es el PDF corregido. Roja = hay que corregirlo, los bonos
+   cambiaron después de emitirlo. Cuál se pinta lo decide `cintaContrato()`
+   por precedencia entre las dos marcas de la 0061 —la roja gana si está
+   puesta, sin mirar fechas—; aquí solo está el aspecto.
+
+   Por qué estos dos colores y no otros: `--blue` significa "falta un dato" y
+   `--orange` ya es el estado Error de esta misma pantalla, así que las dos
+   mentirían. El oro está permitido para "filetes", y `.pill red` ya se usa
+   para `no_asistio` en Sesiones — o sea, rojo también quiere decir "esto no
+   sirve", no solo dinero que salió.
+
+   Sin tokens nuevos: el estado apagado/encendido es opacidad, no un segundo
+   dorado y un segundo rojo inventados aquí abajo.
+
+   Y sin JavaScript: `:hover` basta para que solo haya una abierta a la vez —
+   el puntero solo puede estar en un sitio— y para que se cierre al salir. El
+   `:hover` del ancla sigue siendo verdadero mientras el puntero esté sobre el
+   globo, que es su descendiente, así que el texto se puede leer sin que huya. */
+table.t tr.fila-con-cinta td:last-child {
+  position: relative;
+  /* Reserva el sitio de la cinta para que nunca se pose sobre "Recorregir". */
+  padding-right: 28px;
+}
+/* 20px de alto, no 16: el triángulo mide 16 y el globo empieza en 20, así que
+   el ancla tiene que PUENTEAR esos 4 px. Con `height: 16px` el puntero que
+   bajaba a leer el texto cruzaba una franja sin ancla ni globo y el globo se
+   cerraba en la cara — el aire visual se mantiene, lo que se va es el hueco. */
+.marca-cinta { position: absolute; top: 0; right: 0; width: 16px; height: 20px; cursor: help; }
+.marca-cinta .cinta {
+  position: absolute; top: 0; right: 0; width: 16px; height: 16px;
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
+  opacity: .8; transition: opacity .12s ease;
+}
+.marca-cinta.dorada .cinta { background: var(--gold); }
+.marca-cinta.roja .cinta { background: var(--red); }
+.marca-cinta:hover .cinta, .marca-cinta:focus-visible .cinta { opacity: 1; }
+
+/* Se abre hacia la izquierda y hacia abajo: a la derecha se sale de la tabla y
+   arriba choca con la cabecera. */
+.marca-cinta .globo {
+  position: absolute; top: 20px; right: 0;
+  width: max-content; max-width: 260px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  padding: 10px 13px;
+  box-shadow: 0 10px 26px -10px rgba(0,0,0,.65);
+  opacity: 0; visibility: hidden;
+  transition: opacity .12s ease;
+  z-index: 20;
+  text-align: left; white-space: normal; cursor: default;
+}
+.marca-cinta.dorada .globo { border-color: var(--gold-line); }
+.marca-cinta.roja .globo { border-color: var(--red); }
+.marca-cinta:hover .globo, .marca-cinta:focus-visible .globo { opacity: 1; visibility: visible; }
+/* 🔴 Y esto es lo que hace que el globo se VEA. La tabla vive dentro de
+   `.tabla-scroll`, que es `overflow-x: auto` — y el spec de CSS dice que si un
+   eje no es `visible`, el otro deja de serlo también: `overflow-y` pasa a
+   `auto` solo. O sea que el contenedor RECORTA por abajo, y el globo, que se
+   abre hacia abajo, se cortaba a la mitad.
+   No es un caso raro de tablas largas: es justo el contrario. Con UN solo
+   contrato en la lista, esa única fila ES la última, así que el globo nacía
+   roto el primer día. Abrirlo hacia arriba no arregla nada — ahí choca con la
+   cabecera, que está dentro del mismo contenedor.
+   Se le reserva el sitio SOLO mientras hay un globo abierto, con `:has()` —el
+   mismo patrón que el hover de grupo de más arriba—, así que no deja hueco en
+   blanco bajo ninguna tabla el 99 % del tiempo. Crece hacia abajo, que es
+   donde no hay nada, y por eso no mueve nada de sitio. */
+.tabla-scroll:has(.marca-cinta:hover), .tabla-scroll:has(.marca-cinta:focus-visible) {
+  padding-bottom: 96px;
+}
+/* Mismo criterio que `.tt`, el otro globo flotante: en papel una sombra negra
+   al 65 % es una mancha, no una elevación. */
+:root[data-tema="claro"] .marca-cinta .globo { box-shadow: 0 8px 26px rgba(0,0,0,.14); }
+.marca-cinta .globo .tit { display: block; font-size: var(--t1); font-weight: 600; margin-bottom: 3px; }
+.marca-cinta.dorada .globo .tit { color: var(--gold); }
+.marca-cinta.roja .globo .tit { color: var(--red); }
+.marca-cinta .globo .txt { display: block; font-size: var(--t0); color: var(--text-2); line-height: 1.45; }
+
+/* Compras dentro del panel lateral (420px): la misma tabla que en la página
+   completa, con menos aire para que entren sus 4 columnas sin scroll lateral. */
+table.t.tabla-compacta th, table.t.tabla-compacta td { padding: 8px 6px; }
+
+/* La card a la que saltamos al abrir la ficha desde un pago concreto — un
+   brillo dorado que sube y baja igual de progresivo (mismo patrón que
+   .rp-glow-strong del kit de efectos visuales del Escritorio: 50%/50%,
+   ease-in-out). Con 87%/100% subía despacio y se apagaba de golpe —
+   comprimir la bajada a un 13 % del ciclo la hacía brusca aunque la curva
+   fuera la misma. El ciclo completo dura 2.3s y se repite 3 veces. */
+@keyframes linea-resalto {
+  0%, 100% { box-shadow: 0 0 0 0 transparent, 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 0 1px var(--gold-line), 0 0 14px 2px var(--gold-line); }
+}
+/* Genérico a propósito — no `tr...td`: en un <tr> de una tabla con
+   border-collapse:collapse (table.t) este box-shadow se pinta roto, solo el
+   borde superior de la fila y algún borde vertical suelto entre columnas
+   (medido el 8-sep en Compras). Por eso el glow no vive en la fila que
+   resaltamos sino en la `.card` que la contiene (FichaBloques.tsx busca
+   `fila.closest(".card")`) — fuera de una tabla, el box-shadow se pinta
+   entero y sigue el radius de la card. */
+.linea-resaltada { animation: linea-resalto 2.3s ease-in-out 3; }
+.pill { font-size: var(--t0); padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-2); color: var(--text-3); white-space: nowrap; }
+.pill.gold { color: var(--gold); border-color: var(--gold-line); background: var(--gold-soft); }
+.pill.green { color: var(--green); border-color: transparent; background: var(--green-soft); }
+.pill.red { color: var(--red); border-color: transparent; background: var(--red-soft); }
+.pill.blue { color: var(--blue); border-color: transparent; background: var(--blue-soft); }
+.pill.orange { color: var(--orange); border-color: transparent; background: var(--orange-soft); }
+.pill.yellow { color: var(--yellow); border-color: transparent; background: var(--yellow-soft); }
+.pill.c-manuel { color: var(--c-manuel); border-color: var(--c-manuel-line); background: var(--c-manuel-soft); }
+.pill.c-berni { color: var(--c-berni); border-color: var(--c-berni-line); background: var(--c-berni-soft); }
+.pill.c-alex { color: var(--c-alex); border-color: var(--c-alex-line); background: var(--c-alex-soft); }
+.pill.c-iker { color: var(--c-iker); border-color: var(--c-iker-line); background: var(--c-iker-soft); }
+.pill.c-dani { color: var(--c-dani); border-color: var(--c-dani-line); background: var(--c-dani-soft); }
+/* Franja lateral (SE-4): quién dio la sesión, de reojo en una tabla de
+   cientos de filas. El hover de tr:hover td (línea de arriba) pintaría
+   --surface-2 encima y taparía el color, así que estas filas anulan ese
+   fondo y en cambio se aclaran enteras. */
+table.t tbody tr.r-manuel { background: var(--c-manuel-soft); box-shadow: inset 4px 0 0 var(--c-manuel); }
+table.t tbody tr.r-berni { background: var(--c-berni-soft); box-shadow: inset 4px 0 0 var(--c-berni); }
+table.t tbody tr.r-alex { background: var(--c-alex-soft); box-shadow: inset 4px 0 0 var(--c-alex); }
+table.t tbody tr.r-iker { background: var(--c-iker-soft); box-shadow: inset 4px 0 0 var(--c-iker); }
+table.t tbody tr.r-dani { background: var(--c-dani-soft); box-shadow: inset 4px 0 0 var(--c-dani); }
+table.t tbody tr[class*="r-"]:hover td { background: transparent; }
+table.t tbody tr[class*="r-"]:hover { filter: brightness(1.35); }
+.note { font-size: var(--t1); color: var(--text-3); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
+.empty-box { padding: 40px; text-align: center; color: var(--text-3); }
+.bar-row { display: flex; align-items: center; gap: 10px; padding: 7px 18px; font-size: var(--t1); }
+.bar-row .bar { height: 8px; border-radius: 4px; background: var(--gold); opacity: .8; }
+.bar-row .lbl { width: 120px; color: var(--text-2); flex-shrink: 0; }
+.bar-row .num { margin-left: auto; color: var(--text-3); font-size: var(--t1); }
+
+/* ================= Inbox module (dentro del OS) ================= */
+.shell { display: flex; height: 100dvh; overflow: hidden; width: 100%; }
+.sidebar { width: 340px; min-width: 280px; flex-shrink: 0; border-right: 1px solid var(--border); background: var(--bg-2); display: flex; flex-direction: column; }
+.sidebar-head { padding: 16px; border-bottom: 1px solid var(--border); }
+.sidebar-head h1 { font-size: var(--t2); margin: 0 0 12px; font-family: "Oswald", sans-serif; }
+.tabs { display: flex; gap: 6px; }
+.tab { font-size: var(--t1); padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-3); }
+.tab.active { background: var(--gold-soft); color: var(--gold); border-color: transparent; }
+.conv-list { overflow-y: auto; flex: 1; }
+.conv { display: block; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.conv:hover { background: var(--surface); }
+.conv.active { background: var(--surface); border-left: 3px solid var(--gold); padding-left: 13px; }
+.conv-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.conv-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv-time { font-size: var(--t0); color: var(--text-3); flex-shrink: 0; }
+.conv-meta { display: flex; gap: 6px; margin-top: 5px; align-items: center; flex-wrap: wrap; }
+.badge { font-size: var(--t0); padding: 2px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-3); white-space: nowrap; }
+.badge.pend { color: var(--orange); border-color: transparent; background: rgba(251,146,60,.14); }
+.badge.tier { color: var(--gold); border-color: transparent; background: var(--gold-soft); }
+.badge.coach { color: var(--purple); border-color: transparent; background: var(--purple-soft); }
+.conv-autor { font-size: var(--t0); color: var(--text-3); white-space: nowrap; }
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.thread-head { padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--surface); display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+.thread-head .who .nm { font-weight: 600; font-size: var(--t2); }
+.thread-head .who .ph { color: var(--text-3); font-size: var(--t1); margin-top: 2px; }
+.actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.btn { font-size: var(--t1); padding: 6px 12px; border-radius: 8px; cursor: pointer; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+.btn:hover { border-color: var(--border-2); }
+.btn.primary { background: var(--gold); color: #080808; border-color: transparent; font-weight: 600; }
+.btn.warn { background: rgba(251,146,60,.14); color: var(--orange); border-color: transparent; }
+select.sel { font-size: var(--t1); padding: 6px 8px; border-radius: 8px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+.messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+.msg { position: relative; max-width: 68%; padding: 9px 13px; border-radius: 12px; line-height: 1.45; word-wrap: break-word; }
+.msg.in { align-self: flex-start; background: var(--surface-2); border-bottom-left-radius: 4px; }
+.msg.out { align-self: flex-end; background: #1c3a26; border-bottom-right-radius: 4px; }
+.msg .meta { font-size: var(--t0); color: var(--text-3); margin-top: 4px; }
+.msg .meta .autor { color: var(--text-3); }
+
+/* ===== media en el hilo (Task 4) ===== */
+.media-img { display: block; max-width: 260px; width: 100%; border-radius: var(--radius); cursor: pointer; }
+.media-video { display: block; max-width: 280px; width: 100%; border-radius: var(--radius); background: #000; }
+.media-audio { width: 240px; max-width: 100%; }
+.transcript { font-size: var(--t1); color: var(--text-3); font-style: italic; margin-top: 5px; }
+.media-doc {
+  display: flex; align-items: center; gap: 6px; padding: 9px 13px; border-radius: var(--radius);
+  background: var(--surface-3); border: 1px solid var(--border-2); color: var(--text); font-size: var(--t1);
+}
+.media-doc:hover { border-color: var(--gold-line); color: var(--gold); }
+.media-loc { font-size: var(--t1); color: var(--text); }
+.reaccion {
+  position: absolute; top: -10px; right: -6px; font-size: var(--t2); line-height: 1;
+  background: var(--surface-3); border: 1px solid var(--border-2); border-radius: 999px;
+  padding: 3px 5px; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+.msg.in .reaccion { right: auto; left: -6px; }
+.reply { border-top: 1px solid var(--border); padding: 12px 16px; background: var(--surface); }
+.reply form { display: flex; gap: 10px; align-items: flex-end; }
+.reply textarea { flex: 1; resize: none; min-height: 42px; max-height: 140px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: var(--t2); }
+.reply .hint { font-size: var(--t0); color: var(--text-3); margin-top: 6px; }
+.reply .err { font-size: var(--t1); color: var(--red); margin-top: 6px; }
+.banner-ventana { font-size: var(--t1); color: var(--orange); background: rgba(251,146,60,.14); border: 1px solid rgba(251,146,60,.3); border-radius: 8px; padding: 7px 11px; margin-bottom: 8px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.banner-ventana .linkbtn { color: var(--orange); font-weight: 600; }
+.banner-ventana .linkbtn:hover { color: var(--gold); }
+.empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-3); }
+.divider { color: var(--text-3); font-size: var(--t0); }
+
+/* ================= Login ================= */
+.login-wrap { position: fixed; inset: 0; overflow: hidden; display: grid; place-items: center; background: var(--bg); }
+.login-bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.login-overlay { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 35%, rgba(8,8,8,0.35), rgba(8,8,8,0.9) 72%); }
+.login-card {
+  position: relative; z-index: 2; width: min(390px, 92vw);
+  background: rgba(16,16,16,0.72); backdrop-filter: blur(16px) saturate(120%);
+  border: 1px solid var(--gold-line); border-radius: 20px; padding: 34px 30px 26px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.login-logo-wrap { display: flex; justify-content: center; margin-bottom: 6px; }
+.login-logo-wrap img { width: 158px; height: auto; display: block; }
+.login-title { font-family: "Oswald", sans-serif; font-size: var(--t4); font-weight: 600; letter-spacing: .4px; }
+.login-sub { color: var(--text-3); font-size: var(--t1); margin-top: 2px; }
+.login-ticker { display: flex; align-items: center; gap: 10px; font-size: var(--t1); color: var(--text-3); margin-bottom: 20px; font-family: "JetBrains Mono", monospace; }
+.login-ticker .up { color: var(--green); }
+.login-form { display: flex; flex-direction: column; gap: 12px; }
+.login-form input {
+  padding: 13px 15px; border-radius: 11px; border: 1px solid var(--border-2);
+  background: rgba(8,8,8,0.6); color: var(--text); font-size: var(--t2); outline: none;
+}
+.login-form input:focus { border-color: var(--gold-line); box-shadow: 0 0 0 3px var(--gold-soft); }
+.login-btn {
+  padding: 13px; border-radius: 11px; background: var(--gold); color: #080808;
+  font-weight: 600; font-size: var(--t2); font-family: "Oswald", sans-serif; letter-spacing: .3px;
+  transition: transform .06s ease, opacity .2s ease;
+}
+.login-btn:hover { opacity: .92; }
+.login-btn:active { transform: translateY(1px); }
+.login-btn:disabled { opacity: .6; cursor: default; }
+.login-err { color: var(--red); font-size: var(--t1); text-align: center; margin-top: 2px; }
+.login-foot { text-align: center; color: var(--text-4); font-size: var(--t0); margin-top: 20px; }
+
+/* logout en el nav */
+.osnav .nav-spacer { flex: 1; }
+.osnav .logout { margin: 10px; padding: 9px 12px; border-radius: 8px; color: var(--text-3); font-size: var(--t1); border: 1px solid var(--border); text-align: center; }
+.osnav .logout:hover { background: var(--surface); color: var(--text); }
+
+/* indicador en vivo (inbox) */
+.live { font-size: var(--t0); color: var(--green); font-family: "JetBrains Mono", monospace; letter-spacing: .3px; margin-left: 6px; vertical-align: middle; animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* formulario de gasto */
+.gasto-form { display: flex; flex-direction: column; gap: 12px; }
+.gasto-form .gf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.gasto-form label { display: flex; flex-direction: column; gap: 5px; font-size: var(--t1); color: var(--text-3); }
+.gasto-form input, .gasto-form select { padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border-2); background: var(--surface-2); color: var(--text); font-size: var(--t2); }
+.gasto-form input:focus, .gasto-form select:focus { outline: none; border-color: var(--gold-line); box-shadow: 0 0 0 3px var(--gold-soft); }
+.gasto-form .gf-actions { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.gasto-form .gf-ok { color: var(--green); font-size: var(--t1); }
+
+/* Íconos SVG que reemplazan emoji (Iconos.tsx y afines): sin esto quedan
+   alineados a la línea de base del texto, pegados al borde superior de
+   cualquier caja/pill que los envuelva. */
+.mc-icono { vertical-align: -2px; flex: none; }
+
+/* botones-enlace y modal */
+.linkbtn { color: var(--gold); font-size: var(--t1); padding: 2px 4px; }
+/* Fondo en vez de subrayado: el subrayado se leía barato. Antes vivía solo
+   como override de `table.t td.nom` (Clientes) — promovido a la regla base
+   el 9-sep-2026 para que TODO `.linkbtn` de cualquier pantalla (Contratos
+   incluida) lo herede, en vez de repetir el override pantalla por pantalla.
+
+   `--surface-3` y NO `--surface-2`, que es lo que decía al promoverla: casi
+   todos los `.linkbtn` del OS viven DENTRO de una tabla, y al apuntar a uno
+   la fila entera ya se ha pintado de `--surface-2`
+   (`table.t tr:hover td`, línea 246 de este fichero). Fondo del mismo tono
+   sobre fondo del mismo tono = no se ve nada: el botón perdía el subrayado
+   que tenía y no ganaba nada a cambio, justo en el sitio donde más se usa.
+   Con `--surface-3` el botón se despega de su propia fila. */
+.linkbtn:hover { text-decoration: none; background: var(--surface-3); border-radius: 4px; }
+/* Reenviar/Recorregir en /contratos quedan siempre pintados y se deshabilitan
+   en vez de desaparecer — el atributo `disabled` real del <button> alcanza,
+   no hace falta una clase aparte para el mismo estado.
+
+   🔴 AQUÍ NO VA EL ESTILO DE `:disabled`. Lo pone `inbox.css:1247`
+   (`opacity: .5; cursor: not-allowed`), que se importa DESPUÉS y por tanto
+   gana los empates. Este bloque llegó a tener además
+   `.linkbtn:disabled { color: var(--text-4) }`, con la misma especificidad
+   (0,2,0) pero OTRA propiedad — así que no competían: se sumaban. El texto
+   salía con el color apagado Y la opacidad encima, y el resultado medido era
+   2,08:1 en tema oscuro y 1,89:1 en claro. La línea 25 de este mismo fichero
+   documenta que `--text-4` se subió a 4,55:1 justamente para no estar ahí:
+   el apilado devolvía el botón al 2,01:1 que ese comentario llama ilegible.
+   Y no era solo Contratos — son los 9 componentes que deshabilitan un
+   `.linkbtn`. Si algún día hace falta tocar el aspecto deshabilitado, se toca
+   en inbox.css, que es el carril que gana. Retirado el 9-sep-2026. */
+/* El hover sí se cancela desde aquí: cancela el `background` que pone la regla
+   de hover de tres líneas más arriba, que también vive en este fichero. */
+.linkbtn:disabled:hover { background: none; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: grid; place-items: center; z-index: 50; padding: 20px; }
+.modal { width: min(520px, 94vw); max-height: 88dvh; overflow-y: auto; background: var(--surface); border: 1px solid var(--border-2); border-radius: 16px; padding: 20px 22px; box-shadow: 0 24px 70px rgba(0,0,0,0.6); }
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.modal-head h3 { font-family: "Oswald", sans-serif; font-size: var(--t3); }
+.modal-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+
+/* picker de clientes (Nuevo mensaje) */
+.newmsg-btn { margin-top: 12px; }
+.search { width: 100%; padding: 11px 13px; border-radius: 10px; border: 1px solid var(--border-2); background: var(--surface-2); color: var(--text); font-size: var(--t2); margin-bottom: 10px; }
+.search:focus { outline: none; border-color: var(--gold-line); box-shadow: 0 0 0 3px var(--gold-soft); }
+.picker-list { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.picker-item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 9px; text-align: left; }
+.picker-item:hover { background: var(--surface-2); }
+.pi-name { color: var(--text); font-size: var(--t2); }
+.pi-phone { color: var(--text-3); font-size: var(--t1); }
+
+/* Previsualización de la plantilla en la lista del picker. La fila pasa a
+   ser vertical: el texto del mensaje manda y el nombre técnico
+   (`recordatorio_1h_es`) baja a etiqueta pequeña. */
+.picker-item.tpl { flex-direction: column; align-items: stretch; gap: 5px; padding: 11px 12px; }
+.tpl-preview { color: var(--text); font-size: var(--t1); line-height: 1.45; }
+.tpl-meta { display: flex; gap: 8px; align-items: center; color: var(--text-3); font-size: var(--t1); }
+/* Marcador de variable sin rellenar: [link]. Se distingue del texto real
+   para que nadie lo confunda con parte del mensaje. */
+.tpl-hueco { color: var(--text-3); }
+.picker-sel { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--surface-2); border-radius: 10px; margin-bottom: 12px; }
+.compose { width: 100%; min-height: 90px; resize: vertical; padding: 11px 13px; border-radius: 10px; border: 1px solid var(--border-2); background: var(--surface-2); color: var(--text); font-family: inherit; font-size: var(--t2); margin-bottom: 10px; }
+.compose:focus { outline: none; border-color: var(--gold-line); box-shadow: 0 0 0 3px var(--gold-soft); }
+
+/* selector de plantillas (Task 4) */
+.tpl-sel { align-items: center; }
+.tpl-body { font-size: var(--t1); color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; margin-bottom: 12px; white-space: pre-wrap; line-height: 1.5; }
+.tpl-vars { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.tpl-var { display: flex; flex-direction: column; gap: 5px; font-size: var(--t1); color: var(--text-3); }
+.tpl-var input { padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border-2); background: var(--surface-2); color: var(--text); font-size: var(--t2); }
+.tpl-var input:focus { outline: none; border-color: var(--gold-line); box-shadow: 0 0 0 3px var(--gold-soft); }
+.tpl-err { color: var(--red); font-size: var(--t1); margin: 4px 0 10px; }
+
+/* selector de la agenda que cerró la venta (Task 5) */
+.opts { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.opt { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border: 1px solid var(--border-2); border-radius: 9px; background: var(--surface-2); font-size: var(--t1); cursor: pointer; }
+.opt:has(input:checked) { border-color: var(--gold-line); background: var(--gold-soft); }
+.aviso { color: var(--red); font-size: var(--t1); margin: 4px 0; overflow-wrap: anywhere; }
+
+/* ---- Formulario Nueva venta ---- */
+.venta-tipos { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.venta-tipos .vt { flex: 1; min-width: 130px; padding: 10px; border: 1px solid var(--border, #333); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
+/* Mismo patrón de "activo" que .osnav .navitem.active y .tab.active: el
+   fondo es lo que se ve de un vistazo, no solo el borde. */
+.venta-tipos .vt.on { background: var(--gold-soft); border-color: var(--gold-line); color: var(--gold); font-weight: 600; }
+.venta-sugerencias { list-style: none; margin: 4px 0 10px; padding: 0; border: 1px solid var(--border, #333); border-radius: 8px; }
+.venta-sugerencias button { width: 100%; text-align: left; padding: 8px 10px; background: none; border: none; color: inherit; cursor: pointer; }
+.venta-sugerencias button:hover { background: rgba(255,255,255,0.06); }
+.venta-ctx { border: 1px solid var(--border, #333); border-radius: 8px; padding: 10px 12px; margin: 8px 0 12px; font-size: 0.92em; }
+/* Aviso BLANDO: "puede que este cliente ya exista". Se guarda igual. */
+.venta-form .warn { color: var(--orange); margin: 6px 0; }
+/* Error DURO: la venta pudo no guardarse y hay que ir a comprobarlo. Antes
+   compartía color con el aviso blando (#e0b64f, además a pelo y no un token),
+   así que el peor mensaje de la pantalla se leía igual que el más inocuo. */
+.venta-form .error {
+  color: var(--red); background: var(--red-soft);
+  border: 1px solid rgba(248, 113, 113, .25); border-radius: var(--radius-sm);
+  padding: 9px 12px; margin: 10px 0; line-height: 1.5;
+}
+
+/* ---- Secciones de /nueva-venta -------------------------------------------
+   El formulario tenía cinco bloques marcados solo en comentarios del código:
+   en pantalla eran 14 campos seguidos. Y el de atribución iba en un
+   <fieldset> sin clase, con el borde gris por defecto del navegador dentro
+   de una app oscura. */
+/* 780px: dentro de la .card el form se estiraba a todo el ancho y en
+   pantalla grande quedaban inputs de 900px para escribir "620 000 000". */
+.venta-form { gap: 0; max-width: 780px; }
+.vf-sec { border-top: 1px solid var(--border); padding: 20px 0 22px; }
+.vf-sec:first-of-type { border-top: none; padding-top: 4px; }
+.vf-sec-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 12px; flex-wrap: wrap; }
+/* Oswald, igual que .page-head h1, .modal-head h3 y .sidebar-head h1: que se
+   lea que son cuatro pasos y no catorce campos seguidos. */
+.vf-sec-head h3 { font-family: "Oswald", sans-serif; font-size: var(--t2); font-weight: 600; margin: 0; letter-spacing: .3px; color: var(--text); }
+.vf-sec-n {
+  flex: none; width: 19px; height: 19px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--gold-soft); border: 1px solid var(--gold-line);
+  color: var(--gold); font-size: var(--t0); font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.vf-sec-sub { font-size: var(--t0); color: var(--text-3); }
+.vf-sec-body { display: flex; flex-direction: column; gap: 14px; }
+.vf-ayuda { font-size: var(--t0); color: var(--text-3); line-height: 1.45; margin-top: 3px; }
+
+/* Bonos en la ficha del cliente. Se ve siempre que haya programa activo,
+   aunque no tenga bonos: el cliente al que se le olvidaron es justo el que
+   hay que poder arreglar. */
+.bonos-ficha { margin-top: 10px; }
+.bonos-ficha-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bonos-ficha-label {
+  font-size: var(--t0); text-transform: uppercase; letter-spacing: .6px; color: var(--text-3);
+}
+.bonos-lista {
+  margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px;
+  font-size: var(--t1); color: var(--text-2);
+}
+
+/* Bonos del evento 26/08 ---------------------------------------------------
+   Bloque plano dentro de "Qué compró": son parte de lo que el cliente compra,
+   no un paso aparte. El maestro va sobre --gold-soft para que se lea como el
+   atajo que es, y las cuatro casillas quedan planas debajo. */
+.vf-bonos {
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 14px 16px; margin: 0 0 16px; display: flex; flex-direction: column; gap: 8px;
+}
+.vf-bonos legend {
+  font-size: var(--t0); text-transform: uppercase; letter-spacing: .6px;
+  color: var(--text-3); padding: 0 6px;
+}
+/* Sin scope a `.venta-form`: BonosCliente.tsx y RecorregirContrato.tsx usan
+   este mismo picker sin ese ancestro, así que sin esta regla las filas y las
+   casillas quedaban sin ningún estilo propio — pegadas y del tamaño por
+   defecto del navegador. Gana la de abajo (0,2,0) donde sí hay `.venta-form`. */
+.vf-bono {
+  display: flex; align-items: flex-start; gap: 11px; padding: 9px 10px;
+  border-radius: var(--radius); cursor: pointer;
+  font-size: var(--t2); color: var(--text-2); letter-spacing: 0;
+}
+.vf-bono:hover { background: var(--surface-2); }
+.vf-bono input[type="checkbox"] { flex: none; margin: 2px 0 0; accent-color: var(--gold); width: 18px; height: 18px; }
+.vf-bono > span { display: flex; flex-direction: column; }
+.vf-bono .vf-ayuda { margin-top: 2px; }
+/* Lo ÚNICO que hace falta con scope. `.venta-form label` (globals.css:722,
+   especificidad (0,1,1)) le gana a `.vf-bono` (0,1,0) en las dos propiedades
+   que declara y que aquí molestan: `font-size: var(--t1)` y
+   `letter-spacing: .2px`. El resto —display, gap, padding, radio, cursor,
+   color— NO lo toca ningún selector de `.venta-form`, así que ya venía de la
+   regla base y no había nada que ganar.
+
+   Estaba duplicado entero, con `gap` y `padding` distintos, y por eso el mismo
+   picker de bonos se veía de tres maneras según la pantalla: Nueva venta más
+   apretado que la ficha del cliente y que el modal de Recorregir. Reducido a
+   las dos propiedades reales el 9-sep-2026: ahora hay UNA definición del
+   picker y las tres pantallas se ven igual. Dos reglas casi idénticas siempre
+   acaban divergiendo. */
+.venta-form .vf-bono { font-size: var(--t2); letter-spacing: 0; }
+/* Aquí había cuatro reglas más —`:hover`, la casilla, el `> span` y `.vf-ayuda`—
+   copiadas de la base con derivas de 1px (margin 3px vs 2px, margin-top 1px vs
+   2px). Ninguna le ganaba a nada: no hay selector de `.venta-form` que compita
+   por esas propiedades. Retiradas el 9-sep-2026 junto con el resto de la
+   duplicación de arriba. Si el picker necesita cambiar, se cambia en la regla
+   base y cambia en las tres pantallas a la vez. */
+.venta-form .vf-bono-maestro {
+  background: var(--gold-soft); border: 1px solid var(--gold-line);
+  margin-bottom: 8px;
+}
+.venta-form .vf-bono-maestro:hover { background: var(--gold-soft); }
+.venta-form .vf-bono-maestro strong { color: var(--text); font-weight: 600; }
+.vf-bonos-nota { margin: 6px 2px 0; }
+
+/* Los <select> y los <input type="date"> nativos abrían su widget en CLARO
+   dentro de una app negra: no había `color-scheme` en ninguna parte del
+   fichero. Acotado al formulario para no tocar otras pantallas. */
+.venta-form input, .venta-form select { color-scheme: dark; }
+
+/* El mismo fallo que se arregló arriba SOLO para `.venta-form` estaba vivo en
+   todos los demás formularios de la app, y era invisible desde el código: la
+   regla de la línea 133 le da a todo input `color: inherit` — o sea el blanco
+   de la app — mientras el navegador le pone su fondo blanco por defecto.
+   Resultado: TEXTO BLANCO SOBRE BLANCO. Verificado el 2-sep en `EditarCliente`
+   (16 campos) y `ClasificarDevolucion` (7). Alex lleva clasificando
+   devoluciones a ciegas desde el 25-ago.
+
+   Va en `:root` y no acotado a dos componentes a propósito: acotarlo arregla
+   los formularios de hoy y deja la trampa armada para el siguiente que alguien
+   escriba. Es seguro porque el tema claro no se activa desde ninguna parte —
+   `data-tema` tiene 0 usos en todo el TSX (comprobado, no supuesto). Si algún
+   día se añade, este bloque es lo primero que hay que revisar. */
+:root { color-scheme: dark; }
+/* Las casillas y los radios quedan FUERA. Un checkbox nativo con
+   `background-color` explícito deja de dibujarse como control nativo en parte
+   de WebKit/Blink: caja vacía que no enseña la marca al activarse. Y con el
+   `color-scheme: dark` de arriba ya se pintan solos y correctos, así que no
+   necesitan nada. Afectaba a 13 controles, entre ellos el radio del alcance de
+   una devolución y el de la agenda que atribuye una venta: dos sitios donde
+   "no se ve cuál está marcado" cuesta dinero. Sería cambiar un fallo visible
+   por uno silencioso. `input[type=file]` sí entra: el botón lo pinta el
+   navegador y el fondo solo afecta a la caja. */
+input:not([type="checkbox"]):not([type="radio"]), select, textarea { background: var(--surface-2); }
+
+/* Importes y fechas en la mono que el OS ya usa para cifras, con ancho de
+   dígito fijo para que no bailen mientras se teclea. */
+.venta-form input[type="number"], .venta-form input[type="date"] {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Las etiquetas heredaban --text-3 de .gasto-form: #7a7a7a sobre #121212 es
+   ~4.3:1 a 12px, justo en el límite y en la práctica gris sopa. --text-2 sube
+   a ~9:1. --text-3 se queda para las ayudas (.vf-ayuda, .hint), que sí son
+   secundarias. Es el mismo token, no una paleta nueva. */
+.venta-form label { font-size: var(--t1); color: var(--text-2); letter-spacing: .2px; }
+
+/* `.hint` NO tiene regla base a propósito. Se contextualiza, igual que ya
+   hacen `.card-head .hint` y `.reply .hint`, para arreglar los del
+   formulario sin cambiar el render de ninguna otra pantalla. */
+.venta-form .hint, .venta-ok .hint { font-size: var(--t1); color: var(--text-3); line-height: 1.45; }
+.venta-ok h3 { font-family: "Oswald", sans-serif; font-size: var(--t3); }
+
+/* Los radios del selector de agenda salían rotos por especificidad: `.opt`
+   es (0,1,0) y `.gasto-form label` es (0,1,1), así que ganaba el segundo y
+   la sección de la que sale QUIÉN COBRA COMISIÓN se pintaba en columna
+   (input encima del texto), a 12px y en --text-3. `.venta-form .opt` es
+   (0,2,0) y gana a las dos. */
+.venta-form .opt {
+  flex-direction: row; align-items: center;
+  font-size: var(--t1); color: var(--text-2); letter-spacing: 0;
+}
+.venta-form .opt input[type="radio"] { flex: none; margin: 0; }
+
+/* La fila de "Cómo paga" mete 3 labels en una rejilla de 2 columnas fijas:
+   la tercera caía sola a otra fila con la mitad del ancho. Y `.gf-row` no
+   tenía ni una media query, así que en ventana estrecha los pares se
+   aplastaban. auto-fit resuelve las dos cosas. Acotado a .venta-form:
+   `.gf-row` lo usan también GastoForm, GastosTable y ConfirmarFuentes. */
+.venta-form .gf-row { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.venta-form .gf-row > .btn-mini { justify-self: start; }
+@media (max-width: 720px) {
+  .venta-form .gf-row { grid-template-columns: 1fr; }
+}
+
+/* Cuotas. Cada fila era una .gf-row con DOS labels completos ("Cuota 3 (€)",
+   "Vence") más el botón: ~3 líneas de alto por cuota, la palabra "Vence"
+   repetida en cada fila, y el ✕ desalineado con un `align-self: end` que
+   compensaba la altura del label. Con 4 cuotas eran ~380px de ruido, y con
+   12 el botón de guardar se iba fuera de la pantalla. Ahora es una tabla con
+   la cabecera una sola vez, y a partir de 6 filas el bloque scrollea en vez
+   de crecer. */
+.vf-cuotas {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; background: var(--surface-2);
+}
+/* 328px = cabecera (28.75) + 6,5 filas (46 c/u): corta A MEDIA FILA a
+   propósito. Con el 268px anterior el corte caía justo en el borde inferior
+   de una fila y la lista parecía completa — con 7 cuotas ya se escondían
+   casi dos, y la línea de totales seguía sumándolas. */
+.vf-cuotas.scroll { max-height: 328px; overflow-y: auto; overflow-x: hidden; }
+/* El thumb por defecto (#2a2a2a sobre #181818) da 1,15:1: invisible. */
+.vf-cuotas.scroll::-webkit-scrollbar-thumb { background: var(--border-2); }
+.vf-cuotas.scroll::-webkit-scrollbar-track { background: transparent; }
+.vf-cuotas.scroll { scrollbar-color: var(--border-2) transparent; }
+.vf-cuotas-n {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  color: var(--text-3); text-align: right; font-size: var(--t0);
+}
+.vf-cuotas-head, .vf-cuota {
+  display: grid; grid-template-columns: 30px 1fr 1fr 34px;
+  gap: 8px; align-items: center; padding: 6px 10px;
+}
+.vf-cuotas-head {
+  font-size: var(--t0); text-transform: uppercase; letter-spacing: .4px;
+  color: var(--text-3); border-bottom: 1px solid var(--border);
+}
+.vf-cuota + .vf-cuota { border-top: 1px solid var(--border); }
+.vf-cuota .n {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: var(--t1); color: var(--text-3);
+}
+.venta-form .vf-cuota input { padding: 6px 8px; }
+.venta-form .vf-cuota .btn-mini {
+  align-self: center; justify-self: center; padding: 4px 7px; line-height: 1;
+}
+@media (max-width: 720px) {
+  .vf-cuotas-head, .vf-cuota { grid-template-columns: 26px 1fr 1fr 30px; gap: 6px; padding: 6px 8px; }
+}
+
+/* El botón deshabilitado ya no calla: al lado va el motivo. */
+.vf-guardar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+.vf-guardar .btn:disabled { opacity: .45; cursor: not-allowed; }
+.vf-bloqueo { font-size: var(--t1); color: var(--orange); }
+.venta-ok h3 { margin-top: 0; }
+.venta-bienvenida { margin: 10px 0; }
+.btn-mini { align-self: end; background: none; border: 1px solid var(--border, #333); border-radius: 6px; color: inherit; cursor: pointer; padding: 6px 10px; }
+
+/* Botón de bienvenida (venta nueva + lista de clientes) */
+.error { color: var(--red); font-size: var(--t1); margin-left: 6px; }
+
+/* Cuotas — acciones por fila y error en modal */
+.cuota-acciones { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cuota-acciones form { display: inline; }
+.cuota-error { color: var(--red); font-size: var(--t1); margin: 8px 0 0; }
+
+/* Línea temporal del cliente */
+.tl-bloque { margin-top: 28px; }
+.tl-mes { font-size: var(--t1); text-transform: uppercase; letter-spacing: .06em; opacity: .6; margin: 18px 0 8px; }
+.tl { list-style: none; padding: 0; margin: 0; }
+.tl-item { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.tl-icono { width: 22px; text-align: center; flex: none; }
+.tl-cuerpo { flex: 1; min-width: 0; }
+.tl-titulo { font-size: var(--t2); }
+.tl-detalle { font-size: var(--t1); }
+.tl-fecha { font-size: var(--t1); flex: none; }
+
+/* Bandeja de ventas sin atribuir (Task 7) */
+.atribucion-lista { display: flex; flex-direction: column; gap: 14px; }
+.atribucion-fila { padding: 16px 18px; }
+.atribucion-fila .af-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.atribucion-fila .af-head strong { font-size: var(--t2); color: var(--text); }
+
+/* Histórico sin atribuir — no se recalcula (corte de comisiones, Task 7) */
+.historico-atribucion { margin-top: 22px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 18px; }
+.historico-atribucion summary { cursor: pointer; font-size: var(--t1); color: var(--text-2); font-weight: 600; }
+.historico-atribucion summary:hover { color: var(--text); }
+.historico-atribucion .hint { font-size: var(--t1); color: var(--text-3); margin: 10px 0 12px; }
+.historico-atribucion table.t { margin-top: 4px; }
+
+/* ================= Reporte semanal ================= */
+.semana-nav { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: var(--t2); }
+.semana-nav .btn { padding: 1px 11px; line-height: 1.7; }
+.dinero { display: flex; gap: 32px; margin-top: 16px; }
+.dinero .d-label { font-size: var(--t0); text-transform: uppercase; letter-spacing: .5px; color: var(--text-3); }
+.dinero .d-value { font-size: var(--t3); margin-top: 2px; }
+
+/* ================= Módulo de servicio — Sesiones ================= */
+.sesiones-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+.sesiones-acciones { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.sesiones-acciones .tabs { margin-bottom: 0; }
+.kpi.warn .value { color: var(--orange); }
+table.t td.nom { color: var(--text); }
+/* El hover de `.linkbtn` (fondo en vez de subrayado) ya cubre esto desde la
+   regla base — este override quedó redundante el 9-sep-2026 y se borró. */
+/* "ver sesiones": mismo patrón compacto que .semana-nav .btn, con el borde
+   izquierdo alineado al nombre de arriba — pero CON padding-left: sin él la
+   "v" tocaba el propio borde del botón (medido el 8-sep). */
+.btn-ver-sesiones { padding: 3px 10px 3px 6px; margin-top: 2px; }
+tr.clickable { cursor: pointer; }
+
+/* bandeja de sesiones sin cliente */
+.bandeja-sesiones { background: var(--surface); border: 1px solid rgba(251,146,60,.3); border-radius: var(--radius-lg); padding: 14px 18px; margin-bottom: 20px; }
+.bandeja-sesiones .bs-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.bandeja-sesiones .bs-head strong { color: var(--orange); font-size: var(--t1); }
+.bandeja-sesiones .bs-head .hint { font-size: var(--t1); color: var(--text-3); }
+.bandeja-sesiones .bs-fila { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 9px 0; border-top: 1px solid var(--border); }
+.bandeja-sesiones .bs-datos { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.bandeja-sesiones .bs-fecha { color: var(--text-2); font-size: var(--t1); }
+.bandeja-sesiones .bs-form { display: flex; gap: 8px; align-items: center; margin-left: auto; flex-wrap: wrap; }
+.bandeja-sesiones .bs-fila > .btn { margin-left: auto; }
+
+/* notas en tabla */
+.nota-prev { color: var(--text-3); font-size: var(--t1); max-width: 430px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sin-nota { color: var(--text-4); font-size: var(--t1); font-style: italic; }
+
+/* cupo por cliente */
+.prog { height: 7px; border-radius: 4px; background: var(--surface-3); width: 110px; overflow: hidden; display: inline-block; vertical-align: middle; }
+.prog > i { display: block; height: 100%; background: var(--gold); opacity: .85; }
+.prog.full > i { background: var(--green); }
+.ajustado { font-size: var(--t0); text-transform: uppercase; letter-spacing: .4px; color: var(--gold); border: 1px solid var(--gold-line); border-radius: 4px; padding: 1px 4px; margin-left: 6px; }
+table.t td.reparto { font-size: var(--t1); }
+tr.cli-detalle td { background: var(--bg-2) !important; padding: 4px 18px 16px; }
+.hist-item { border-left: 2px solid var(--border-2); padding: 2px 0 12px 14px; margin-left: 4px; }
+.hist-item.clickable { cursor: pointer; border-radius: 0 8px 8px 0; }
+.hist-item.clickable:hover { background: var(--surface-2); border-left-color: var(--gold); }
+.hist-item:last-child { padding-bottom: 2px; }
+.hist-cab { font-size: var(--t1); color: var(--text); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.hist-cab .f { color: var(--text-3); font-size: var(--t1); }
+.hist-txt { white-space: pre-wrap; font-size: var(--t1); color: var(--text-3); margin-top: 5px; max-width: 720px; }
+
+/* detalle de sesión */
+.modal.ancho { width: min(660px, 96vw); }
+/* Un documento, no un formulario: casi todo el ancho de la pantalla y casi
+   todo el alto, para que el PDF se lea sin acercarse ni hacer zoom. */
+.modal.grande { width: min(1400px, 96vw); max-height: 94dvh; }
+.det-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 3px; }
+.det-head h3 { font-family: "Oswald", sans-serif; font-size: var(--t4); letter-spacing: .3px; }
+.det-fecha { font-size: var(--t1); color: var(--text-3); margin-bottom: 13px; }
+.det-chips { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 18px; }
+.det-bloque { margin-bottom: 16px; }
+.det-bloque > h4 { font-size: var(--t0); text-transform: uppercase; letter-spacing: .7px; color: var(--text-3); margin-bottom: 8px; }
+.det-notas { white-space: pre-wrap; font-size: var(--t1); color: var(--text-2); background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 13px 15px; line-height: 1.55; }
+.det-notas.det-cupo { white-space: normal; font-size: var(--t1); }
+.det-notas b { color: var(--text); }
+.det-vacio { font-size: var(--t1); color: var(--text-4); font-style: italic; background: var(--bg-2); border: 1px dashed var(--border-2); border-radius: 10px; padding: 13px 15px; }
+.det-vacio b { color: var(--text-3); font-style: normal; font-weight: 500; }
+.det-detectado { margin-top: 9px; font-size: var(--t1); color: var(--text-3); background: var(--gold-soft); border: 1px solid var(--gold-line); border-radius: 10px; padding: 10px 13px; }
+.det-detectado .lbl { color: var(--gold); font-weight: 600; font-size: var(--t0); text-transform: uppercase; letter-spacing: .6px; display: block; margin-bottom: 6px; }
+.det-detectado .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 7px; }
+.det-detectado b { color: var(--gold-dim); }
+.det-enlaces { display: flex; gap: 10px; flex-wrap: wrap; }
+.det-enlace { display: flex; align-items: center; gap: 7px; font-size: var(--t1); color: var(--gold); border: 1px solid var(--gold-line); background: var(--gold-soft); border-radius: 9px; padding: 8px 12px; }
+.det-enlace:hover { border-color: var(--gold); }
+.det-nav { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--border); padding-top: 14px; margin-top: 18px; flex-wrap: wrap; }
+.det-nav .pos { font-size: var(--t1); color: var(--text-3); margin-left: auto; }
+.det-nav .btn[disabled] { opacity: .35; cursor: default; }
+.det-borrar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 14px; margin-top: 18px; font-size: var(--t1); color: var(--orange); }
+.det-borrar form { display: inline; }
+
+/* operaciones */
+.op-linea { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: var(--t1); color: var(--text-2); padding: 8px 0; border-top: 1px solid var(--border); }
+.op-linea:first-child { border-top: none; }
+.op-linea .dir { font-weight: 500; }
+.op-linea .dir.short { color: var(--red); }
+.op-linea .dir.long { color: var(--green); }
+.op-linea .dir.spot, .op-linea .dir.etfs { color: var(--blue); }
+.op-linea .dir.esperar { color: var(--text-3); }
+.op-linea .pill { margin-left: auto; }
+.op { border: 1px solid var(--border-2); border-radius: 11px; padding: 12px 13px 2px; margin-bottom: 10px; background: var(--surface-2); }
+.op-cab { font-size: var(--t0); text-transform: uppercase; letter-spacing: .6px; color: var(--gold-dim); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+.op-cab .quitar { font-size: var(--t1); color: var(--text-3); text-transform: none; letter-spacing: 0; }
+.op-cab .quitar:hover { color: var(--red); }
+.btn.añadir-op { width: 100%; border-style: dashed; color: var(--gold); border-color: var(--gold-line); }
+
+/* formulario de sesión */
+.modal-sub { font-size: var(--t1); color: var(--text-3); margin-bottom: 18px; }
+.fs { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px 16px; margin-bottom: 14px; background: var(--bg-2); }
+.fs > legend { font-size: var(--t0); text-transform: uppercase; letter-spacing: .7px; color: var(--text-3); padding: 0 7px; }
+.fs .aviso-fs { font-size: var(--t1); color: var(--text-3); margin: 2px 0 12px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.row.tres { grid-template-columns: 1fr 1fr 1fr; }
+label.f { display: flex; flex-direction: column; gap: 5px; font-size: var(--t1); color: var(--text-3); margin-bottom: 12px; }
+.f input, .f select, .f textarea { padding: 9px 11px; border-radius: 9px; border: 1px solid var(--border-2); background: var(--surface-2); color: var(--text); font-size: var(--t1); width: 100%; }
+.f textarea { resize: vertical; min-height: 104px; line-height: 1.5; }
+.f input:focus, .f select:focus, .f textarea:focus { outline: none; border-color: var(--gold-line); box-shadow: 0 0 0 3px var(--gold-soft); }
+.seg { display: flex; gap: 7px; }
+.seg button { flex: 1; padding: 9px; border: 1px solid var(--border-2); border-radius: 9px; background: var(--surface-2); font-size: var(--t1); color: var(--text-2); }
+.seg button.on { border-color: var(--gold-line); background: var(--gold-soft); color: var(--gold); font-weight: 600; }
+.auto { font-size: var(--t1); color: var(--text-3); background: var(--surface-3); border-radius: 7px; padding: 8px 11px; margin: -4px 0 12px; line-height: 1.6; }
+.auto b { color: var(--gold); font-weight: 600; }
+.sug { list-style: none; border: 1px solid var(--border-2); border-radius: 9px; margin: -6px 0 12px; max-height: 186px; overflow-y: auto; background: var(--surface-2); }
+.sug li button { width: 100%; text-align: left; padding: 8px 11px; font-size: var(--t1); }
+.sug li button:hover { background: var(--surface-3); }
+.prev-wrap { margin-bottom: 16px; }
+.prev-label { font-size: var(--t0); text-transform: uppercase; letter-spacing: .7px; color: var(--text-3); margin-bottom: 8px; }
+.prev-card { background: var(--bg-2); border: 1px solid var(--gold-line); border-radius: 12px; padding: 14px 16px; }
+.prev-cab { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.prev-cab .f { color: var(--text-3); font-size: var(--t1); }
+.prev-notas { white-space: pre-wrap; font-size: var(--t1); color: var(--text-3); margin-bottom: 10px; }
+.prev-paso { font-size: var(--t1); color: var(--gold-dim); border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; }
+.ok-box { text-align: center; padding: 22px 6px 8px; }
+.ok-box .big { font-size: var(--t5); }
+.ok-box h4 { font-family: "Oswald", sans-serif; font-size: var(--t3); margin: 10px 0 6px; }
+.ok-box p { font-size: var(--t1); color: var(--text-3); margin-bottom: 16px; }
+
+/* ---- Elegir la cita que cerró la venta (SelectorAgenda) -------------------
+   Cada opción enseñaba SOLO la fecha. Como la fuente cuelga del contacto y se
+   repite igual en todas sus citas, dos opciones del mismo cliente se veían
+   idénticas salvo por la hora: imposible saber de qué llamada depende una
+   comisión. Ahora la fuente va una vez arriba y cada cita enseña lo que de
+   verdad la distingue — qué pasó con ella, de qué calendario es y quién la
+   llevó. */
+.cita-fuente { font-size: var(--t1); color: var(--text-3); margin: 0 0 10px; line-height: 1.5; }
+.opt.cita { align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: var(--radius); }
+.opt.cita:hover { background: var(--surface-2); }
+.opt.cita input { margin-top: 3px; }
+.cita-cuerpo { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cita-linea1 { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+.cita-fecha { font-size: var(--t1); color: var(--text); text-transform: capitalize; }
+.cita-linea2 { font-size: var(--t1); color: var(--text-2); }
+.cita-linea3 { font-size: var(--t0); color: var(--text-4); }
+.cita-estado {
+  font-size: var(--t0); padding: 1.5px 8px; border-radius: 999px; white-space: nowrap;
+  border: 1px solid transparent;
+}
+.cita-estado.ok { color: var(--green); background: var(--green-soft); }
+.cita-estado.pendiente { color: var(--text-3); border-color: var(--border-2); }
+.cita-estado.malo { color: var(--red); background: var(--red-soft); }
+/* La cancelada no se esconde —a veces es la buena, si se cerró por WhatsApp
+   después— pero tiene que costar elegirla por accidente. */
+.opt.cita-malo .cita-fecha, .opt.cita-malo .cita-linea2 { color: var(--text-3); }
+.cita-aviso {
+  font-size: var(--t1); color: var(--orange); line-height: 1.5;
+  background: rgba(251, 146, 60, .08); border: 1px solid rgba(251, 146, 60, .25);
+  border-radius: var(--radius-sm); padding: 8px 11px; margin: 8px 0 0;
+}
+
+/* Poner a mano quién cerró, cuando la llamada no aparece en GHL (27-ago-2026).
+   Va dentro de .opts, así que hereda el flex en columna: solo hace falta
+   sangrarlo bajo su radio y que se lea como parte de esa opción. */
+.cierre-manual {
+  display: flex; flex-direction: column; gap: 10px;
+  margin: -2px 0 2px 26px; padding: 11px 13px;
+  border: 1px solid var(--gold-line); border-radius: var(--radius);
+  background: var(--gold-soft);
+}
+.cierre-manual label { font-size: var(--t1); display: flex; flex-direction: column; gap: 5px; }
+@media (max-width: 720px) { .cierre-manual { margin-left: 0; } }
+
+/* =========================================================================
+   MOVIL — fase 1: el inbox (17-ago-2026)
+   Todo lo de abajo vive dentro de media queries salvo los estados "apagados"
+   de los elementos nuevos, para no cambiar ni un pixel del escritorio.
+   ========================================================================= */
+
+/* Apagados por defecto: solo existen en pantalla pequena. */
+.os-topbar { display: none; }
+.os-backdrop { display: none; }
+.thread-volver { display: none; }
+
+/* iOS infla el texto al girar el telefono si no se le dice que no. */
+html { -webkit-text-size-adjust: 100%; }
+
+/* Chip de "hay mensajes nuevos". Sticky dentro del scroll del hilo: se queda
+   flotando abajo mientras lees hacia arriba y desaparece al volver al final. */
+.nuevos-chip {
+  position: sticky; bottom: 8px; align-self: center; z-index: 2;
+  background: var(--gold); color: #080808; font-weight: 600;
+  font-size: var(--t1); padding: 9px 16px; border-radius: 999px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, .55);
+}
+.nuevos-chip::before { content: "\2193\00a0"; }
+
+/* ---- Cabecera + cajon de navegacion (<=900px) ------------------------- */
+@media (max-width: 900px) {
+  /* La nav sale del flujo (pasa a fixed), asi que el shell se reordena en
+     columna: cabecera arriba, contenido debajo. */
+  .os { flex-direction: column; }
+
+  .os-topbar {
+    display: flex; align-items: center; gap: 10px; flex: none;
+    padding: 8px 12px; padding-top: calc(8px + env(safe-area-inset-top));
+    background: var(--bg-2); border-bottom: 1px solid var(--border);
+    /* Por encima del cajon (41): con la nav abierta el boton se convierte en
+       una X y tiene que seguir viendose y pudiendose tocar. */
+    position: relative; z-index: 42;
+  }
+  .os-topbar .brand-logo { height: 26px; }
+  .os-burger {
+    position: relative; flex: none;
+    width: 44px; height: 44px;
+    display: grid; place-items: center; font-size: var(--t3);
+    color: var(--text-2); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px;
+  }
+  .os-burger:active { background: var(--surface-2); }
+  /* Con la nav escondida, los contadores de pendientes no se ven nunca. Este
+     punto es lo unico que queda de ellos en la pantalla. */
+  .os-burger-dot {
+    position: absolute; top: 7px; right: 7px;
+    width: 7px; height: 7px; border-radius: 50%; background: var(--gold);
+  }
+
+  .os-backdrop { display: block; position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, .55); }
+
+  .osnav {
+    /* 60px = 44 del boton + 8+8 de padding. El cajon arranca DEBAJO de la
+       cabecera en vez de taparla. */
+    position: fixed; top: calc(60px + env(safe-area-inset-top)); bottom: 0; left: 0; z-index: 41;
+    width: min(280px, 84vw);
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+    box-shadow: 0 0 40px rgba(0, 0, 0, .5);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .osnav.abierta { transform: none; }
+  /* El logo ya esta en la cabecera, dos palmos mas arriba. */
+  .osnav .brand { display: none; }
+  .osnav .navitem { padding: 11px 12px; font-size: var(--t2); }
+  .osnav .logout { padding: 12px; }
+
+  .os-main { flex: 1; min-height: 0; }
+  .page { padding: 18px 16px 48px; }
+
+  /* El shell del inbox ya no puede medir 100dvh: la cabecera se lleva su
+     parte. Hereda la altura que le deja el flex del contenedor. */
+  .shell { height: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .osnav { transition: none; }
+}
+
+/* ---- Inbox: un panel por ruta (<=780px) ------------------------------- */
+@media (max-width: 780px) {
+  /* /inbox ensena la lista; /inbox/c/[id] ensena el hilo. La clase la pone
+     la pagina del hilo, asi que el "atras" del navegador vuelve a la lista. */
+  .sidebar { width: 100%; min-width: 0; border-right: none; }
+  .shell.con-hilo .sidebar { display: none; }
+  .shell:not(.con-hilo) .main { display: none; }
+
+  .thread-volver {
+    display: grid; place-items: center; flex: none;
+    width: 40px; height: 40px; margin-left: -6px;
+    font-size: var(--t4); color: var(--text-2); border-radius: 10px;
+  }
+  .thread-volver:active { background: var(--surface-2); }
+
+  /* Dentro de una conversacion la cabecera global no ayuda a responder y se
+     come 60px de los 844 que hay. La salida es el "<-", igual que en WhatsApp;
+     el menu vive en la lista, que es donde se navega. */
+  .os:has(.shell.con-hilo) .os-topbar { display: none; }
+  .os:has(.shell.con-hilo) .thread-head { padding-top: calc(10px + env(safe-area-inset-top)); }
+
+  .thread-head { padding: 10px 12px; gap: 8px; flex-wrap: wrap; }
+  .thread-head .who { flex: 1; min-width: 0; }
+  .thread-head .who .nm {
+    font-size: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* Las acciones bajan a su propia fila: el selector de coach estira y los
+     dos botones se quedan a su ancho. En 390px los tres no caben arriba. */
+  .thread-head .actions { width: 100%; justify-content: flex-start; gap: 6px; }
+  .thread-head .actions form { display: flex; gap: 6px; flex: 1; min-width: 0; }
+  .thread-head .actions form + form { flex: none; }
+  .thread-head .actions select.sel { flex: 1; min-width: 0; }
+  .thread-head .actions .btn { min-height: 40px; }
+
+  .messages { padding: 14px 12px; overscroll-behavior: contain; }
+  .msg { max-width: 85%; }
+  .media-img, .media-video { max-width: 100%; }
+  .media-audio { width: 100%; }
+
+  .sidebar-head { padding: 12px; }
+  .conv { padding: 14px; }
+  .tab { padding: 8px 13px; font-size: var(--t1); }
+
+  /* ---- Compositor ---- */
+  .reply { padding: 10px 12px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .reply form { flex-wrap: wrap; gap: 8px; align-items: center; }
+  /* El textarea sube a la primera fila y los botones caen debajo SIN tocar el
+     orden del DOM, que es el orden de tabulacion con teclado. */
+  .reply textarea {
+    order: -1; flex: 1 0 100%; width: 100%; min-height: 46px;
+    font-size: var(--t3); /* por debajo de 16px iOS hace zoom al enfocar y no vuelve */
+  }
+  .reply .btn { min-height: 44px; padding: 8px 12px; }
+  .reply .btn.primary { margin-left: auto; }
+  .reply .hint { font-size: var(--t0); }
+  .solo-escritorio { display: none; }
+
+  /* Los campos de los modales, por lo mismo del zoom. */
+  .search, .compose, .tpl-var input { font-size: var(--t3); }
+
+  /* Modales como hoja inferior: en un movil, un cuadro centrado deja el
+     teclado tapando justo el campo que acabas de tocar. */
+  .modal-overlay { padding: 0; place-items: end stretch; }
+  .modal, .modal.ancho, .modal.grande {
+    width: 100%; max-width: none; max-height: 90dvh;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ---- Avisos push (alta del dispositivo, en la cabecera del inbox) -------
+   Solo aparece cuando hay algo que hacer: una vez activado se queda en una
+   línea de una palabra. Un panel de ajustes permanente encima de la lista de
+   conversaciones estorbaría a diario. */
+.push-fila { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.push-activar { font-size: var(--t1); padding: 8px 12px; border-color: var(--gold-line); color: var(--gold); }
+.push-activar:hover { background: var(--gold-soft); }
+.push-ok { font-size: var(--t1); color: var(--green); }
+.push-err { font-size: var(--t1); color: var(--red); }
+.push-aviso {
+  margin-top: 10px; font-size: var(--t1); line-height: 1.5; color: var(--text-3);
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 9px; padding: 9px 11px;
+}
+.push-aviso b { color: var(--text-2); font-weight: 600; }
+@media (max-width: 780px) {
+  /* Mismo motivo que el resto del compositor: 44px de objetivo táctil. */
+  .push-activar { min-height: 44px; }
+}
+
+/* ============================================================
+   ESTRATEGIAS — módulo del equipo
+   ============================================================ */
+/* El bloque .kpis que vivía aquí se ELIMINÓ (24-ago-2026). Redeclaraba
+   .kpis 700 líneas después del original con `repeat(3, 1fr)`, así que las
+   pantallas de 4 y 5 KPIs dejaban una tarjeta huérfana en la segunda fila; y
+   `.kpis .kpi` (0,2,0) le ganaba a `.kpi.accent` (0,2,0) por ir después,
+   matando el destacado del KPI norte en 9 pantallas. Su `.sub` en --text-4
+   daba 2,1:1 de contraste sobre --surface, justo donde vive la distinción
+   entre cash collected y facturación. Todo eso lo cubre ya el bloque
+   original de la línea 87. */
+.kpi.warn { border-color: rgba(251, 146, 60, .28); background: rgba(251, 146, 60, .07); }
+.kpi.warn .value { color: var(--orange); }
+
+.panel-estrategias .barra { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.panel-estrategias .buscador { flex: 1; min-width: 200px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 12px; font-size: var(--t2); outline: none; }
+.panel-estrategias .buscador:focus { border-color: var(--gold-line); }
+.panel-estrategias .chk { display: inline-flex; align-items: center; gap: 7px; font-size: var(--t1); color: var(--text-2); cursor: pointer; }
+.btn-oro { background: var(--gold-soft); border: 1px solid var(--gold-line); color: var(--gold); font-size: var(--t1); padding: 8px 14px; border-radius: var(--radius-sm); }
+.btn-oro:hover { background: rgba(225, 202, 113, .18); }
+.btn-oro:disabled { opacity: .55; cursor: default; }
+.btn-plano { border: 1px solid var(--border); color: var(--text-3); font-size: var(--t1); padding: 8px 14px; border-radius: var(--radius-sm); }
+.btn-plano:hover { color: var(--text-2); border-color: var(--border-2); }
+
+.aviso { border-radius: var(--radius); padding: 10px 14px; font-size: var(--t1); margin-bottom: 14px; }
+.aviso.err { background: var(--red-soft); border: 1px solid var(--red-soft); color: var(--red); }
+.aviso.ok { background: var(--green-soft); border: 1px solid var(--green-soft); color: var(--green); }
+
+.form-estrategia { border: 1px solid var(--gold-line); background: var(--surface); border-radius: var(--radius); padding: 18px; margin-bottom: 20px; }
+.form-estrategia h4 { font-family: "Oswald", sans-serif; font-weight: 600; font-size: var(--t2); margin: 0 0 14px; }
+.form-estrategia .rejilla { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.form-estrategia .campo.ancho { grid-column: 1 / -1; }
+.form-estrategia .campo { display: flex; flex-direction: column; gap: 6px; }
+.form-estrategia .campo span { font-size: var(--t0); text-transform: uppercase; letter-spacing: .1em; color: var(--text-3); }
+.form-estrategia input, .form-estrategia select { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 11px; font-size: var(--t2); outline: none; }
+.form-estrategia input:focus, .form-estrategia select:focus { border-color: var(--gold-line); }
+.form-estrategia .avisar { margin-top: 14px; }
+.form-estrategia .acciones { display: flex; gap: 10px; margin-top: 16px; }
+
+.tabla-scroll { overflow-x: auto; }
+.panel-estrategias td.nm { color: var(--text); font-weight: 500; white-space: nowrap; }
+.panel-estrategias td .u { font-size: var(--t1); color: var(--text-3); text-decoration: none; white-space: nowrap; }
+.panel-estrategias td .u:hover { color: var(--gold-dim); }
+.panel-estrategias td.d { font-size: var(--t1); color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.panel-estrategias td.pwc { white-space: nowrap; }
+.pw-toggle { font-family: "JetBrains Mono", monospace; font-size: var(--t1); color: var(--text-3); letter-spacing: .08em; }
+.pw-toggle:hover { color: var(--gold-dim); }
+.panel-estrategias td.pwc .sin { font-size: var(--t1); color: var(--text-4); }
+.panel-estrategias .pill.gris { color: var(--text-3); border: 1px solid var(--border-2); background: var(--surface-2); }
+.panel-estrategias .acc { display: flex; gap: 12px; }
+.panel-estrategias .acc button { font-size: var(--t0); text-transform: uppercase; letter-spacing: .06em; color: var(--text-4); }
+.panel-estrategias .acc button:hover { color: var(--text-2); }
+.panel-estrategias .vacio { border: 1px dashed var(--border-2); border-radius: var(--radius); padding: 34px 20px; text-align: center; color: var(--text-3); font-size: var(--t2); }
+
+@media (max-width: 700px) {
+  .kpis { grid-template-columns: 1fr; }
+  .form-estrategia .rejilla { grid-template-columns: 1fr; }
+}
+
+/* ============================================================
+   PORTAL DEL CLIENTE (/e/<token>) — fuera del shell del OS
+   ============================================================ */
+.portal { max-width: 620px; margin: 0 auto; padding: 26px 20px 60px; min-height: 100dvh; }
+.portal-marca { padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+.portal-marca img { height: 24px; width: auto; display: block; }
+.portal-head { padding: 30px 0 22px; }
+.portal-head h1 { font-family: "Oswald", sans-serif; font-weight: 600; font-size: var(--t4); letter-spacing: .3px; margin: 0; }
+.portal-sub { font-size: var(--t1); color: var(--text-3); margin: 5px 0 0; }
+.portal-lista { display: flex; flex-direction: column; gap: 12px; }
+.portal-card { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: 17px; }
+.portal-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+.portal-card h2 { font-family: "Oswald", sans-serif; font-weight: 600; font-size: var(--t3); margin: 0; line-height: 1.3; }
+.portal-fecha { font-family: "JetBrains Mono", monospace; font-size: var(--t0); color: var(--text-3); white-space: nowrap; padding-top: 3px; }
+.portal-resumen { font-size: var(--t1); color: var(--text-2); margin: 0 0 14px; line-height: 1.55; }
+.portal-pw { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 12px; margin-bottom: 13px; }
+.portal-pw .k { font-family: "JetBrains Mono", monospace; font-size: var(--t0); text-transform: uppercase; letter-spacing: .1em; color: var(--text-4); }
+.portal-pw .v { font-family: "JetBrains Mono", monospace; font-size: var(--t1); letter-spacing: .08em; color: var(--text); }
+/* 44px de alto real: es un control táctil en el móvil de un cliente, no un
+   enlace de escritorio. Con 32px se falla al pulsar y la contraseña parece
+   que no se puede ver. El padding lateral le da además zona de acierto. */
+.portal-pw button { font-family: "JetBrains Mono", monospace; font-size: var(--t0); text-transform: uppercase; letter-spacing: .08em; color: var(--gold-dim); min-height: 44px; display: inline-flex; align-items: center; padding: 0 4px; }
+.portal-pw button:hover { color: var(--gold); }
+.portal-abrir { display: block; text-align: center; border: 1px solid var(--gold-line); background: var(--gold-soft); color: var(--gold); font-size: var(--t2); font-weight: 600; padding: 12px; border-radius: var(--radius); text-decoration: none; }
+.portal-abrir:hover { background: rgba(225, 202, 113, .18); }
+.portal-nota { font-size: var(--t1); color: var(--text-4); text-align: center; margin-top: 14px; }
+.portal-vacio { border: 1px dashed var(--border-2); border-radius: var(--radius); padding: 40px 24px; text-align: center; }
+.portal-vacio h1, .portal-vacio h2 { font-family: "Oswald", sans-serif; font-weight: 600; font-size: var(--t3); margin: 0 0 10px; }
+.portal-vacio p { font-size: var(--t1); color: var(--text-3); margin: 0; line-height: 1.6; max-width: 42ch; margin-inline: auto; }
+
+.fila-enlace td { background: var(--surface-2); }
+.enlace-panel { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 4px 0; }
+.enlace-panel .k { font-family: "JetBrains Mono", monospace; font-size: var(--t0); text-transform: uppercase; letter-spacing: .1em; color: var(--text-4); }
+.enlace-panel code { font-family: "JetBrains Mono", monospace; font-size: var(--t1); color: var(--gold); background: var(--surface-3); padding: 6px 10px; border-radius: var(--radius-sm); word-break: break-all; }
+.enlace-acc { display: flex; gap: 10px; margin-left: auto; }
+.enlace-acc button { font-family: "JetBrains Mono", monospace; font-size: var(--t0); text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); border: 1px solid var(--border-2); padding: 6px 12px; border-radius: var(--radius-sm); min-height: 32px; }
+.enlace-acc button:hover { color: var(--text); border-color: var(--text-4); }
+.enlace-acc button.rotar { color: var(--red); border-color: var(--red-soft); }
+.enlace-acc button.rotar:hover { background: var(--red-soft); }
+
+/* Recibo de una devolución dentro de la línea temporal del cliente. El
+   `summary` hereda el aspecto de linkbtn; esto solo le quita el marcador
+   nativo y le da aire al contenido desplegado. */
+.tl-recibo { margin-top: 6px; }
+.tl-recibo > summary { cursor: pointer; list-style: none; display: inline-block; }
+.tl-recibo > summary::-webkit-details-marker { display: none; }
+.tl-recibo[open] > summary { margin-bottom: 8px; }
+
+/* ================= Inicio · filtros, gráficos y señales =================
+   Nada de tokens nuevos: todo sale de :root. Los nombres se eligieron
+   comprobando antes que no chocan con nada — `.aviso` ya estaba declarado
+   dos veces con significados distintos, así que estas tarjetas son `.senal`,
+   y el estado vacío reutiliza `.empty-box` en vez de un `.vacio` suelto. */
+
+/* ---- Filtros: UNA fila, arriba de todo lo que gobiernan ---- */
+.filtros {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 14px; margin-bottom: 22px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+}
+.grupo { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.filtros .sep { width: 1px; height: 24px; background: var(--border); margin: 0 6px; }
+.etq { font-size: var(--t0); text-transform: uppercase; letter-spacing: .6px; color: var(--text-3); margin-right: 4px; }
+.chip {
+  font-size: var(--t1); padding: 5px 11px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--text-3); font-family: inherit;
+}
+.chip:hover { color: var(--text-2); border-color: var(--border-2); }
+.chip[aria-pressed="true"] { background: var(--gold-soft); color: var(--gold); border-color: var(--gold-line); font-weight: 600; }
+/* ACOTADO a .filtros. Sin el prefijo, esta regla le cambiaba el tamaño y el
+   fondo a los campos de fecha de TODOS los formularios del OS (gastos, nueva
+   venta, sesiones…), que ya tenían su propio estilo. */
+.filtros input[type="date"] {
+  font-family: inherit; font-size: var(--t1); padding: 5px 8px; border-radius: var(--radius-sm);
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+}
+/* El icono nativo sí es global a propósito: es lo único que lo hace visible
+   sobre la superficie oscura del OS, y acotarlo dejaba el glifo negro sobre
+   negro en /gastos, /nueva-venta y los demás formularios con fecha. */
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.6); cursor: pointer; }
+:root[data-tema="claro"] input[type="date"]::-webkit-calendar-picker-indicator { filter: none; }
+
+/* ---- El titular. LA cifra de --t6, una sola en toda la pantalla ---- */
+.titular {
+  display: grid; grid-template-columns: minmax(280px, 1fr) minmax(300px, 1.15fr);
+  gap: 24px; align-items: center; padding: 22px 26px; margin-bottom: 6px;
+  background: linear-gradient(180deg, var(--gold-soft), var(--surface));
+  border: 1px solid var(--gold-line); border-radius: var(--radius-lg);
+}
+.titular .label { font-size: var(--t1); text-transform: uppercase; letter-spacing: .7px; color: var(--text-3); }
+.cifra-hero {
+  font-family: "Oswald", sans-serif; font-size: var(--t6); font-weight: 600;
+  line-height: 1.05; margin-top: 6px; letter-spacing: -.5px;
+}
+.titular .pie { font-size: var(--t1); color: var(--text-3); margin-top: 8px; }
+.pacing { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.pacing .celda { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.pacing .celda .k { font-size: var(--t0); text-transform: uppercase; letter-spacing: .6px; color: var(--text-3); }
+.pacing .celda .v { font-family: "Oswald", sans-serif; font-size: var(--t5); font-weight: 500; margin-top: 4px; line-height: 1.1; }
+.pacing .celda .n { font-size: var(--t0); color: var(--text-4); margin-top: 3px; }
+@media (max-width: 940px) { .titular { grid-template-columns: 1fr; } }
+
+/* ---- Gráficos ---- */
+.gr-wrap { position: relative; width: 100%; }
+.gr-wrap svg { display: block; width: 100%; }
+.gr-wrap text { font-variant-numeric: tabular-nums; }
+.leyenda { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+.leyenda .it { display: flex; align-items: center; gap: 6px; font-size: var(--t1); color: var(--text-2); }
+.leyenda .sw { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; background: var(--gold); }
+.leyenda .sw.tramado {
+  background-color: var(--surface-3);
+  background-image: repeating-linear-gradient(45deg, var(--gold) 0 2px, transparent 2px 5px);
+}
+.leyenda .linea { width: 18px; height: 0; border-top: 2px solid var(--gold); flex-shrink: 0; }
+.leyenda .linea.ref { border-top-style: dashed; border-top-color: var(--text-3); }
+
+/* Tooltip. El valor manda y la serie acompaña: aquí el lector ya sabe qué
+   serie mira y lo que busca es el número. */
+.tt {
+  position: absolute; pointer-events: none; z-index: 9; opacity: 0; transform: translate(-50%, -100%);
+  background: var(--surface-3); border: 1px solid var(--border-2); border-radius: var(--radius);
+  padding: 9px 11px; font-size: var(--t1); min-width: 168px; transition: opacity .1s;
+  box-shadow: 0 8px 26px rgba(0,0,0,.4);
+}
+.tt.visible { opacity: 1; }
+:root[data-tema="claro"] .tt { box-shadow: 0 8px 26px rgba(0,0,0,.14); }
+.tt .tt-m { font-size: var(--t0); text-transform: uppercase; letter-spacing: .6px; color: var(--text-3); margin-bottom: 6px; }
+.tt .tt-f { display: flex; align-items: baseline; gap: 8px; margin-top: 4px; }
+.tt .tt-k { width: 12px; height: 2px; flex-shrink: 0; align-self: center; }
+.tt .tt-l { color: var(--text-3); font-size: var(--t0); }
+.tt .tt-v { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; margin-left: auto; }
+.tt .tt-tot { border-top: 1px solid var(--border); margin-top: 7px; padding-top: 6px; }
+
+/* ---- Barras horizontales con pista (mix de tiers) ----
+   `display:block` en .fill no es decorativo: siendo un <span> inline, ni
+   width ni height le aplican y las barras salen todas iguales. */
+.bar-row .track { flex: 1; height: 10px; background: var(--surface-3); border-radius: 5px; overflow: hidden; }
+.bar-row .fill { display: block; height: 100%; background: var(--gold); border-radius: 5px; }
+.bar-row .n2 { width: 46px; text-align: right; color: var(--text-4); font-size: var(--t0); flex-shrink: 0; }
+
+/* ---- Señales: lo que los números están diciendo ----
+   El filete izquierdo lleva la tinta semántica del sistema: naranja dinero
+   que no ha entrado, rojo dinero que salió, azul falta un dato. */
+.senales { display: grid; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); gap: 14px; }
+.senal {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 15px 17px; border-left-width: 3px;
+}
+.senal.atencion { border-left-color: var(--orange); }
+.senal.mal { border-left-color: var(--red); }
+.senal.dato { border-left-color: var(--blue); }
+.senal.bien { border-left-color: var(--green); }
+.senal .t { display: flex; align-items: center; gap: 7px; font-size: var(--t1); font-weight: 600; }
+.senal.atencion .t { color: var(--orange); }
+.senal.mal .t { color: var(--red); }
+.senal.dato .t { color: var(--blue); }
+.senal.bien .t { color: var(--green); }
+.senal .v { font-family: "Oswald", sans-serif; font-size: var(--t5); font-weight: 500; margin: 6px 0 2px; line-height: 1.1; }
+.senal .d { font-size: var(--t1); color: var(--text-3); }
+
+/* Sesiones recurrentes (miércoles/domingo) — configuración del aviso 1 h antes */
+.recurrentes { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 18px; margin-top: 20px; }
+.recurrentes .rc-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.recurrentes .rc-head strong { font-size: var(--t1); }
+.recurrentes .rc-head .hint { font-size: var(--t1); color: var(--text-3); }
+.recurrentes .rc-fila { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 9px 0; border-top: 1px solid var(--border); }
+.recurrentes .rc-datos { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; min-width: 220px; }
+.recurrentes .rc-dia { color: var(--text-2); font-size: var(--t2); }
+.recurrentes .rc-form { display: flex; gap: 8px; align-items: center; margin-left: auto; flex-wrap: wrap; }
+.recurrentes .rc-hora { width: 110px; }
+.recurrentes .rc-enlace { min-width: 240px; flex: 1; }
+.recurrentes .rc-activa { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t1); color: var(--text-2); cursor: pointer; }
+.recurrentes .pill.orange { color: var(--orange); border-color: transparent; background: rgba(251,146,60,.12); }
+.recurrentes .pill.gris { color: var(--text-3); border: 1px solid var(--border-2); background: var(--surface-2); }
+.recurrentes .rc-ok { color: var(--green); font-size: var(--t1); margin: 8px 0 0; }
+
+/* Una tabla ancha hace scroll DENTRO de su tarjeta: el body de la página no
+   se mueve de lado nunca, porque en móvil eso rompe la lectura entera. */
+.tabla-scroll { overflow-x: auto; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

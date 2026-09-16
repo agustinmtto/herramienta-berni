@@ -1,0 +1,32 @@
+{
+  "crons": [
+    {
+      "path": "/api/inbox/media-backfill",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/sesiones/sync",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/sesiones/recurrentes",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/ghl/evento-notas",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/email/estados",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/email/invitaciones",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/fathom/sync",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}

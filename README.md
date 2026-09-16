@@ -6,15 +6,28 @@ Lead magnet para el negocio de Berni (Metacrypto Club, cripto): landing con wiza
 
 ## Estado actual (sept 2026)
 
-- ✅ **App MVP** en la branch `feature/wizard-mvp` (Next.js 15, deploy Netlify-ready): wizard con preguntas genéricas config-driven → pregunta de segmentación → análisis → **pantalla final única** con diagnóstico determinístico + 3 video placeholders + CTA
+- ✅ **App MVP** integrada en `main` (Next.js 15, deploy Netlify-ready): wizard con preguntas genéricas config-driven → pregunta de segmentación → análisis → **pantalla final única** con diagnóstico determinístico + 3 video placeholders + CTA
 - ✅ Motor determinístico por reglas sobre las respuestas (`lib/engine.js`); sin IA (decisión firme)
 - ✅ JSON agnóstico `pregunta/respuesta` → `POST /api/lead` (stub con validación de seguridad; Supabase del negocio cuando estén los accesos)
 - ✅ Tracking mínimo: `session_id` + **hasta qué pregunta llega el lead** (dropoff por `sendBeacon`)
 - ✅ Documento HTML fijo personalizado por nombre + descarga PDF (`lib/pdf.js`)
 - ✅ Entrega WhatsApp: teléfono obligatorio, CTA al `+54 9 3585 401429` y mensaje con respuestas
-- ✅ Tests: `test/` — unitarios + integración + seguridad (21/21)
+- ✅ Tests: `test/` — unitarios + integración + seguridad (38/38)
 - ⏳ **Pendiente crítico:** Berni define las preguntas finales (blocker #1) → swap en `lib/question-config.js`
-- ⏳ Accesos a Supabase del negocio (Fase 0), deploy en Netlify, PDF por email real (Resend), videos reales
+- ✅ Código y esquema actual de MetaCrypto OS incorporados en `metacrypto-os-app/` como base de integración
+- ⏳ Conexión efectiva con Supabase, deploy, PDF por email real (Resend) y videos reales
+
+## Repositorio unificado
+
+Este repositorio contiene ahora los dos lados de la integración:
+
+- La raíz conserva el Quiz Funnel.
+- `metacrypto-os-app/` contiene una copia limpia del sistema interno y sus migraciones, tomada de su `main` en el commit `f2aee5c`.
+- `ANALISIS_INTEGRACION_QUIZ_LEADS.md` documenta la arquitectura, el modelo de datos y el plan de implementación.
+- `documentacion_prototipo.txt` resume el alcance y estado funcional del funnel.
+- `metacrypto-os-app/esquema-metacrypto-os.sql` es el DDL standalone analizado.
+
+La incorporación del sistema no significa que el funnel ya persista datos: deja todo el código y la documentación en un único Git para implementar la integración desde aquí.
 
 ## Cómo correrlo y testearlo
 
@@ -53,15 +66,18 @@ prototipos/
   referencia/landings/  # landings del negocio = fuente del design system
   frames/               # capturas del prototipo
 docs/                   # documentación viva (fuente de verdad del proyecto)
+metacrypto-os-app/      # sistema interno, Supabase, migraciones y DDL de referencia
+ANALISIS_INTEGRACION_QUIZ_LEADS.md # análisis técnico consolidado
+documentacion_prototipo.txt        # síntesis funcional del prototipo
 scripts/transcribe.py   # utilidad: transcribe audios con Whisper
 ```
 
 ## Cómo funcionan los datos
 
 1. El wizard guarda las respuestas en estado del componente (nada persiste en el navegador).
-2. Al terminar: build del **JSON agnóstico** `{session_id, lead{name,email,consent}, signals{dropoff_question,finished_at}, answers[{pregunta,respuesta}]}` → `POST /api/lead`.
+2. Al terminar: build del **JSON agnóstico** `{session_id, lead{name,email,phone,consent}, signals{dropoff_question,finished_at}, answers[{pregunta,respuesta}]}` → `POST /api/lead`.
 3. **Hoy:** el endpoint valida (413/400/422) y loguea en consola; no se persiste nada.
-4. **Mañana:** mismo JSON → tablas Supabase del negocio (leads, respuestas, sesiones, eventos, flag `hot_lead` con RLS). El modelo de trabajo está en `docs/08` (Supabase local + Docker, migrations append-only, PRs).
+4. **Siguiente fase:** contrato versionado → `personas` + tablas nuevas de envíos y respuestas en Supabase, con clasificación backend e idempotencia. El diseño completo está en `ANALISIS_INTEGRACION_QUIZ_LEADS.md`.
 5. Si el lead **abandona** a mitad del wizard, un `sendBeacon` en `pagehide` manda el payload parcial con `dropoff_question` (la métrica clave del negocio).
 
 ## Documentación
@@ -78,6 +94,9 @@ scripts/transcribe.py   # utilidad: transcribe audios con Whisper
 | `docs/06-pendientes-y-preguntas.md` | Bloqueantes y **roadmap vivo** |
 | `docs/07-scm-gestion-configuracion.md` | Nombrado, estructura, branches, commits |
 | `docs/08-roadmap.md` | Modelo de trabajo (fases) y fases de implementación |
+| `docs/09-security.md` | Seguridad del endpoint, rate limiting y checklist preproducción |
+| `ANALISIS_INTEGRACION_QUIZ_LEADS.md` | Análisis integral del funnel, MetaCrypto OS, DDL y módulo de leads |
+| `documentacion_prototipo.txt` | Síntesis funcional y decisiones del prototipo |
 
 ## Cómo desarrollar (flujo de trabajo)
 

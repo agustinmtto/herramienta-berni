@@ -1,0 +1,1874 @@
+/* ============================================================
+   inbox.css — CSS nuevo del OS
+   ============================================================
+   `globals.css` NO se toca: lo lleva otra sesión en paralelo. Todo lo que
+   se añada al sistema visual vive aquí.
+
+   Este fichero se importa en `app/layout.tsx` DESPUÉS de globals.css, así
+   que en un empate de especificidad gana lo de aquí. Eso es deliberado y es
+   lo que permite corregir reglas de globals.css sin editarlo — pero exige
+   igualar su especificidad a mano, no confiar en el orden a ciegas. Cada
+   bloque de abajo dice contra qué regla concreta compite.
+   ============================================================ */
+
+
+/* ============================================================
+   1 · FOCO VISIBLE
+   ============================================================
+   `:focus-visible` aparecía 0 veces en las 1.182 líneas de globals.css. Las
+   8 reglas `:focus` que existen son todas sobre input/select/textarea: los
+   109 botones de la app y toda la navegación no tenían ningún indicador de
+   foco. Con teclado no se sabe dónde estás.
+
+   Y donde sí había regla, era `outline: none` sustituido por un cambio de
+   `border-color` a `--gold-line`, que da 2,10:1 contra la superficie — por
+   debajo del 3:1 que pide el criterio de contraste de elementos no
+   textuales.
+
+   `:focus-visible` y no `:focus`: el navegador solo lo activa cuando el foco
+   viene de teclado. Pulsar un botón con el ratón no deja el anillo puesto.
+   ============================================================ */
+
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* Los ocho sitios donde globals.css apaga el outline. Cinco lo hacen en
+   `:focus` (338, 354, 372, 380, 730) y tres en el estado base (310, 984,
+   1003). Se replica aquí la MISMA especificidad de cada uno con
+   `:focus-visible`: al ir este fichero después, gana el empate.
+   Sin esta lista, la regla de arriba (0,1,1) perdería contra
+   `.gasto-form input:focus` (0,2,1) y los formularios de dinero seguirían
+   sin foco visible.
+
+   `outline-offset: 1px` y no 2px: estos campos ya llevan un halo propio de
+   3px al enfocar, y a 2px el anillo se despegaba del halo dejando una
+   franja muerta entre los dos. */
+.gasto-form input:focus-visible,
+.gasto-form select:focus-visible,
+.f input:focus-visible,
+.f select:focus-visible,
+.f textarea:focus-visible,
+.search:focus-visible,
+.compose:focus-visible,
+.tpl-var input:focus-visible,
+.panel-estrategias .buscador:focus-visible,
+.form-estrategia input:focus-visible,
+.form-estrategia select:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+}
+
+
+/* ============================================================
+   2 · TABLAS QUE NO SE PUEDEN LEER EN UN MÓVIL
+   ============================================================
+   `.card { overflow: hidden }` (globals.css:199) contra tablas de 6 columnas
+   sin envoltorio: en un iPhone de 390px la última columna —donde viven
+   "Pagada", "Editar" y "Anular"— no desborda, se CORTA. Sin barra de scroll
+   y sin ninguna señal de que exista. No se puede cobrar una cuota desde el
+   móvil, que es desde donde Berni y Alex miran esto.
+
+   `.tabla-scroll { overflow-x: auto }` ya existe en globals.css (dos veces,
+   en :983 y :1181) y estaba aplicada en 4 de 21 tablas. Los envoltorios que
+   faltaban van en los TSX.
+
+   Pero envolver no basta, y esta es la parte que no se ve venir:
+   `table.t { width: 100% }` (globals.css:207) hace que la tabla se ajuste al
+   ancho del contenedor en vez de desbordarlo. Dentro de un `overflow-x:
+   auto` eso significa que NO hay scroll: la tabla se comprime y las columnas
+   se machacan unas contra otras. El envoltorio solo, sin lo de abajo, no
+   arregla nada.
+
+   El mínimo se escala con el número de columnas usando `:has()` en vez de
+   una clase por tabla, para que una tabla de 3 columnas no herede el scroll
+   de una de 7. Soportado en Safari desde 15.4; si un navegador viejo lo
+   ignora, se degrada exactamente al comportamiento de hoy. */
+.tabla-scroll {
+  overflow-x: auto;
+  /* Que el scroll de la tabla no arrastre la página entera al llegar al
+     final: en móvil eso rompe la lectura, y el comentario del propio
+     globals.css ya avisaba de que el body no se mueve de lado nunca. */
+  overscroll-behavior-x: contain;
+}
+
+.tabla-scroll > table.t:has(thead th:nth-child(5)) { min-width: 640px; }
+.tabla-scroll > table.t:has(thead th:nth-child(7)) { min-width: 820px; }
+
+
+/* ============================================================
+   3 · OBJETIVOS TÁCTILES
+   ============================================================
+   La regla de 44px se aplicó en el inbox y en el portal del cliente. En el
+   resto del OS, no: `.btn` mide ~30px, `.chip` ~27px y `.linkbtn` ~18px —
+   y `.linkbtn` es el enlace al cliente en /clientes y el "Deshacer" de una
+   devolución.
+
+   Solo bajo 780px: en escritorio con ratón, 30px es cómodo y subirlos a 44
+   ensancharía cada barra de acciones de cada tabla sin motivo.
+   ============================================================ */
+
+@media (max-width: 780px) {
+  .btn,
+  .btn-oro,
+  .btn-plano,
+  .btn-mini,
+  .chip {
+    min-height: 44px;
+  }
+
+  /* `.linkbtn` es un enlace de texto, no una caja: sin `inline-flex` el
+     min-height no lo centra y el texto se queda pegado arriba. */
+  .linkbtn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  /* Las flechas de mes de /semana median ~25px. */
+  .semana-nav .btn { min-height: 44px; }
+}
+
+
+/* ============================================================
+   4 · EL ZOOM DE iOS QUE NO VUELVE
+   ============================================================
+   Por debajo de 16px, Safari en iPhone hace zoom al enfocar un campo y NO
+   deshace el zoom al salir: te deja el resto de la pantalla desplazada a
+   mano. globals.css ya lo evita en `.search`, `.compose` y `.tpl-var input`,
+   y deja fuera `.gasto-form` (15px) y `.f` (13px) — que son justo las clases
+   de VentaForm y DevolucionForm, los dos formularios más largos de la app.
+
+   `--t3` son 17px, el mismo valor que usa el bloque equivalente del inbox.
+   ============================================================ */
+
+@media (max-width: 780px) {
+  .gasto-form input,
+  .gasto-form select,
+  .f input,
+  .f select,
+  .f textarea {
+    font-size: var(--t3);
+  }
+}
+
+
+/* ============================================================
+   5 · DOS CLASES QUE SE USAN Y NO EXISTÍAN
+   ============================================================
+   Las dos se escribieron en el markup y nunca llegaron al CSS, así que no
+   hacían nada y nadie se enteró.
+   ============================================================ */
+
+/* `.pill.purple` se usa en InicioPanel para distinguir un upsell de una
+   venta nueva. Sin la regla, las dos caían al gris de `.pill` y la columna
+   "Tipo" no distinguía nada. `--purple` y `--purple-soft` ya existían en
+   `:root`: esto no añade paleta, solo enchufa la que había.
+
+   Nota para la ola 2: el morado no está en la doctrina de color por
+   significado del sistema (rojo salió · naranja no ha entrado · azul falta
+   un dato · verde confirma). Un upsell es una categoría, no un estado, así
+   que probablemente no debería llevar tinta semántica. Se deja funcionando
+   y se decide con el resto del sistema. */
+.pill.purple {
+  color: var(--purple);
+  border-color: transparent;
+  background: var(--purple-soft);
+}
+
+/* `.card-body.flush` se usa en las dos tablas de Inicio para que la tabla
+   pegue con el borde de la tarjeta. `.card-body` mete 6px arriba y abajo,
+   que dejaban una franja de fondo sobre la primera fila del `thead`. */
+.card-body.flush { padding: 0; }
+
+
+/* ============================================================
+   6 · CIFRAS QUE LLEVAN A ALGÚN SITIO
+   ============================================================
+   La pantalla de Inicio diagnostica bien —"8.458 USD en cuotas vencidas… es
+   dinero que hay que ir a buscar"— y no ofrecía por dónde. Las pantallas que
+   cobran, atribuyen y cargan gastos existen, están en el menú y tienen la
+   acción construida: solo faltaba conectarlas.
+
+   Dos afordances, y ninguno depende del hover: en un móvil no hay hover, y
+   Berni y Alex miran esto desde el teléfono.
+   ============================================================ */
+
+/* `.kpi` ya trae el fondo, el borde y el padding. Esto solo añade el estado
+   de enlace: el `display:block` es necesario porque un <Link> es un <a>
+   inline y sin él el padding de `.kpi` no levanta la caja. */
+.kpi-link {
+  display: block;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+
+.kpi-link:hover {
+  border-color: var(--gold-line);
+  background: var(--surface-2);
+}
+
+/* La flecha es lo que distingue un KPI que lleva a algún sitio de uno que no,
+   sin pasar el ratón. En oro porque es el color de "esto es un camino" en
+   todo el sistema — y el oro nunca toca una cifra, solo enlaces y filetes. */
+.kpi-flecha { color: var(--gold); }
+
+/* El pie de acción de una señal. Separado por un filete para que se lea como
+   la salida del bloque y no como una línea más de la explicación. */
+.senal-cta {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 11px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  width: 100%;
+  color: var(--gold);
+  font-size: var(--t1);
+  font-weight: 600;
+}
+
+.senal-cta:hover { text-decoration: underline; }
+
+@media (max-width: 780px) {
+  /* 44px de objetivo táctil, igual que el resto de acciones del OS. */
+  .senal-cta { min-height: 44px; }
+}
+
+
+/* ============================================================
+   7 · LA BARRA DE ACCIONES DE LA FICHA DEL CLIENTE
+   ============================================================
+   La ficha era un extracto de solo lectura: el único enlace saliente de toda
+   la pantalla era "← Clientes". El cliente es el objeto sobre el que gira el
+   negocio y desde su ficha no se le podía ni escribir ni cobrar.
+
+   Va pegada bajo el nombre y el estado, antes que los formularios de editar y
+   devolver: primero lo que se hace a diario, después lo que se hace de vez en
+   cuando.
+   ============================================================ */
+
+.ficha-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+@media (max-width: 780px) {
+  /* Los botones estiran a partes iguales en vez de quedarse a su ancho
+     natural: en 390px, tres botones de texto corto dejaban una fila con dos
+     y un huérfano debajo. `flex-basis` con un mínimo generoso los reparte en
+     dos filas limpias de dos y uno a ancho completo. */
+  .ficha-acciones .btn {
+    flex: 1 1 auto;
+    min-width: 140px;
+    justify-content: center;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+/* El nombre del cliente en la cabecera de una fila de atribución. No usa
+   `.linkbtn` porque ahí el nombre va en <strong> y a tamaño de título: la
+   regla de linkbtn le impondría --t1 y lo dejaría más pequeño que la línea
+   de datos que tiene debajo. Solo se le añade el color de enlace. */
+.af-nombre { color: var(--gold); }
+.af-nombre:hover { text-decoration: underline; }
+
+
+/* ============================================================
+   8 · LA LÍNEA DE CONFIRMACIÓN
+   ============================================================
+   La consume `components/Confirmacion.tsx`, montado una vez en el layout del
+   OS. Ahí está explicado por qué no puede vivir dentro de la fila que hace la
+   acción: la fila se remonta al revalidar y se lleva el mensaje por delante.
+
+   Abajo y no arriba: en escritorio el ojo está en la tabla, no en la
+   cabecera; y en móvil, arriba lo tapa la barra del navegador y el pulgar
+   llega antes abajo.
+
+   Verde porque es texto de confirmación, que es el único uso que la doctrina
+   de color del sistema le concede al verde — nunca en una cifra ni en una
+   fila.
+   ============================================================ */
+
+.confirmacion {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  /* El desplazamiento horizontal va en una variable porque la animación
+     también lo necesita: sin ella habría que redefinir el @keyframes dentro
+     de la media query de móvil, y un keyframe duplicado por nombre se pisa a
+     sí mismo de formas difíciles de leer. */
+  --conf-x: -50%;
+  transform: translateX(var(--conf-x));
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  max-width: min(560px, calc(100vw - 32px));
+
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+
+  padding: 12px 14px;
+  background: var(--surface-2);
+  /* Borde uniforme de 1px, sin franja de acento a la izquierda. La versión
+     anterior llevaba `border-left: 3px solid var(--green)` y sobraba: lo que
+     dice "esto salió bien" son el ✓ y su color, que ya están dentro. Un
+     filete grueso de color en un aviso es adorno, y encima compite con el
+     filete de las señales de Inicio, donde el grosor SÍ significa algo
+     (la tinta del sistema: naranja, rojo, azul). Si el mismo gesto significa
+     una cosa en una pantalla y nada en otra, deja de significar. */
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  /* Con desplazamiento y desenfoque: un halo sin offset es decoración, no
+     profundidad. Esto flota sobre la página y tiene que parecerlo. */
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .45);
+
+  font-size: var(--t1);
+  line-height: 1.45;
+  color: var(--text);
+
+  animation: confirmacion-entra .22s cubic-bezier(.2, .8, .3, 1);
+}
+
+/* Entra desde donde va a quedarse, no desde fuera de la pantalla: es un
+   acuse de recibo, no una interrupción. */
+@keyframes confirmacion-entra {
+  from { opacity: 0; transform: translate(var(--conf-x), 6px); }
+  to   { opacity: 1; transform: translate(var(--conf-x), 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirmacion { animation: none; }
+}
+
+.confirmacion-marca {
+  color: var(--green);
+  font-weight: 700;
+  flex: none;
+  line-height: 1.45;
+}
+
+.confirmacion-texto { flex: 1; min-width: 0; }
+
+.confirmacion-cerrar {
+  flex: none;
+  color: var(--text-3);
+  font-size: var(--t1);
+  /* 24px en escritorio es suficiente para un ratón y no ensancha la línea;
+     en móvil sube a 44 como el resto. */
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: var(--radius-sm);
+}
+
+.confirmacion-cerrar:hover { color: var(--text); }
+
+@media (max-width: 780px) {
+  .confirmacion {
+    /* A ancho completo con márgenes: en 390px una línea centrada de 560px
+       máximos no cabía y el texto quedaba en tres renglones estrechos. */
+    left: 16px;
+    right: 16px;
+    --conf-x: 0px;
+    max-width: none;
+  }
+  .confirmacion-cerrar { min-width: 44px; min-height: 44px; }
+}
+
+
+/* ============================================================
+   9 · EL BOTÓN DE CERRAR DEL MODAL
+   ============================================================
+   Los doce modales de la app estaban copiados a mano y seis no tenían salida
+   sin ratón: la única forma de cerrarlos era hacer clic en el fondo. Tres de
+   esos seis mueven dinero (cobrar una cuota, editarla, anularla).
+
+   Ahora todos pasan por components/Modal.tsx, que siempre pinta este botón.
+   Los que ya traían uno propio usaban `.linkbtn`, que es un enlace de texto
+   en oro: la ✕ leía como una acción más de la cabecera en vez de como el
+   cierre.
+   ============================================================ */
+
+.modal-cerrar {
+  flex: none;
+  /* 32px en escritorio: cae en la cabecera, junto al título, y no compite
+     con él. En móvil sube a 44 como todo lo pulsable. */
+  min-width: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--text-3);
+  font-size: var(--t2);
+  line-height: 1;
+}
+
+.modal-cerrar:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+@media (max-width: 780px) {
+  .modal-cerrar { min-width: 44px; min-height: 44px; }
+}
+
+/* El modal es un contenedor de scroll propio (`max-height: 88dvh; overflow-y:
+   auto`). Que el gesto no arrastre la página de detrás al llegar al final —
+   el bloqueo de body lo cubre, esto es el cinturón para el rebote de iOS. */
+.modal { overscroll-behavior: contain; }
+
+
+/* ============================================================
+   10 · EL PIE DEL MENÚ
+   ============================================================
+   Dos cosas que no estaban en ningún sitio: quién ha iniciado sesión, y el
+   interruptor de los avisos del dispositivo.
+
+   El `nombre` llegaba a OsNav desde el layout, tipado y recibido, y no se
+   pintaba en ninguna pantalla. Con permisos por módulo, no ver con qué cuenta
+   estás dentro es no poder explicarte por qué te falta una entrada del menú.
+
+   `AvisosPush` estaba encima de la lista de conversaciones del inbox, donde
+   solo pasa quien va a escribir por WhatsApp.
+   ============================================================ */
+
+.nav-usuario {
+  margin: 0 10px 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.nav-usuario-nombre {
+  font-size: var(--t1);
+  color: var(--text-2);
+  font-weight: 600;
+  /* La columna mide 244px y hay nombres largos: se recorta con puntos
+     suspensivos en vez de partir la palabra o empujar el menú. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-push { margin: 0 10px 4px; }
+
+/* El bloque de ayuda de iOS ("añade la app a la pantalla de inicio") es un
+   párrafo entero dentro de una columna estrecha. Se le baja el cuerpo para
+   que quepa sin descuadrar el pie del menú. */
+.nav-push .push-aviso { font-size: var(--t0); padding: 8px 9px; }
+
+
+/* ============================================================
+   11 · ESQUELETOS DE CARGA
+   ============================================================
+   Los consume `app/(os)/loading.tsx`. Todas las páginas del OS son
+   `force-dynamic` con 3–4 lecturas REST en paralelo: sin esto, al navegar
+   la pantalla ANTERIOR se queda congelada varios segundos sin ningún
+   indicador, y el usuario vuelve a pulsar.
+
+   Gris que respira, no barra de progreso: no sabemos cuánto tarda, y una
+   barra que finge saberlo miente.
+   ============================================================ */
+
+.sk {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  animation: sk-latido 1.4s ease-in-out infinite;
+}
+
+/* Escalonar el arranque evita el efecto "cortina" de veinte bloques
+   latiendo exactamente a la vez, que lee como un fallo de render. */
+.sk:nth-child(2) { animation-delay: .12s; }
+.sk:nth-child(3) { animation-delay: .24s; }
+.sk:nth-child(4) { animation-delay: .36s; }
+
+@keyframes sk-latido {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .45; }
+}
+
+/* Quien pide menos movimiento no debería recibir veinte bloques
+   parpadeando: se queda el gris, quieto. Sigue diciendo "esto está
+   cargando" por su forma, sin la animación. */
+@media (prefers-reduced-motion: reduce) {
+  .sk { animation: none; opacity: .8; }
+}
+
+.sk-h1    { height: 26px; width: 220px; }
+.sk-sub   { height: 13px; width: 320px; max-width: 70%; margin-top: 10px; }
+.sk-linea { height: 13px; }
+
+/* El esqueleto imita la plana real —KPIs arriba, tarjeta con filas debajo—
+   para que lo que aparece después caiga donde el ojo ya estaba mirando. */
+.sk-kpi   { height: 92px; border-radius: var(--radius-lg); }
+.sk-fila  { display: flex; align-items: center; gap: 18px; padding: 13px 18px; border-bottom: 1px solid var(--border); }
+.sk-fila:last-child { border-bottom: none; }
+
+.sk-titulo { width: 160px; }
+.sk-cifra  { width: 72px; margin-left: auto; flex: none; }
+
+/* Los anchos desiguales van aquí y no en un `style` del markup. Una columna
+   de nombres tiene el borde derecho irregular; seis barras idénticas leen
+   como una plantilla, no como datos que están a punto de llegar. */
+.sk-nombre { flex: none; }
+.sk-fila:nth-child(1) .sk-nombre { width: 68%; }
+.sk-fila:nth-child(2) .sk-nombre { width: 52%; }
+.sk-fila:nth-child(3) .sk-nombre { width: 74%; }
+.sk-fila:nth-child(4) .sk-nombre { width: 44%; }
+.sk-fila:nth-child(5) .sk-nombre { width: 61%; }
+.sk-fila:nth-child(6) .sk-nombre { width: 57%; }
+
+/* El escalonado del latido de arriba está escrito para hijos directos. En la
+   tarjeta, los `.sk` son nietos (van dentro de `.sk-fila`), así que se
+   escalona por fila para que el efecto no se pierda. */
+.sk-tabla .sk-fila:nth-child(2) .sk { animation-delay: .10s; }
+.sk-tabla .sk-fila:nth-child(3) .sk { animation-delay: .20s; }
+.sk-tabla .sk-fila:nth-child(4) .sk { animation-delay: .30s; }
+.sk-tabla .sk-fila:nth-child(5) .sk { animation-delay: .40s; }
+.sk-tabla .sk-fila:nth-child(6) .sk { animation-delay: .50s; }
+
+
+/* ============================================================
+   12 · PANTALLAS DE ESTADO (carga, error, no encontrado)
+   ============================================================ */
+
+.estado-pantalla {
+  max-width: 460px;
+  margin: 12vh auto 0;
+  padding: 0 24px 60px;
+  text-align: center;
+}
+
+.estado-pantalla h1 {
+  font-family: "Oswald", sans-serif;
+  font-weight: 600;
+  font-size: var(--t4);
+  letter-spacing: .3px;
+}
+
+.estado-pantalla p {
+  color: var(--text-3);
+  font-size: var(--t2);
+  line-height: 1.55;
+  margin-top: 10px;
+}
+
+.estado-acciones {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 22px;
+}
+
+/* El detalle técnico del error existe para que Milo pueda pedirlo por
+   WhatsApp sin abrir Vercel, pero va plegado: Berni no tiene que ver un
+   stack para entender que hay que reintentar. */
+.estado-tecnico {
+  margin-top: 26px;
+  text-align: left;
+  font-size: var(--t0);
+  color: var(--text-4);
+}
+
+.estado-tecnico summary {
+  cursor: pointer;
+  color: var(--text-3);
+  text-align: center;
+  list-style: none;
+}
+
+.estado-tecnico summary::-webkit-details-marker { display: none; }
+
+.estado-tecnico pre {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+
+/* ============================================================
+   13 · GASTOS — la pantalla por meses
+   ============================================================
+   Antes no tenía ninguna dimensión temporal: un total de los 105 movimientos
+   históricos y una tabla. No se podía preguntar "cuánto gasté en agosto".
+   ============================================================ */
+
+/* Una fila de barra que además es un filtro. Hereda todo de `.bar-row` y solo
+   añade lo que la convierte en control: ancho completo (un <button> se encoge
+   a su contenido), texto alineado y el estado activo. */
+.bar-row-btn {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.bar-row-btn:hover { background: var(--surface-2); }
+
+/* Activo en oro: la única regla de sistema que todos los módulos respetaron
+   (spec §9). Un filete a la izquierda de 2px, no de 3: aquí marca la fila
+   seleccionada de una lista, como `.conv.active` en el inbox. */
+.bar-row-btn.on {
+  background: var(--gold-soft);
+  box-shadow: inset 2px 0 0 var(--gold);
+}
+
+.bar-row-btn.on .lbl { color: var(--text); font-weight: 600; }
+
+/* El recuento de movimientos al final de la fila. `.n2` ya existe con el
+   ancho y el color; aquí solo se le da unidad para que no se lea como parte
+   del importe que tiene al lado. */
+.bar-row .n2::after {
+  content: " mov";
+  color: var(--text-4);
+}
+
+/* ---- El bloque de recurrentes pendientes ---- */
+
+/* Naranja, no rojo: por la doctrina de color del sistema esto es "dinero que
+   todavía no está donde debe" (un mes sin cargar), no "dinero que salió". */
+.recurrentes-pendientes {
+  border-color: var(--orange);
+  margin-bottom: 16px;
+}
+
+.recurrentes-pendientes .card-head h2 { color: var(--orange); }
+
+/* La fila desmarcada se atenúa pero SIGUE LEGIBLE: hay que poder comprobar
+   qué se está dejando fuera, que es justo la decisión que se está tomando. */
+.fila-fuera td { opacity: .45; }
+.fila-fuera td:first-child { opacity: 1; }
+
+.rc-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+/* ---- La ficha de un gasto ---- */
+
+.gd-cifras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  margin-bottom: 16px;
+}
+
+/* Ficha técnica en pares etiqueta/valor que fluyen, en vez de una rejilla de
+   tarjetas: cuatro o seis dan igual y nunca queda una huérfana (spec §2.3). */
+.gd-ficha {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 20px;
+  margin: 16px 0;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.gd-ficha dt {
+  font-size: var(--t0);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--text-3);
+}
+
+.gd-ficha dd { font-size: var(--t2); color: var(--text); margin-top: 3px; }
+
+.gd-notas { margin-bottom: 16px; }
+.gd-notas p { font-size: var(--t1); color: var(--text-2); margin-top: 5px; line-height: 1.5; }
+
+.gd-hist .d-label { margin-bottom: 8px; }
+
+/* Un aviso de subida de precio no es una nota neutra. */
+.note-sube {
+  border-color: var(--orange);
+  background: var(--orange-soft);
+  color: var(--text-2);
+}
+
+/* La fila del gasto que se está mirando, dentro de su propio histórico. */
+.fila-actual td {
+  background: var(--gold-soft);
+  color: var(--text);
+}
+
+/* El concepto es el asidero para abrir la ficha, así que se lee como texto
+   normal hasta que se pasa por encima: en una tabla de 105 filas, 105 enlaces
+   dorados serían un muro. */
+.gasto-concepto {
+  color: inherit;
+  text-align: left;
+  padding: 0;
+}
+
+.gasto-concepto:hover { color: var(--gold); text-decoration: underline; }
+
+/* `.card-body` no tiene padding lateral porque casi siempre lleva una tabla a
+   sangre. Un formulario dentro sí lo necesita. */
+.card-body-pad { padding: 18px; }
+
+
+/* ============================================================
+   14 · DEVOLUCIONES — cuándo, por qué, y ordenables
+   ============================================================
+   La pantalla daba un total del año y una tabla ordenada por fecha. Para
+   responder "¿en qué meses nos han devuelto?" había que leer las filas y
+   agrupar de cabeza.
+   ============================================================ */
+
+/* ---- Cabeceras que ordenan ---- */
+
+/* Un <button> dentro del <th>, no un onClick en el <th>: una cabecera
+   pulsable sin botón es inalcanzable por teclado. Hereda el aspecto de
+   `table.t th` — versalitas, --text-3 — y solo añade el gesto. */
+.th-orden {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+.th-orden:hover { color: var(--text); }
+
+/* `.r` alinea la celda a la derecha; el botón, siendo inline-flex, se queda
+   pegado a la izquierda si no se le empuja. */
+th.r .th-orden { flex-direction: row-reverse; }
+
+/* La flecha en gris tenue cuando esa columna NO es la que ordena, para que se
+   lea como afordance y no como estado. El ↑↓ activo hereda el color del
+   hover/texto. */
+.th-flecha { font-size: var(--t0); color: var(--text-4); }
+th[aria-sort="ascending"] .th-orden,
+th[aria-sort="descending"] .th-orden { color: var(--gold); }
+th[aria-sort="ascending"] .th-flecha,
+th[aria-sort="descending"] .th-flecha { color: var(--gold); }
+
+/* Filtro por columna (CL-9): una fila de inputs angostos bajo cada
+   cabecera, discretos hasta que se usan. */
+.th-filtro {
+  width: 100%; box-sizing: border-box; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text-2); font: inherit; font-size: var(--t0);
+  text-transform: none; letter-spacing: normal; padding: 3px 7px;
+}
+.th-filtro:focus { outline: none; border-color: var(--gold-line); }
+.th-filtro::placeholder { color: var(--text-4); }
+
+/* ---- El motivo ---- */
+
+/* Un motivo puede ser una etiqueta de catálogo o un WhatsApp entero. Se le da
+   una anchura de lectura y se deja envolver: el resto de celdas de la tabla no
+   envuelven, esta sí, porque es prosa. */
+.dev-motivo {
+  color: var(--text-2);
+  max-width: 34ch;
+  white-space: normal;
+  line-height: 1.45;
+}
+
+/* ---- La serie mensual ---- */
+
+.dev-meses {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+  padding: 6px 18px 4px;
+  align-items: end;
+}
+
+.dev-mes { text-align: center; min-width: 0; }
+
+.dev-mes-barra {
+  height: 78px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  /* La línea de base: sin ella, los meses vacíos no se leen como "cero" sino
+     como espacio en blanco. */
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 7px;
+}
+
+.dev-mes-fill {
+  width: 60%;
+  max-width: 34px;
+  /* Rojo: dinero que SALIÓ, por la doctrina de color del sistema. */
+  background: var(--red);
+  border-radius: 3px 3px 0 0;
+  min-height: 2px;
+}
+
+.dev-mes-nombre {
+  font-size: var(--t0);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--text-3);
+}
+
+.dev-mes-cifra {
+  font-size: var(--t0);
+  margin-top: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.dev-mes-cifra .mono { color: var(--text); }
+.dev-mes-n { color: var(--text-4); }
+
+/* Un mes sin devoluciones se atenúa entero pero se sigue viendo: es la mitad
+   de la respuesta a "¿cuándo hubo devoluciones?". */
+.dev-mes.vacio .dev-mes-nombre { color: var(--text-4); }
+
+@media (max-width: 780px) {
+  /* Doce meses en 390px no caben en una fila. Se deja desplazar de lado, con
+     cada mes a un ancho fijo legible, en vez de comprimirlos a 20px. */
+  .dev-meses {
+    grid-auto-columns: 58px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .dev-motivo { max-width: 26ch; }
+}
+
+
+/* ============================================================
+   15 · LA FICHA DEL CLIENTE
+   ============================================================
+   Antes era un extracto de solo lectura con una única lista cronológica donde
+   compras, pagos, sesiones y plantillas automáticas iban revueltas. En el
+   cliente con más historia del negocio, 10 de sus 18 eventos son "Plantilla
+   enviada" y entierran la compra y las tres sesiones.
+   ============================================================ */
+
+.ficha-cabecera { margin-bottom: 20px; }
+.ficha-cabecera h1 {
+  font-family: "Oswald", sans-serif; font-weight: 600; font-size: var(--t4);
+  letter-spacing: .3px; margin-top: 6px; text-wrap: balance;
+}
+
+.ficha-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin-top: 7px; font-size: var(--t1); color: var(--text-3);
+}
+
+.ficha-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+.btn-cuenta {
+  font-size: var(--t0); background: var(--surface-3); color: var(--text-3);
+  border-radius: 999px; padding: 1px 6px; margin-left: 6px;
+}
+
+/* ---- Las cuatro cifras ---- */
+
+/* Rejilla de una sola pieza con los separadores hechos con `gap` sobre un
+   fondo de borde: cuatro tarjetas sueltas dejaban una huérfana en la segunda
+   fila en cuanto la ventana estrechaba. */
+.ficha-dinero {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(146px, 1fr));
+  gap: 1px; background: var(--border);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  overflow: hidden; margin-bottom: 6px;
+}
+.ficha-dinero .d-item { background: var(--surface); padding: 14px 16px; }
+.ficha-dinero .d-label {
+  font-size: var(--t0); text-transform: uppercase; letter-spacing: .6px; color: var(--text-3);
+}
+.ficha-dinero .d-value {
+  font-family: "Oswald", sans-serif; font-size: var(--t5);
+  font-weight: 500; margin-top: 5px; line-height: 1.1;
+}
+.ficha-dinero .d-value.warn { color: var(--orange); }
+.ficha-dinero .d-sub { font-size: var(--t0); color: var(--text-4); margin-top: 3px; }
+
+.ficha .acotacion { margin-bottom: 20px; }
+
+/* ---- Lo que hay que hacer hoy ---- */
+
+.ficha-hoy {
+  border: 1px solid var(--orange); border-radius: var(--radius-lg);
+  background: var(--surface); padding: 14px 16px; margin-bottom: 18px;
+}
+.ficha-hoy h2 {
+  font-size: var(--t1); text-transform: uppercase; letter-spacing: .6px;
+  color: var(--orange); font-weight: 600; margin-bottom: 11px;
+}
+.ficha-hoy .avisos { display: flex; flex-direction: column; gap: 10px; }
+.ficha-hoy .aviso {
+  display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
+  font-size: var(--t1); color: var(--text-2);
+}
+.aviso-marca { flex: none; width: 14px; text-align: center; }
+.aviso-marca.atencion { color: var(--orange); }
+.aviso-marca.dato { color: var(--blue); }
+.aviso-texto { flex: 1; min-width: 190px; }
+
+/* ---- Toggle lists ---- */
+
+.tog { border-bottom: 1px solid var(--border); }
+.tog:last-child { border-bottom: none; }
+
+.tog-head {
+  width: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 13px 16px; background: none; border: 0; cursor: pointer;
+  text-align: left; color: var(--text); font-size: var(--t2);
+}
+.tog-head:hover { background: var(--surface-2); }
+
+.tog-flecha { flex: none; color: var(--text-4); font-size: var(--t1); transition: transform .18s ease; }
+.tog-head[aria-expanded="true"] .tog-flecha { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) { .tog-flecha { transition: none; } }
+
+.tog-titulo { font-weight: 600; }
+
+/* El resumen de la derecha es lo que hace útil una lista plegada: dice lo
+   suficiente CERRADA para decidir si hace falta abrirla. */
+.tog-resumen {
+  margin-left: auto; display: flex; align-items: center; gap: 10px;
+  font-size: var(--t1); color: var(--text-2);
+}
+
+.tog-cuerpo { background: var(--bg-2); border-top: 1px solid var(--border); }
+
+.ascendio {
+  font-size: var(--t1); color: var(--text-3);
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+}
+.ascendio strong { color: var(--gold); }
+
+/* Una línea ya cerrada (cobrada) se atenúa: sigue ahí para cuadrar, pero no
+   compite con lo que falta por cobrar.
+
+   🔴 El prefijo `table.t tr` es obligatorio, no decorativo. Esta regla estuvo
+   MUERTA desde que se escribió: `.linea-cerrada td` es (0,1,1) y
+   `globals.css:246 table.t td` es (0,1,2) — le gana por un selector de tipo,
+   y cargar después no sirve de nada contra más especificidad. O sea que una
+   cuota cobrada se leía con la misma fuerza (10,85:1) que una pendiente, en
+   vez de los 4,55:1 atenuados que pide este bloque. De los dos canales que
+   FichaBloques.tsx dice usar a propósito porque "el color no puede ser el
+   único", el de la tinta no llegaba a existir; solo sobrevivía el ✓ verde.
+   Ahora es (0,2,3) y sí gana. */
+table.t tr.linea-cerrada td { color: var(--text-4); }
+.linea-marca { margin-right: 7px; color: var(--text-4); }
+.linea-cerrada .linea-marca { color: var(--green); }
+tr:not(.linea-cerrada) .linea-marca { color: inherit; }
+.linea-motivo { font-size: var(--t0); color: var(--text-4); margin-top: 3px; max-width: 30ch; }
+
+/* ---- Cupo de sesiones ---- */
+
+.cupo {
+  display: flex; align-items: center; gap: 13px; flex-wrap: wrap;
+  padding: 13px 16px; border-bottom: 1px solid var(--border);
+}
+.cupo-barra {
+  flex: 1; min-width: 120px; max-width: 220px; height: 8px;
+  background: var(--surface-3); border-radius: 4px; overflow: hidden; display: block;
+}
+.cupo-hechas { display: block; height: 100%; background: var(--gold); }
+.cupo-texto { font-size: var(--t1); color: var(--text-2); }
+.cupo-texto strong { color: var(--text); }
+
+.sesion-notas {
+  font-size: var(--t1); color: var(--text-2); line-height: 1.55;
+  margin-top: 6px; max-width: 68ch; white-space: pre-wrap;
+}
+
+/* ---- El panel lateral ---- */
+
+.panel-velo { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 70; }
+
+.panel-lateral {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: min(420px, 100vw);
+  background: var(--surface); border-left: 1px solid var(--border-2);
+  z-index: 80; display: flex; flex-direction: column;
+  box-shadow: -18px 0 50px rgba(0,0,0,.5);
+  animation: panel-entra .2s cubic-bezier(.2,.8,.3,1);
+}
+
+/* Entra desde donde va a quedarse, no desde fuera de la pantalla: acompaña,
+   no irrumpe. */
+@keyframes panel-entra {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .panel-lateral { animation: none; } }
+
+.panel-head {
+  padding: 13px 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; gap: 10px; flex: none;
+}
+.panel-titulos { min-width: 0; flex: 1; }
+.panel-head h2 { font-size: var(--t2); font-weight: 600; }
+.panel-sub {
+  display: block; font-size: var(--t0); color: var(--text-3); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.panel-cuerpo { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+.panel-pie { flex: none; border-top: 1px solid var(--border); padding: 12px 16px; }
+.panel-btn-ancho { width: 100%; justify-content: center; }
+
+/* ---- El hilo dentro del panel ---- */
+
+.chat-hilo {
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 14px 16px; background: var(--bg-2); min-height: 100%;
+}
+.chat-msg {
+  max-width: 82%; padding: 9px 12px; border-radius: 12px;
+  font-size: var(--t1); line-height: 1.45; overflow-wrap: anywhere;
+}
+.chat-msg.in { background: var(--surface-2); align-self: flex-start; border-bottom-left-radius: 4px; }
+/* Verde de la casa para lo saliente. Fijo y no por token porque este verde es
+   el del chat, no el `--green` de confirmación del sistema. */
+.chat-msg.out { background: #1F3D31; align-self: flex-end; border-bottom-right-radius: 4px; }
+.chat-hora { font-size: var(--t0); color: var(--text-4); margin-left: 8px; white-space: nowrap; }
+
+/* ---- Actividad ---- */
+
+.act-lista { list-style: none; padding: 6px 16px 16px; }
+.act-item {
+  display: flex; gap: 11px; padding: 10px 0;
+  border-bottom: 1px solid var(--border); font-size: var(--t1);
+}
+.act-item:last-child { border-bottom: none; }
+.act-marca { flex: none; width: 16px; text-align: center; color: var(--text-4); }
+.act-cuerpo { flex: 1; min-width: 0; }
+.act-titulo { color: var(--text-2); }
+.act-detalle { color: var(--text-4); font-size: var(--t0); margin-top: 2px; }
+.act-fecha { flex: none; color: var(--text-4); font-size: var(--t0); }
+
+/* ---- Pie y mantenimiento ---- */
+
+.ficha-traza {
+  font-size: var(--t0); color: var(--text-4);
+  padding-top: 16px; margin-top: 20px; border-top: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; gap: 6px 18px;
+}
+
+/* Los formularios de corregir van en su propia página, al pie, para que la
+   ficha de arriba no se llene de botones de mantenimiento. */
+.ficha-mantenimiento { padding-top: 0; }
+.ficha-mantenimiento-acciones { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+
+@media (max-width: 780px) {
+  /* A pantalla completa: 420px sobre 390 no deja ver nada del fondo, y un
+     panel a medias es peor que una pantalla entera. */
+  .panel-lateral { width: 100vw; }
+  .ficha-acciones .btn { flex: 1 1 auto; min-width: 150px; justify-content: center; }
+  .ficha-dinero .d-value { font-size: var(--t4); }
+  .tog-resumen { width: 100%; margin-left: 0; padding-left: 24px; }
+}
+
+
+/* ============================================================
+   16 · UNA SOLA TIPOGRAFÍA
+   ============================================================
+   Decisión de Milo (2-sep-2026): una sans para todo — titulares, texto y
+   cifras. Antes eran cuatro familias (Oswald, Sora, JetBrains Mono y
+   Georgia/serif), tres de ellas pedidas por <link> a Google sin preconnect y
+   bloqueando el render.
+
+   La carga la hace ahora `next/font` en app/layout.tsx, que la descarga en el
+   build y la sirve desde nuestro dominio. Aquí solo se redirigen las reglas
+   que declaraban otra familia.
+
+   POR QUÉ ESTÁ AQUÍ Y NO EN globals.css: ese fichero lo lleva otro carril y no
+   se toca. Las reglas de abajo replican EXACTAMENTE sus selectores, así que
+   ganan por ir después con la misma especificidad. Cuando el otro carril
+   limpie globals.css, este bloque entero se puede borrar de una vez.
+
+   Lo que arregla de fondo (§4 del spec): Oswald es una grotesca CONDENSADA de
+   titular y estaba sobre las cifras de dinero. Un número es un número — la
+   misma voz en la cifra de 52px, en la tabla y en el recibo.
+   ============================================================ */
+
+:root {
+  /* `--font-sans` la inyecta next/font en el <html>. El resto de la pila es el
+     respaldo mientras la fuente viaja, y el que se usa si falla. */
+  --sans: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI",
+          system-ui, sans-serif;
+}
+
+body { font-family: var(--sans); }
+
+/* Los once selectores que declaraban Oswald. */
+.page-head h1,
+.kpi .value,
+.sidebar-head h1,
+.login-title,
+.login-btn,
+.modal-head h3,
+.vf-sec-head h3,
+.venta-ok h3,
+.det-head h3,
+.ok-box h4,
+.form-estrategia h4,
+.portal-head h1,
+.portal-card h2,
+.portal-vacio h1,
+.portal-vacio h2,
+.cifra-hero,
+.pacing .celda .v,
+.senal .v,
+/* Y los míos, declarados en este mismo fichero más arriba. */
+.estado-pantalla h1,
+.ficha-cabecera h1,
+.ficha-dinero .d-value {
+  font-family: var(--sans);
+}
+
+/* Los catorce que declaraban JetBrains Mono.
+
+   `.mono` deja de ser monoespaciada y pasa a ser la sans con cifras de ancho
+   fijo: es lo que alinea una columna de dinero, y no hacía falta cambiar de
+   familia para conseguirlo. globals.css ya aplica `tabular-nums slashed-zero`
+   a `.cifra, .mono, .value, td.r, th.r`, así que las columnas siguen cuadrando
+   exactamente igual. */
+.mono,
+.login-ticker,
+.live,
+.venta-form input[type="number"],
+.venta-form input[type="date"],
+.vf-cuotas-n,
+.vf-cuota .n,
+.pw-toggle,
+.portal-fecha,
+.portal-pw .k,
+.portal-pw .v,
+.portal-pw button,
+.enlace-panel .k,
+.enlace-acc button {
+  font-family: var(--sans);
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* Las dos excepciones, y son excepciones de verdad: aquí lo monoespaciado NO
+   es un adorno "técnico" sino lo que hace legible el contenido. Un enlace o un
+   volcado de error se leen carácter a carácter, y ahí un ancho fijo evita
+   confundir l/1/I y O/0. */
+.enlace-panel code,
+.estado-tecnico pre {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* La serif de la acotación se queda: es la voz distinta que separa «qué es
+   este número» del número. Es la cuarta familia, sí, pero no se descarga —
+   Georgia y sus respaldos ya están en el sistema. */
+
+
+/* ============================================================
+   17 · LO QUE ESTABA EN EL MARKUP Y DEBÍA ESTAR AQUÍ
+   ============================================================
+   El spec pide cero `style={{}}` y cero `font-size` en el markup (§8.7). Un
+   estilo en línea no lo puede pisar ninguna regla del sistema, así que cada
+   uno es un sitio donde el sistema deja de aplicar — y donde el siguiente
+   cambio de tema o de escala no llega.
+
+   Aquí van los que se repetían. Los que quedan en el código son coordenadas y
+   dimensiones de SVG (las gráficas de Inicio) y anchos proporcionales
+   calculados con datos, que son valores, no estilo.
+   ============================================================ */
+
+/* Separación entre bloques apilados de una plana. Estaba escrito como
+   `style={{ marginTop: 16 }}` en siete sitios. */
+.bloque { margin-top: 16px; }
+
+/* La nota bajo el dato principal de una celda: el abonado de una cuota, el
+   motivo de una anulación, quién la tocó y cuándo. Estaba como
+   `style={{ fontSize: 11 }}`, un tamaño suelto fuera de la escala cerrada —
+   que resulta ser exactamente `--t0`. */
+.nota-celda {
+  font-size: var(--t0);
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* `.empty-box` centra el texto, que es lo correcto para "no hay nada". El
+   recibo de una devolución no encaja ahí: es un párrafo que se lee. */
+.empty-box.izq { text-align: left; }
+
+/* ---- El estado vacío del inbox ---- */
+
+.vacio-inbox { text-align: center; max-width: 34ch; }
+
+.vacio-inbox h2 {
+  font-size: var(--t3);
+  font-weight: 600;
+  margin: 10px 0 5px;
+}
+
+.vacio-inbox p { color: var(--text-3); font-size: var(--t1); line-height: 1.5; }
+
+/* Una forma geométrica en lugar del emoji 💬 que había: el spec las pide
+   monocromas (§8.6) y además se dibujan igual en todos los sistemas, que un
+   emoji no. Grande y tenue: marca el sitio sin competir con el texto. */
+.vacio-marca {
+  display: block;
+  font-size: 34px;
+  line-height: 1;
+  color: var(--border-2);
+}
+
+/* ---- :disabled, en todos los botones ----
+   Hoy solo 4 de 109 tenían estilo de deshabilitado. Un botón que no responde
+   y se ve igual que uno que sí lee como una app rota — y en los que mueven
+   dinero, invita a volver a pulsar. */
+.btn:disabled,
+.btn-oro:disabled,
+.btn-plano:disabled,
+.btn-mini:disabled,
+.chip:disabled,
+.linkbtn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+/* El hover no debe responder a algo que no se puede pulsar: si el borde se
+   ilumina, el botón promete que funciona. */
+.btn:disabled:hover,
+.btn-oro:disabled:hover,
+.btn-plano:disabled:hover,
+.chip:disabled:hover {
+  border-color: var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.btn.primary:disabled:hover { background: var(--gold); color: #080808; }
+.linkbtn:disabled:hover { text-decoration: none; }
+
+/* 🔴 El único sitio donde el bloque de arriba PERDÍA, y perdía las dos
+   propiedades. `globals.css:795 .det-nav .btn[disabled]` es (0,3,0) —dos
+   clases y un atributo— contra los (0,2,0) de `.btn:disabled`, así que ganaba
+   pese a cargarse antes: la navegación entre sesiones se quedaba en
+   `opacity: .35` y en `cursor: default`.
+   Los números: con .35 los botones «‹ Anterior» y «Siguiente ›» quedan a
+   2,93:1 —por debajo incluso del 3:1 que pide un control, no ya del 4,5:1 de
+   texto—, contra los 4,56:1 que da el .5 de aquí arriba. Y el puntero seguía
+   siendo la flecha normal, así que el botón no avisaba de que estaba muerto ni
+   por color ni por cursor: exactamente la "app rota" que este bloque existe
+   para evitar.
+   Se iguala la especificidad desde este carril en vez de borrar la regla de
+   globals.css, que es lo que toca otra sesión. */
+.det-nav .btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+/* Utilidades que sustituyen a los estilos en línea que se repetían. Son pocas
+   y con nombre: una utilidad por cada patrón real, no un sistema de clases
+   atómicas — eso sería cambiar 80 estilos en línea por 80 clases sin
+   significado. */
+
+/* Botones que van uno al lado de otro dentro de una celda o un formulario. */
+.fila-acciones { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* El que se come el espacio sobrante de su fila. */
+.crece { flex: 1; min-width: 0; }
+
+/* Un bloque separado del SIGUIENTE, no del anterior. */
+.bloque-fin { margin-bottom: 22px; }
+
+/* Una nota con su acción a la derecha, en vez de debajo. */
+.note-con-accion {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* Una lista larga que hace su propio scroll en vez de estirar la página. El
+   corte a media fila es deliberado y está documentado en globals.css: enseña
+   que hay más abajo. */
+.lista-alta {
+  max-height: 420px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ── Aviso de canal de WhatsApp caído ──────────────────────────────────────
+   Nace del incidente del 2-sep-2026: Meta baneó la WABA y durante tres horas
+   nada en la pantalla lo dijo, porque Kapso devolvía 200 y el fallo llegaba
+   después por webhook.
+
+   Usa --red, que globals.css reserva para "dinero que SALIÓ". Aquí no hay
+   dinero: se toma prestado como color de alarma porque es el único rojo del
+   sistema, y una caída de canal es lo más parecido a una alarma que tiene el
+   OS. Si algún día entra un token de alarma propio, este bloque cambia solo.
+
+   No compite con ninguna regla de globals.css: la clase es nueva. */
+.aviso-wa-caido {
+  font-size: var(--t1);
+  color: var(--red);
+  background: var(--red-soft);
+  border: 1px solid var(--red);
+  border-radius: 8px;
+  padding: 9px 13px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+/* ── Centro de novedades: la campana y su tabla ────────────────────────────
+   La campana vive en el topbar de móvil (fuera del cajón: un contador
+   dentro de una nav escondida no se ve nunca) y junto al nombre de usuario
+   en la nav de escritorio. El badge usa --gold como os-burger-dot: es el
+   mismo "hay algo pendiente" del sistema, no una alarma (--red es dinero
+   que salió).
+
+   No compite con reglas de globals.css: las clases son nuevas. El
+   margin-left:auto de .campana en el topbar empuja la campana al borde
+   derecho del header flex de globals.css:825. */
+.os-topbar .campana { margin-left: auto; }
+.campana {
+  position: relative; flex: none;
+  display: grid; place-items: center;
+  width: 44px; height: 44px; /* área táctil mínima, como .os-burger */
+  font-size: var(--t3);
+  border-radius: 10px;
+  text-decoration: none;
+}
+.campana:active { background: var(--surface-2); }
+.campana-badge {
+  position: absolute; top: 4px; right: 2px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 700; line-height: 1;
+  color: var(--bg-2); background: var(--gold);
+  border-radius: 999px;
+}
+.nav-usuario { display: flex; align-items: center; justify-content: space-between; }
+
+.novedades-lista { list-style: none; margin: 0; padding: 0; }
+.novedades-fila {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.novedades-fila:last-of-type { border-bottom: none; }
+.novedades-frase a { text-decoration: none; }
+.novedades-frase a:hover { text-decoration: underline; }
+/* El ícono SVG del tipo es inline por defecto y se alinea a la línea de base
+   del texto, no al centro del pill — queda pegado al borde superior. */
+.novedades-frase .pill { display: inline-flex; align-items: center; justify-content: center; padding: 4px; }
+.novedades-meta {
+  display: flex; gap: 10px; flex: none;
+  font-size: var(--t1); color: var(--text-2);
+}
+.novedades-vacio { color: var(--text-2); margin: 0; }
+.novedades-error { color: var(--red); font-size: var(--t1); }
+
+/* ============================================================
+   Llamadas de Fathom (/llamadas)
+   Berni, CAMBIOS OS 6-sep: que las sesiones se registren solas y el consultor
+   solo revise. Esta pantalla es ese "revisar".
+
+   Todo el bloque va aquí y no en globals.css: es el carril nuevo, y globals lo
+   está tocando el equipo del cockpit en paralelo. Ninguna de estas clases
+   existe en globals.css — comprobado al escribirlas, así que no compiten con
+   nada y no hay que replicar especificidad de nadie.
+   ============================================================ */
+
+.fa-barra {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+}
+/* El contador dentro de la pestaña, no al lado: pegado al texto se lee como
+   parte de la etiqueta ("Consultorías 7") y no como un badge suelto que hay
+   que interpretar. */
+.tab-n {
+  font-size: var(--t0); color: var(--text-3); margin-left: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.tab.on .tab-n { color: inherit; }
+
+/* Una sugerencia de emparejamiento, no un hecho. Va en el color de "falta un
+   dato" (--blue) y NO en naranja ni rojo: no es un error, es algo que alguien
+   tiene que mirar. */
+.fa-duda {
+  font-size: var(--t0); color: var(--blue); border: 1px solid var(--blue);
+  border-radius: 4px; padding: 0 5px; margin-left: 7px; white-space: nowrap;
+  opacity: .85;
+}
+
+.ok-linea { color: var(--green); font-size: var(--t1); margin: 8px 0; }
+
+.fa-acciones {
+  display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+  margin: 14px 0 4px;
+}
+.fa-campo { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 210px; }
+.fa-campo > span { font-size: var(--t0); text-transform: uppercase; letter-spacing: .6px; color: var(--text-3); }
+.fa-campo .sel { width: 100%; }
+
+.fa-convertir {
+  border: 1px solid var(--border-2); border-radius: var(--radius-lg);
+  padding: 13px 15px; margin: 14px 0;
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
+}
+
+/* El resumen de Fathom. Márgenes apretados a propósito: son 8.000 caracteres
+   de viñetas dentro de un modal, y con el aire por defecto de un <p> hay que
+   hacer scroll tres veces para leer lo que cabía en una pantalla. */
+.fa-resumen { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px; }
+.fa-resumen h4 {
+  font-size: var(--t1); text-transform: uppercase; letter-spacing: .6px;
+  color: var(--text-3); margin: 16px 0 6px; font-weight: 600;
+}
+.fa-resumen h4:first-child { margin-top: 0; }
+.fa-resumen p { margin: 0 0 7px; font-size: var(--t1); color: var(--text-2); line-height: 1.5; }
+.fa-vineta { padding-left: 15px; position: relative; }
+.fa-vineta::before {
+  content: "·"; position: absolute; left: 4px; color: var(--text-4); font-weight: 700;
+}
+/* Cada frase del resumen es un enlace al segundo exacto de la grabación. Si se
+   pintaran como enlaces normales, el resumen entero sería oro subrayado y no se
+   podría leer. Se quedan del color del texto y solo se delatan al apuntar. */
+.fa-salto { color: inherit; text-decoration: none; }
+.fa-salto:hover { color: var(--gold); text-decoration: underline; }
+.fa-salto:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 2px; }
+
+/* ---- Sesiones: notas desplegables y enlaces de la fila (CAMBIOS OS) ----
+   Berni pidió "que la parte de notas sea desplegable y que abra todas las
+   notas", y sendos botones a la grabación y a la landing. */
+
+/* El <summary> nativo trae un triángulo y `display: list-item`; aquí la nota
+   ya ocupa toda la celda, así que el marcador solo roba ancho. Se quita en los
+   dos dialectos —`::-webkit-details-marker` para Safari— y el aviso de que hay
+   más se da con el propio texto recortado. */
+.nota-desp > summary { list-style: none; cursor: pointer; }
+.nota-desp > summary::-webkit-details-marker { display: none; }
+.nota-desp > summary::marker { content: ""; }
+.nota-desp > summary:hover .nota-prev { color: var(--text); }
+.nota-desp > summary:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 4px; }
+/* Abierta, la nota entera: se respetan los saltos de línea porque las notas de
+   una consultoría vienen en párrafos y en una sola línea no se leen. */
+.nota-desp[open] > summary .nota-prev {
+  display: none;
+}
+.nota-todo {
+  white-space: pre-wrap; font-size: var(--t1); color: var(--text-2);
+  line-height: 1.5; max-width: 62ch; padding: 2px 0 4px;
+}
+
+.ses-enlaces { display: flex; flex-direction: column; gap: 2px; }
+.ses-enlaces a { font-size: var(--t0); color: var(--gold); text-decoration: none; white-space: nowrap; }
+.ses-enlaces a:hover { text-decoration: underline; }
+.ses-enlaces a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: 3px; }
+
+/* La tabla del histórico pasó de 7 a 9 columnas. El escalón de ancho mínimo
+   se define por número de columnas (bloque 3 de este fichero), así que sin
+   esta línea las nueve se comprimían unas contra otras en móvil en vez de
+   activar el scroll lateral. */
+.tabla-scroll > table.t:has(thead th:nth-child(9)) { min-width: 980px; }
+
+/* ---- Inicio: la fila del hueco en los repartos (CAMBIOS OS) ----
+   «sin atribuir» / «sin método» no son un canal con el que competir: son lo
+   que falta por rellenar. Se pintan apagados y con la barra hueca para que se
+   lean como ausencia y no como resultado — hoy esa fila es la mitad de las
+   ventas en «por fuente», y en color pleno encabezaría el gráfico como si
+   Instagram fuera el segundo canal. */
+.bar-row.rep-hueco .lbl { color: var(--text-4); font-style: italic; }
+.bar-row.rep-hueco .fill { background: var(--border-2); }
+.bar-row.rep-hueco .num, .bar-row.rep-hueco .n2 { color: var(--text-4); }
+
+/* ============================================================
+   PORTAL DE FIRMA (/c/<token>) — la única pantalla de todo esto que ve
+   alguien que no es del equipo
+   ============================================================
+   Compite con el bloque `.portal*` de globals.css (1277-1302) y no lo pisa:
+   lo REUTILIZA entero —`.portal`, `.portal-marca`, `.portal-head`,
+   `.portal-vacio`, `.portal-abrir`, `.portal-nota`— y solo añade lo que un
+   contrato necesita y una lista de estrategias no: el visor del PDF, el
+   formulario y el final feliz. Vive aquí y no en globals.css por la regla del
+   carril separado (CLAUDE.md); el único selector que gana algo por el orden de
+   carga es `.firma-boton`, que corrige un borde de `.portal-abrir`.
+
+   Y uno que NO gana, dicho aquí para que nadie lo intente otra vez: el fondo
+   del campo del nombre lo pone `globals.css:743`
+   (`input:not([type="checkbox"]):not([type="radio"])`, que es 0-2-1) y desde
+   `.firma-nombre input` (0-1-1) no hay orden de carga que lo tumbe. Da igual:
+   ese fondo es `--surface-2`, el mismo que llevan los campos de todo el OS, y
+   es el que debe llevar. Por eso aquí no hay ninguna línea de `background`.
+
+   Se mide en un móvil, no en el portátil. El enlace llega por correo y se
+   abre con el pulgar, y un contrato de varios miles de euros que no se lee
+   cómodamente en el teléfono es un contrato que no se firma. De ahí los 48px
+   de alto en todo lo que se toca (WCAG 2.5.5 pide 44), la casilla de 22px en
+   vez de los ~13 de fábrica, y el visor medido en `vh`.
+   ============================================================ */
+
+/* `margin-top` y no `margin-bottom`: el enlace de escape va ENCIMA del visor
+   (el porqué está en PortalFirma), así que la separación que hace falta es la
+   de arriba. */
+.firma-visor {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  margin-top: 12px;
+}
+/* `min(70vh, 720px)`: en el móvil manda el 70% de la altura —queda a la vista
+   el borde de abajo, que es lo que cuenta que debajo sigue habiendo página— y
+   en un monitor grande el visor deja de crecer a los 720px, ya más alto que
+   un folio en pantalla. */
+.firma-visor iframe {
+  width: 100%;
+  height: min(70vh, 720px);
+  border: 0;
+  display: block;
+}
+/* 🔴 45vh en el móvil, y no es una cuestión de gusto: Chrome y Firefox en
+   Android NO pintan PDF dentro de un iframe, y en iPhone es poco fiable. Para
+   media clientela esto es un rectángulo gris, y a 70vh ese rectángulo se come
+   la pantalla y empuja el formulario entero bajo el pliegue. A 45vh el cliente
+   ve que debajo sigue habiendo página, y el enlace de escape le queda encima
+   sin tener que buscarlo. */
+@media (max-width: 700px) {
+  .firma-visor iframe { height: 45vh; }
+}
+
+/* `scroll-margin-top`: la ruta del POST redirige a `#firma` cuando algo falla,
+   y sin esto el formulario aterriza pegado al borde de arriba de la ventana. */
+.firma-form {
+  scroll-margin-top: 16px;
+  margin-top: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.firma-check {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  font-size: var(--t1);
+  line-height: 1.55;
+  color: var(--text-2);
+  cursor: pointer;
+}
+/* 22px y no el tamaño de fábrica (~13): es la casilla que dice «acepto» en un
+   documento legal, pulsada con el pulgar. El `<label>` entero también vale
+   como zona de toque, así que el área real es toda la línea del texto. */
+.firma-check input {
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+  flex: none;
+  accent-color: var(--gold);
+}
+.firma-check input:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+
+.firma-nombre {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--t1);
+  color: var(--text-2);
+}
+/* 16px CLAVADOS, no `var(--t2)` (15px). Es el único número suelto de este
+   bloque y tiene motivo: Safari en iOS hace zoom sobre cualquier campo de
+   menos de 16px en cuanto se toca, y deja al cliente con la página desencajada
+   a mitad de firma, sin saber cómo volver. */
+.firma-nombre input {
+  font-size: 16px;
+  padding: 12px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  min-height: 48px;
+}
+.firma-nombre input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* El botón de firmar lleva `.portal-abrir` para heredar el bloque dorado, y
+   aquí se le quita lo que no le sirve de venir de un `<a>`. El borde sube a
+   2px A PROPÓSITO: sin eso, «Firmar el contrato» y «Abrir el contrato en una
+   pestaña» son dos rectángulos idénticos, y el que cierra el trato tiene que
+   pesar más que el que abre un visor. No se rellena de oro macizo porque el
+   tema claro invierte `--gold` a un oro oscuro y el texto negro de
+   `.btn.primary` se queda en 3,2:1 contra él. */
+.firma-boton {
+  cursor: pointer;
+  font-family: inherit;
+  min-height: 48px;
+  border: 2px solid var(--gold);
+}
+.firma-boton:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+/* Rojo sobre rojo al 12% da 5,83:1 contra el fondo — medido, porque en este
+   fichero ya hubo un botón atenuado por dos hojas a la vez que acabó en
+   2,08:1 y cada diff parecía inocente.
+
+   El margen es propio porque el error salió del formulario: ahora es lo
+   primero que hay tras la cabecera, encima del visor, ya que la redirección
+   del POST devuelve al cliente al principio de la página y ahí abajo no lo
+   veía. `scroll-margin-top` por si se aterriza en él por `#firma-error`. */
+.firma-error {
+  margin: 0 0 16px;
+  scroll-margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--red);
+  border-radius: var(--radius-sm);
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: var(--t1);
+}
+
+/* El final bueno. `.portal-vacio` pinta un borde DISCONTINUO, que es el dibujo
+   de «aquí todavía no hay nada»; esto es lo contrario, así que el mismo bloque
+   va con borde continuo y dorado. */
+.firma-ok { border-style: solid; border-color: var(--gold-line); }
+.firma-ok h1 { color: var(--gold); }
+.firma-ok .portal-abrir { margin: 20px auto 0; max-width: 320px; }
+
+/* ============================================================
+   EDITOR DE CONTRATO (modal) — el texto a la izquierda, el PDF a la derecha
+   ============================================================
+   La pantalla del "modificar en la previsualización como si fuera un Word"
+   (spec 2026-09-15, decisión 4). Ninguna de estas clases existe en
+   globals.css — comprobado al escribirlas —, así que nada de aquí compite con
+   nada. Y lo interesante de este bloque es lo que NO declara, que son tres
+   cosas y las tres a propósito:
+
+   · **`font-family`**: la pone `globals.css:157` (`input, select, textarea {
+     font-family: inherit }`), que la hereda del `body` — o sea `var(--sans)`,
+     la única tipografía del OS. Ver el comentario largo sobre el textarea.
+   · **`background`**: la pone `globals.css:743` (`…, select, textarea {
+     background: var(--surface-2) }`). Ese gris es el fondo de todos los campos
+     del OS y este es un campo del OS. Misma decisión que en el bloque del
+     portal de firma, y por lo mismo.
+   · **`:focus-visible`**: lo pone el bloque 1 de este mismo fichero
+     (`textarea:focus-visible`), que es exactamente el anillo que hace falta.
+
+   `color: inherit` de `globals.css:157` también se queda: es `--text`, la
+   tinta del OS.
+   ============================================================ */
+
+/* El alto sale de una resta y no de un `72vh` suelto. `.modal.grande` es
+   `max-height: 94dvh` con `overflow-y: auto`: si las dos columnas piden más
+   de lo que sobra, el que se pone a desplazarse es el MODAL, y entonces para
+   leer el final del contrato hay que mover dos scrolls encajados, el del
+   textarea dentro del de la caja. Los ~260px son la cabecera, el subtítulo,
+   las notas, el pie, el aviso, los botones y los aires. El `max(240px, …)`
+   es el suelo para una pantalla muy baja, donde sí se acepta que el modal
+   desplace. */
+.editor-contrato {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  height: max(240px, min(72vh, calc(94dvh - 260px)));
+}
+
+/* 🔴 AQUÍ NO HAY `font-family`, Y ES UNA DECISIÓN, NO UN OLVIDO.
+   Se escribió con `"Times New Roman", Times, serif` para igualar el PDF de al
+   lado, que pdfkit dibuja en Times-Roman (`lib/contrato-pdf.ts`). Milo lo
+   revirtió el 16-sep, y el motivo es mejor que el mío: **el sitio donde se ve
+   cómo queda de verdad es el iframe del PDF, que está a catorce píxeles**. El
+   textarea es una superficie del OS, no una previsualización, y el OS tiene
+   una sola tipografía (bloque 16 de este fichero: Sora, auto-hospedada con
+   `next/font`, y costó trabajo dejarlo así).
+
+   Sin línea de `font-family`, `globals.css:157` (`input, select, textarea {
+   font-family: inherit }`) la hereda del `body`, que es `var(--sans)`. O sea
+   que la forma de cumplir la regla del OS es no escribir nada. Quien vuelva a
+   poner una familia aquí, que lea esto antes.
+
+   `--t2` (15px) es el cuerpo de la escala del OS, y en la escala del OS nos
+   quedamos. El `line-height` sí sube a 1.6: son párrafos largos de prosa
+   legal, no etiquetas de tabla. */
+.editor-contrato-texto {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  font-size: var(--t2);
+  line-height: 1.6;
+  padding: 16px 18px;
+  /* `--border-2` y no un borde más marcado: es el mismo que llevan todos los
+     campos del OS (`globals.css:974`, `.f input`). Da 1,67:1 en oscuro y 1,83:1
+     en claro contra el relleno del campo (`--surface-2`), que por sí solo no
+     llegaría al 3:1 de un contorno de control —
+     pero el criterio se cumple por el conjunto (relleno propio, cursor y el
+     texto dentro), y sobre todo esta es la decisión del sistema, no de esta
+     pantalla. Si un día sube, sube para todos los campos a la vez. */
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-sm);
+}
+/* En solo lectura (contrato de la plantilla anterior) NO se atenúa nada. Un
+   contrato legal en gris claro es un contrato que no se puede leer, y este
+   fichero ya tiene la cicatriz de un botón atenuado por dos hojas a la vez
+   que acabó en 2,08:1. Lo que cambia es el cursor y el borde, que deja de ser
+   el de un campo y pasa a ser el de una caja de texto. */
+.editor-contrato-texto[readonly] {
+  border-color: var(--border);
+  cursor: default;
+}
+
+.editor-contrato-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+/* Encima del visor, como en la página del cliente y por lo mismo: hay
+   navegadores que no pintan un PDF dentro de un iframe, y cuando eso pasa lo
+   único que queda es este enlace. */
+.editor-contrato-abrir {
+  flex: none;
+  align-self: flex-start;
+  font-size: var(--t1);
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Blanco fijo en los dos temas: lo que hay detrás es papel. Mientras el PDF
+   viaja, un rectángulo blanco ya es el documento a medio llegar; uno oscuro
+   sería un hueco que parece un error. */
+.editor-contrato-pdf {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+
+/* `.note` ya trae borde, fondo y 16px de margen inferior. Aquí se apretan a
+   12 y se le quita el de arriba: son avisos de contexto y van pegados a la
+   cabecera del modal, no flotando. */
+.editor-contrato-nota { margin: 0 0 12px; }
+
+.editor-contrato-pie { margin: 10px 0 0; }
+.editor-contrato-pie + .editor-contrato-pie { margin-top: 4px; }
+.editor-contrato-pie code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+/* La región viva se monta siempre, aunque esté vacía: un `role="status"` que
+   aparece junto con su texto no lo anuncia ningún lector de pantalla. `:empty`
+   la esconde mientras no dice nada, así que no deja un hueco. */
+.editor-contrato-aviso {
+  margin: 10px 0 0;
+  font-size: var(--t1);
+  line-height: 1.5;
+}
+.editor-contrato-aviso:empty { display: none; }
+/* 🔴 Todas las cifras de contraste de este bloque están calculadas con la
+   fórmula de WCAG 2.x sobre los valores literales de `globals.css`, no a ojo:
+   linealizar cada canal, luminancia 0,2126R + 0,7152G + 0,0722B, y
+   (L1+0,05)/(L2+0,05). La primera vez las estimé y CINCO de las nueve salieron
+   mal por décimas acumuladas al redondear. Un comentario que da una cifra
+   exacta tiene que dar la cifra; si cambias un token, recalcula, no ajustes.
+
+   Medidos contra `--surface` (el fondo del modal), que es donde caen:
+   verde 7,47:1 en oscuro y 6,26:1 en claro; rojo 6,09:1 y 7,09:1. Son los
+   mismos dos tokens que usa el resto del OS para confirmar y para fallar. */
+.editor-contrato-aviso .bien   { color: var(--green); }
+.editor-contrato-aviso .mal    { color: var(--red); }
+/* El tercer tono. "Guardando, espera un momento" no es un éxito (verde
+   mintiendo) ni un fallo (rojo asustando): es el estado normal de una acción
+   en vuelo. `--text-2` da 10,85:1 en oscuro y 8,20:1 en claro contra
+   `--surface`, así que el tono neutro no se paga con legibilidad. */
+.editor-contrato-aviso .espera { color: var(--text-2); }
+
+/* `.modal-actions` de globals.css ya da el flex y el gap. Esto solo empuja
+   "Cerrar" al otro extremo —para que no se pulse por inercia yendo a por el
+   botón de al lado— y marca que la fila está ocupada. Se marca con el cursor
+   y no con opacidad: atenuar el botón dorado en tema claro lo deja en 2,21:1
+   contra su propio texto, que es justo el fallo que ya se pagó una vez. */
+/* `flex-wrap` porque los botones pasaron a ser cuatro y uno se llama "Guardar
+   y actualizar la vista previa": sin esto, en una ventana estrecha se aplastan
+   unos contra otros en vez de bajar a una segunda fila. */
+.editor-contrato-acciones { flex-wrap: wrap; }
+.editor-contrato-cerrar { margin-left: auto; }
+.editor-contrato-acciones[aria-busy="true"] { cursor: progress; }
+
+/* Por debajo de 900px las dos columnas no caben una al lado de la otra. Se
+   apilan y el modal se desplaza, que aquí sí es lo correcto: en un móvil el
+   editor es para una corrección puntual, no para redactar. */
+@media (max-width: 900px) {
+  .editor-contrato {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  /* 16px y no `--t2` SOLO aquí: Safari en iOS hace zoom sobre cualquier campo
+     de menos de 16px en cuanto se toca, y deja la pantalla desencajada a mitad
+     de corrección. Mismo motivo y mismo número que `.firma-nombre input`. */
+  .editor-contrato-texto { height: 52dvh; font-size: 16px; }
+  .editor-contrato-pdf   { height: 44dvh; flex: none; }
+}
+
+/* ── El error del contrato en la pantalla de "Venta registrada" ─────────────
+   COMPITE CONTRA `globals.css:840` — `.error { color: var(--red); font-size:
+   var(--t1); margin-left: 6px; }`, el genérico, que es (0,1,0). Esto es
+   (0,2,0) y además carga después, así que gana por las dos vías.
+
+   Por qué hace falta: `globals.css:618-622` ya resolvió exactamente este
+   problema —su propio comentario lo dice, "el peor mensaje de la pantalla se
+   leía igual que el más inocuo"— pero lo scopeó a `.venta-form .error`, y el
+   bloque del contrato vive en `.venta-ok`, que es la pantalla de DESPUÉS de
+   enviar el formulario. Ahí no llegaba, y el mensaje que dice "la venta sí se
+   guardó, lo que falló es el contrato" se pintaba a 13px —más pequeño que la
+   línea de importe que tiene encima—, sin caja y desalineado 6px respecto a
+   sus párrafos vecinos.
+
+   Es una copia deliberada de `globals.css:618-622` y no un `@extend` ni una
+   clase compartida: tocar aquel selector para que cubra las dos pantallas
+   significaría editar `globals.css`, que es justo lo que este fichero existe
+   para no tener que hacer. Si aquel cambia, este se mira.
+
+   Las dos declaraciones que NO están allí y aquí sí, las dos para deshacer el
+   genérico:
+
+     · `font-size: var(--t2)` — 15px, los del `body`, que es lo que hereda el
+       original porque allí no se declara nada. Aquí hay que reponerlos a mano
+       porque el genérico los había bajado a `var(--t1)`, 13px, que ERA el bug:
+       el peor mensaje de la pantalla más pequeño que la línea del importe.
+       El token que va en la declaración es `--t2`; `--t1` es del que se sale.
+     · `margin: 10px 0` — el mismo del original, que aquí además pone a cero
+       el `margin-left: 6px` del genérico. */
+.venta-ok .error {
+  color: var(--red); background: var(--red-soft);
+  border: 1px solid rgba(248, 113, 113, .25); border-radius: var(--radius-sm);
+  padding: 9px 12px; margin: 10px 0; line-height: 1.5;
+  font-size: var(--t2);
+}

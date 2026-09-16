@@ -1,0 +1,25 @@
+# Credenciales — NUNCA
+.env
+.env.local
+.env*.local
+*.pem
+*.key
+
+# Node / Next
+node_modules/
+.next/
+*.tsbuildinfo
+
+# Vercel
+.vercel
+
+# Supabase CLI
+supabase/.temp/
+
+# macOS / editores
+.DS_Store
+.vscode/
+.idea/
+
+# Herramienta del operador para preparar este repo. No forma parte de la entrega.
+sanear.py

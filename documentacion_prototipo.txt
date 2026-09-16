@@ -1,0 +1,335 @@
+Herramienta de captación de leads
+
+Documento de síntesis para el trabajo conjunto previo a la reunión. Resume el estado actual, la arquitectura propuesta, los puntos de integración y las decisiones pendientes. El detalle técnico completo vive en `docs/00-OVERVIEW.md`, `docs/03-especificacion.md` y `docs/08-roadmap.md`.
+
+## 1. Qué es y para qué sirve
+
+Lead magnet para Metacrypto Club: una landing con un wizard de preguntas sobre la situación del inversor, un diagnóstico de portfolio generado mediante reglas determinísticas, captura de nombre, email y teléfono, descarga de un PDF base y contacto por WhatsApp con las respuestas precargadas.
+
+El objetivo comercial es:
+
+- Captar leads desde Instagram.
+- Conocer su capital, liquidez, experiencia y problemas.
+- Detectar leads con potencial comercial.
+- Guardar la información en el sistema del negocio.
+- Permitir que el equipo de triaje contacte rápidamente a los leads calientes.
+
+El umbral comercial objetivo es un capital superior a 10.000 USD, aunque esta regla todavía debe terminar de implementarse correctamente en el backend.
+
+## 2. Estado actual
+
+El MVP está desarrollado en Next.js y funciona localmente.
+
+### Implementado
+
+- Landing y wizard responsive.
+- Preguntas configurables de opción múltiple.
+- Captura de nombre, email y teléfono.
+- Consentimiento de contacto.
+- Diagnóstico determinístico basado en reglas.
+- Pregunta adicional de segmentación.
+- Pantalla final con diagnóstico y tres videos de muestra.
+- CTA a WhatsApp.
+- Mensaje de WhatsApp con nombre y respuestas precargadas.
+- Documento HTML base personalizado con el nombre.
+- Descarga del documento como PDF A4.
+- `session_id` para identificar cada recorrido.
+- Registro de la pregunta donde abandona el usuario.
+- Endpoint `POST /api/lead` con validaciones.
+- Tests unitarios, de integración y seguridad: `21/21`.
+- Configuración de despliegue para Netlify.
+
+### Pendiente
+
+- Guardar los leads en Supabase.
+- Relacionarlos con los contactos o clientes existentes.
+- Implementar el flag de lead caliente en backend.
+- Crear notificaciones al equipo de triaje.
+- Definir las preguntas definitivas.
+- Sustituir los videos de muestra por videos reales.
+- Crear el módulo administrativo de consulta, si entra en alcance.
+- Implementar UTMs y tracking avanzado.
+- Personalizar completamente el PDF.
+- Enviar el PDF por email mediante Resend.
+- Desplegar y probar el flujo integrado en producción.
+
+Actualmente el endpoint valida los datos y los registra en la terminal, pero todavía no los persiste en una base de datos.
+
+## 3. Flujo punta a punta
+
+1. El lead llega desde Instagram mediante un enlace.
+2. Abre la landing y comienza el diagnóstico.
+3. Responde preguntas sobre capital, liquidez, riesgo, experiencia y portfolio.
+4. Los datos de contacto se solicitan al final para reducir la fricción.
+5. El lead deja nombre, email, teléfono y consentimiento.
+6. Responde una pregunta adicional de segmentación.
+7. Se muestra una animación de análisis.
+8. El frontend construye un JSON con la sesión, contacto y respuestas.
+9. El JSON se envía a `POST /api/lead`.
+10. El motor determinístico genera el diagnóstico.
+11. La pantalla final muestra el resultado y los recursos.
+12. El usuario puede descargar un PDF base personalizado con su nombre.
+13. El usuario puede abrir WhatsApp con sus respuestas precargadas.
+14. Si abandona antes de terminar, se intenta registrar la pregunta donde abandonó.
+
+## 4. Decisiones firmes
+
+| Tema | Decisión |
+|---|---|
+| Integración | Código propio dentro del stack del negocio |
+| CRM | GoHighLevel queda fuera de esta integración; continúa utilizándose para agendas y procesos comerciales existentes |
+| Arquitectura objetivo | Next.js + Supabase |
+| Diagnóstico | Algoritmo determinístico basado en respuestas de opción múltiple, sin IA |
+| Preguntas | Las preguntas definitivas las define Berni con enfoque psicológico y comercial |
+| Contacto | Nombre, email y teléfono al final del wizard |
+| WhatsApp | CTA al `+54 9 3585 401429` con nombre y respuestas precargadas |
+| Lead caliente | Objetivo comercial: capital superior a 10.000 USD |
+| PDF actual | Documento base igual para todos, personalizado únicamente con el nombre |
+| Tracking mínimo | `session_id`, finalización y pregunta de abandono |
+| Desarrollo | Branch de Git, PR acotado, revisión y merge |
+| Base de desarrollo | Supabase local mediante CLI + Docker, no branches remotas de Supabase |
+| Producción | No se modifica directamente desde local |
+
+## 5. Formato actual de datos
+
+El frontend produce un JSON agnóstico basado en registros `pregunta/respuesta`.
+
+```json
+{
+  "session_id": "uuid",
+  "lead": {
+    "name": "Juan Pérez",
+    "email": "juan@email.com",
+    "phone": "+54 9 3585 000000",
+    "consent": true
+  },
+  "signals": {
+    "dropoff_question": null,
+    "finished_at": "2026-09-16T12:00:00.000Z"
+  },
+  "answers": [
+    {
+      "pregunta": "¿Cuánto capital total tenés invertido en cripto?",
+      "respuesta": "15k a 40k"
+    },
+    {
+      "pregunta": "¿Cómo describirías tu tolerancia al riesgo?",
+      "respuesta": "Moderado"
+    },
+    {
+      "pregunta": "¿En qué está tu portfolio hoy?",
+      "respuesta": "Bitcoin y Ethereum"
+    }
+  ]
+}
+```
+
+Actualmente todas las respuestas se envían como texto. Si se necesitan estructuras más complejas, como porcentajes separados de BTC, ETH y stablecoins, habrá que ampliar el contrato y la validación del endpoint.
+
+El formato agnóstico permite cambiar preguntas sin tener que rediseñar completamente la API.
+
+## 6. Arquitectura de integración recomendada
+
+La opción recomendada es incorporar la herramienta dentro del repositorio existente del negocio.
+
+```text
+Navegador
+   ↓
+Wizard Next.js
+   ↓
+POST /api/lead
+   ↓
+Backend Next.js del negocio
+   ↓
+Validación y clasificación
+   ↓
+Supabase
+   ↓
+Reporte, notificación y seguimiento comercial
+```
+
+En este modelo:
+
+- El navegador no se conecta directamente a la base con permisos elevados.
+- Las claves privadas permanecen en el backend.
+- El endpoint valida y normaliza los datos.
+- Supabase funciona como fuente principal.
+- El lead puede relacionarse con entidades existentes.
+- El backend calcula el flag de lead caliente.
+- El sistema puede generar notificaciones.
+- El módulo administrativo consulta la misma base.
+
+Si trabajamos dentro de su repositorio, nosotros podemos crear el endpoint y las migraciones. No es necesario que su equipo entregue un endpoint previamente.
+
+## 7. Alternativa de integración separada
+
+Si prefieren mantener la herramienta desplegada de forma independiente en Netlify:
+
+```text
+Herramienta en Netlify
+   ↓ JSON
+Endpoint del sistema del negocio
+   ↓
+Supabase
+```
+
+En ese caso necesitamos que el sistema del negocio proporcione:
+
+- URL del endpoint.
+- Método de autenticación.
+- Contrato JSON acordado.
+- Política de CORS.
+- Respuestas y códigos de error.
+- Reglas de deduplicación.
+- Responsable de almacenar y procesar los leads.
+
+La integración dentro del mismo repositorio es preferible porque reduce duplicaciones, problemas de seguridad y divergencias entre sistemas.
+
+## 8. Modelo de datos a evaluar
+
+El diseño definitivo depende del esquema actual del sistema. Como referencia, podrían existir estas entidades:
+
+| Entidad | Responsabilidad |
+|---|---|
+| Contactos o leads | Nombre, email, teléfono y consentimiento |
+| Envíos de diagnóstico | Una ejecución completa o parcial del cuestionario |
+| Respuestas | Pregunta y respuesta relacionadas con un envío |
+| Sesiones | Inicio, finalización y abandono |
+| Eventos | Clics, cambios de pantalla o acciones futuras |
+| Clientes | Personas que posteriormente compran un producto o servicio |
+
+La relación recomendada sería:
+
+```text
+Contacto existente
+   ↓ contact_id
+Envío de diagnóstico
+   ↓ submission_id
+Respuestas
+```
+
+Si ya existe una tabla de contactos o leads, no conviene duplicarla. La nueva tabla de diagnósticos debería relacionarse con ella mediante una clave externa.
+
+El `session_id` debería ser único para evitar duplicados entre un envío parcial por abandono y el envío completo.
+
+## 9. Alcance a definir
+
+Necesitamos acordar cuál de estas alternativas forma parte de nuestra entrega:
+
+| Alcance | Incluye |
+|---|---|
+| Captación básica | Endpoint y almacenamiento en Supabase |
+| Captación integrada | Almacenamiento + relación con contactos o clientes existentes |
+| Módulo de consulta | Integración + menú lateral + reporte filtrable + detalle |
+| Automatización completa | Módulo + alertas + asignación + comunicaciones |
+
+### Recomendación
+
+Dividir la implementación en entregas acotadas:
+
+1. Persistencia, relaciones, deduplicación y clasificación.
+2. Módulo administrativo con listado, filtros y detalle.
+3. Notificaciones, email, WhatsApp automático y tracking avanzado.
+
+Esto permite poner en funcionamiento la captación sin esperar todo el módulo administrativo.
+
+## 10. Qué entregamos nosotros
+
+| Entregable | Contenido |
+|---|---|
+| Especificación | Flujo, requisitos y criterios de aceptación |
+| Contrato JSON | Estructura enviada por el formulario |
+| Migraciones | Tablas, relaciones, índices y políticas |
+| Endpoint | Validación, normalización, deduplicación y persistencia |
+| Frontend | Wizard y resultado integrados |
+| Motor | Diagnóstico determinístico y clasificación |
+| WhatsApp | CTA y mensaje con respuestas |
+| PDF | Documento base y generación desde HTML |
+| Módulo administrativo | Listado, filtros y detalle si entra en alcance |
+| Tests | Unitarios, integración y seguridad |
+| Documentación | Setup, variables, arquitectura y despliegue |
+| Pull Request | Cambios acotados para revisión |
+| Handoff | Explicación técnica y validación conjunta |
+
+## 11. Tracking
+
+### Implementado actualmente
+
+- Identificador único `session_id`.
+- Respuestas completadas.
+- Envío completo o parcial.
+- Pregunta donde abandona el usuario.
+- Registro técnico de solicitudes.
+
+### Posibles ampliaciones
+
+- UTMs de Instagram.
+- Tiempo por pregunta.
+- Tiempo total.
+- Clic en WhatsApp.
+- Descarga del PDF.
+- Apertura y clic de email.
+- Porcentaje y duración de video.
+- Experimentos A/B.
+- Atribución comercial.
+
+Estas ampliaciones no forman parte del tracking mínimo actual y deben priorizarse por separado.
+
+## 12. Pendientes que afectan la integración
+
+| Ítem | Responsable | Estado |
+|---|---|---|
+| Preguntas definitivas | Berni | Pendiente crítico |
+| Revisión del esquema actual | Ambos equipos | Pendiente de accesos |
+| Definición de tablas y relaciones | Ambos equipos | Pendiente de revisión |
+| Alcance del módulo administrativo | Por definir | Decisión pendiente |
+| Persistencia en Supabase | Equipo dev | Pendiente |
+| Regla backend de lead caliente | Equipo dev | Pendiente |
+| Notificación al triaje | Por definir | Pendiente |
+| Videos reales | Berni | Pendiente |
+| Email mediante Resend | Ambos equipos | Futuro |
+| Deploy integrado | Ambos equipos | Pendiente |
+
+## 13. Convenciones de trabajo conjunto
+
+- Spec-first: los cambios de requisitos se documentan antes de implementarse.
+- Branches: `feature/<slug>`, `fix/<slug>` o `docs/<slug>`.
+- Nunca se trabaja directamente sobre producción.
+- Commits con Conventional Commits en inglés.
+- Un tema por commit y PR.
+- Migraciones append-only.
+- Supabase se levanta localmente con CLI + Docker.
+- `supabase db reset` antes de abrir un PR con cambios de base.
+- Secrets únicamente en variables de entorno.
+- PR revisado antes de merge.
+- Producción se actualiza únicamente con cambios aprobados.
+
+## 14. Preguntas para resolver en la reunión
+
+1. ¿Qué tablas utilizan actualmente para leads, contactos y clientes?
+2. ¿Cómo identifican y deduplican una persona?
+3. ¿El diagnóstico debe vincularse con un contacto existente?
+4. ¿Supabase será la fuente principal de estos datos?
+5. ¿Creamos tablas nuevas o reutilizamos las actuales?
+6. ¿Nuestro alcance termina en la persistencia?
+7. ¿También construiremos el módulo de consulta?
+8. ¿Qué filtros necesita el reporte?
+9. ¿Quién recibe los leads calientes?
+10. ¿Cuál es el criterio exacto de lead caliente?
+11. ¿Cómo gestionan actualmente migraciones y RLS?
+12. ¿Quién revisa y aprueba nuestros PR?
+13. ¿Dónde se despliega el sistema?
+14. ¿Qué parte implementa cada equipo?
+15. ¿Qué integraciones deben estar en la primera versión?
+
+## 15. Dónde profundizar
+
+| Documento | Contenido |
+|---|---|
+| `AGENTS.md` | Contexto general y decisiones firmes |
+| `docs/00-OVERVIEW.md` | Objetivo, flujo, stack y estado |
+| `docs/01-reunion-integracion.md` | Decisiones de integración |
+| `docs/03-especificacion.md` | Especificación técnica |
+| `docs/06-pendientes-y-preguntas.md` | Bloqueantes y estado |
+| `docs/07-scm-gestion-configuracion.md` | Reglas de branches y commits |
+| `docs/08-roadmap.md` | Supabase local, migraciones, fases y despliegue |

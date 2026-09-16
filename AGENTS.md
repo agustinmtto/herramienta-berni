@@ -18,6 +18,7 @@ Herramienta de captación (lead magnet) para el negocio de Berni (Metacrypto Clu
 | `docs/07-scm-gestion-configuracion.md` | Nombrado de archivos, estructura del repo, branches, formato de commits, prácticas | Antes de cualquier commit/PR |
 | `docs/08-roadmap.md` | Modelo de trabajo (Supabase local + Docker, migrations, feature branches, PRs) y fases de implementación (con estado real de cada fase) | Al planear/implementar cualquier fase |
 | `docs/09-security.md` | Checklist de seguridad pre-producción: qué está implementado, qué no aplica aún, aclaraciones acordadas | Al tocar `/api/lead`, headers, rate limiting o antes de un deploy |
+| `ANALISIS_INTEGRACION_QUIZ_LEADS.md` | Análisis del Quiz Funnel, MetaCrypto OS, DDL y diseño del módulo de leads | Antes de implementar la integración con el sistema |
 
 Fuentes primarias (si hace falta el detalle crudo): `Transcripcion_Reunion.md` y `transcripcion_audio.md` en la raíz.
 
@@ -51,6 +52,7 @@ prototipos/
 docs/                   # Documentación viva del proyecto (varios .md — ver tabla arriba)
 scripts/
   transcribe.py         # Utilidad: transcribe audios con Whisper → docs/*_transcript.md
+metacrypto-os-app/      # Copia del sistema interno y esquema Supabase; ver su CLAUDE.md antes de tocarlo
 ```
 
 ## Convenciones
