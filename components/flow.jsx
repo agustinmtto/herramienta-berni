@@ -1,14 +1,24 @@
 "use client";
 
+// flow.jsx — máquina de estados de TODO el flujo del lead (docs/03-especificacion.md).
+// Estructura simple (pantallas definidas en SCREENS más abajo):
+//   HERO → WIZARD (preguntas + form de contacto dentro) → SEGMENT (pregunta de videos)
+//   → ANALYZING (animación mientras "se arma" el diagnóstico) → FINAL (diagnóstico + PDF + CTA WhatsApp).
+// Todo el contenido vive en lib/question-config.js; el diagnóstico lo arma lib/engine.js.
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { wizardConfig, questions, progressFor } from "../lib/question-config";
 import { buildDiagnosis } from "../lib/engine";
 import { buildWhatsAppUrl } from "../lib/whatsapp";
 import DiagnosisDocument from "./diagnosis-document";
 
+// Pantallas del flujo: la UI actual se elige según el valor de `screen`.
 const SCREENS = { HERO: "hero", WIZARD: "wizard", SEGMENT: "segment", ANALYZING: "analyzing", FINAL: "final" };
 
 export default function Flow() {
+  // Estado del flujo, de arriba a abajo: pantalla actual, índice de pregunta,
+  // respuestas (por id de pregunta), opción de segmentación, progreso de la
+  // animación de análisis, error del form de contacto y flags de envío del lead.
   const [screen, setScreen] = useState(SCREENS.HERO);
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState({});
@@ -18,23 +28,30 @@ export default function Flow() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [started, setStarted] = useState(false);
+
+  // session_id estable durante la vida de la página (tracking, docs/03 §6).
   const sessionIdRef = useRef(typeof crypto !== "undefined" ? crypto.randomUUID() : null);
 
+  // Índice de la pregunta de contacto (última del config) y helpers de posición.
   const contact = questions.length - 1;
   const isContact = qIndex === contact;
   const question = questions[qIndex];
-  const answered = Object.keys(answers).filter((k) => k !== "contact").length;
+  const answered = Object.keys(answers).filter((k) => k !== "contact").length; // solo preguntas de opciones
 
+  // Arranca el wizard desde el hero.
   const startWizard = () => {
     setStarted(true);
     setScreen(SCREENS.WIZARD);
   };
 
+  // Registra la respuesta de la opción elegida: guarda label + tags para el motor.
   const pick = (option) => {
     setAnswers({ ...answers, [question.id]: { answer: option.label, tags: option.tags } });
   };
+  // Navega adelante/atrás en el wizard, sin salirse del rango de preguntas.
   const move = (delta) => setQIndex((i) => Math.max(0, Math.min(i + delta, contact)));
 
+  // Valida el form de contacto (obligatorio todo + consent) y avanza a la pantalla de segmentación.
   const submitContact = (form) => {
     setContactError(null);
     const contact = {
@@ -42,6 +59,8 @@ export default function Flow() {
       email: form.email.trim(),
       phone: form.phone.trim(),
       consent: form.consent,
+      // Honeypot: hidden field, humans never fill it (docs/09-security).
+      website: (form.website || "").trim(),
     };
     if (!contact.name || !contact.email || !contact.phone || !contact.consent) {
       setContactError("Completá nombre, email, teléfono y aceptá recibir el diagnóstico.");
@@ -60,6 +79,7 @@ export default function Flow() {
     setScreen(SCREENS.SEGMENT);
   };
 
+  // Envía el lead al endpoint. Silencioso para el lead: si falla no rompe el flujo (stub por ahora).
   const sendLead = async (payload) => {
     if (sending) return;
     setSending(true);
@@ -75,12 +95,15 @@ export default function Flow() {
     setSending(false);
   };
 
+  // Cierra la segmentación (índice elegido) y arranca la animación de análisis.
   const finishSegment = (index) => {
     setSegIndex(index);
     setAnalyzing(0);
     setScreen(SCREENS.ANALYZING);
   };
 
+  // Avanza la animación de "procesando" y al terminar manda el lead una sola vez
+  // y muestra la pantalla final con el diagnóstico.
   const advanceAnalysis = () => {
     if (analyzing < 4) {
       setAnalyzing((s) => s + 1);
@@ -93,6 +116,8 @@ export default function Flow() {
     setScreen(SCREENS.FINAL);
   };
 
+  // Arma el payload que viaja a POST /api/lead (formato docs/03 §2).
+  // abandoned=true → payload parcial de droppoff (sin lead, con pregunta donde abandonó).
   function buildPayload(abandoned = false) {
     if (abandoned) {
       const partial = questions
@@ -122,12 +147,15 @@ export default function Flow() {
         email: answers.contact ? answers.contact.email : "",
         phone: answers.contact ? answers.contact.phone : "",
         consent: Boolean(answers.contact),
+        website: answers.contact ? answers.contact.website : "",
       },
       signals: { dropoff_question: null, finished_at: new Date().toISOString() },
       answers: payloadAnswers,
     };
   }
 
+  // Diagnóstico memoizado: se recalcula solo al entrar a la pantalla final.
+  // Pasa cada respuesta (con sus tags) al motor determinístico lib/engine.js.
   const diagnosis = useMemo(() => {
     if (screen !== SCREENS.FINAL) return null;
     const lead = questions.map((q) => {
@@ -137,7 +165,8 @@ export default function Flow() {
     return buildDiagnosis(lead, wizardConfig.segmentQuestion.options[segIndex || 0]);
   }, [screen, answers, segIndex]);
 
-  // Dropoff tracking — docs/03 §6: the key metric is how far the lead got.
+  // Tracking de abandono — docs/03 §6: la métrica clave es hasta qué pregunta llega el lead.
+  // pagehide dispara una vez: si el lead se va sin completar, sendBeacon manda el payload parcial.
   useEffect(() => {
     const onLeave = () => {
       if (sent || !started) return;
@@ -146,13 +175,17 @@ export default function Flow() {
       if (runProgress) {
         const payload = buildPayload(true);
         payload.signals.dropoff_question = inWizard && question ? question.title : wizardConfig.segmentQuestion.title;
-        navigator.sendBeacon("/api/lead", JSON.stringify(payload));
+        navigator.sendBeacon(
+          "/api/lead",
+          new Blob([JSON.stringify(payload)], { type: "application/json" })
+        );
       }
     };
     window.addEventListener("pagehide", onLeave);
     return () => window.removeEventListener("pagehide", onLeave);
   });
 
+  // ── Pantalla 1: HERO — gancho + chips + botón para empezar ──
   if (screen === SCREENS.HERO) {
     return (
       <main className="page-shell hero-section">
@@ -175,6 +208,7 @@ export default function Flow() {
     );
   }
 
+  // ── Pantalla 2: WIZARD — una pregunta a la vez (o el form de contacto si es la última) ──
   if (screen === SCREENS.WIZARD) {
     return (
       <main className="page-shell wizard-section">
@@ -219,6 +253,7 @@ export default function Flow() {
     );
   }
 
+  // ── Pantalla 3: SEGMENT — pregunta final que elige cuál video ve el lead ──
   if (screen === SCREENS.SEGMENT) {
     return (
       <main className="page-shell wizard-section">
@@ -240,6 +275,7 @@ export default function Flow() {
     );
   }
 
+  // ── Pantalla 4: ANALYZING — animación de "procesando" antes del diagnóstico ──
   if (screen === SCREENS.ANALYZING) {
     const steps = ["perfil", "portfolio", "desajustes", "liquidez", "plan"];
     return (
@@ -261,6 +297,7 @@ export default function Flow() {
     );
   }
 
+  // ── Pantalla 5: FINAL — diagnóstico del motor + PDF + videos + CTA WhatsApp ──
   if (screen === SCREENS.FINAL && diagnosis) {
     const mappedVideo = wizardConfig.videos.items.find(
       (v) => v.id === wizardConfig.segmentQuestion.options[segIndex || 0].video
@@ -373,8 +410,11 @@ function AnalysisTimer({ step, onDone }) {
   return null;
 }
 
+// Form de contacto al final del wizard: nombre + email + teléfono + consent + honeypot.
+// El honeypot (`website`) es invisible para humanos; los bots que lo llenan son descartados
+// por el endpoint (docs/09-security).
 function ContactForm({ onSubmit, error }) {
-  const [form, setForm] = useState({ name: "", email: "", phone: "", consent: false });
+  const [form, setForm] = useState({ name: "", email: "", phone: "", consent: false, website: "" });
   const update = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   return (
     <div className="contact-grid">
@@ -398,9 +438,21 @@ function ContactForm({ onSubmit, error }) {
           placeholder="+54 9 3585 000000"
         />
       </div>
+      {/* Honeypot — hidden from humans, bots that autofill it get discarded (docs/09-security). */}
+      <div className="hp-field" style={{ position: "absolute", left: "-9999px", top: 0, height: 0, overflow: "hidden" }} aria-hidden="true">
+        <label htmlFor="w-website">No completar</label>
+        <input
+          id="w-website"
+          tabIndex={-1}
+          autoComplete="off"
+          value={form.website}
+          onChange={update("website")}
+        />
+      </div>
       <label className="opt" style={{ cursor: "pointer" }}>
         <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
-        Acepto recibir mi diagnóstico y que me contacten por email, teléfono o WhatsApp
+        Acepto recibir mi diagnóstico por email y que Metacrypto Club me contacte por email, teléfono o WhatsApp con
+        base en mis respuestas
       </label>
       {error && <div className="contact-error">{error}</div>}
       <button className="btn-gold opt-next" type="button" onClick={() => onSubmit(form)}>
