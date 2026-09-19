@@ -38,7 +38,7 @@ Es el motor **determinístico** que se llevará al producto real (no hay IA). Re
 
 - `CONFIG.ctaUrl` — Calendly/WhatsApp real.
 - `CONFIG.videoUrl` — video regalo.
-- Diagnóstico determinístico definitivo: recalibrar reglas cuando Berni entregue las preguntas finales.
-- Pantalla final de video (`docs/03` §9): espacio de video tras los datos; pregunta final → 1 de 3 videos (2 genéricos + 1 variable). Falta pregunta de segmentación y videos.
+- Diagnóstico determinístico definitivo: reglas recalibradas con las ocho preguntas finales.
+- Pantalla final de video (`docs/03` §9): la pregunta 2 selecciona el recurso destacado entre 3 videos. Faltan los videos reales.
 - Envío de lead real a Supabase del negocio (hoy solo `console.info`).
 - Umbral de lead caliente: alinear con 10.000.

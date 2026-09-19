@@ -4,19 +4,19 @@
 
 | # | Ítem | Impacto | Propietario | Estado |
 |---|---|---|---|---|
-| 1 | **Definir las preguntas finales** (psicológicas, orden, fricción) | BLOQUEA el JSON y el motor determinístico definitivo | Berni | Pendiente — prometió "en estos días" |
+| 1 | ~~**Definir las preguntas finales** (psicológicas, orden, fricción)~~ | Desbloquea el JSON y el motor determinístico definitivo | Berni | ✅ Cerrado — 8 preguntas recibidas en orden; composición visual en la pregunta 3 |
 | 2 | **Formato JSON final** `pregunta/respuesta` | BLOQUEA la integración con Supabase | Equipo dev (con Berni las preguntas) | Boceto en `03-especificacion.md` |
 | 3 | ~~Validar branch de Supabase como entorno dev~~ | Resuelto en `docs/08` §1.1: se descarta la branch de Supabase (cobra compute); se usa **Supabase local (CLI + Docker)** con migrations | Agustín / Miled | ✅ Cerrado |
 | 4 | **Módulo de leads dentro del sistema del negocio** (nueva entrada menú lateral, reporte filtrable) — ¿lo hacemos nosotros o lo hacen ellos? | Duda abierta | Por definir con Miled |
 | 5 | Benchmark del **quiz funnel de Ramiro** (grabar pantalla, extraer preguntas/flujo) | Alimenta diseño de preguntas | Lisandro | Por confirmar si se hizo |
 | 6 | Host de videos + embed trackeable (duración vista) | Requiere definir player (Loom/u otro con eventos) | Miled / dev | Abierto |
 | 7 | **PRD** que pidió Miled para arrancar la implementación conjunta | Seco para construir juntos | Agustín/Lisandro | Pendiente — este documento de `docs/` sirve de insumo |
-| 8 | Umbral lead caliente confirmado en 10.000 USD (prototipo usa 25k mock) | Ajustar CONFIG + backend | Equipo dev | Pendiente |
+| 8 | Umbral lead caliente confirmado en 10.000 USD (los rangos definitivos comienzan en `$10k-25k`) | Ajustar config y motor sin inferir una cifra exacta | Equipo dev | En implementación |
 | 9 | Videos segmentados de Berni (3–4 por rango de capital) | Dependencia de contenido (si se mantiene el video — depende del final del flujo, ver #11) | Berni | Pendiente |
 | 10 | Entorno dev/producción dentro del negocio (hoy solo producción + local) | Coordinar branch/PR | Miled | Acordado armarlo |
-| 11 | ~~Decidir el final del flujo~~ → **Resuelto**: pantalla final única con diagnóstico + 3 videos (2 genéricos + 1 variable por pregunta de segmentación) | Sub-pendientes: grabar los videos reales, host del player | Berni / Miled | Parcialmente resuelto |
-| 12 | **PDF personalizado por email (producción)**: existe un PDF base descargable; falta la versión dinámica, Resend del negocio + pixel de apertura | Entrega definitiva del diagnóstico | Miled / Equipo dev | Pendiente — depende de Fase 0 (accesos) |
-| 13 | ~~**Teléfono + CTA WhatsApp + PDF base**~~: teléfono obligatorio, mensaje con respuestas, documento fijo personalizado por nombre y responsive móvil | Entrega transitoria solicitada para el MVP | Equipo dev | ✅ Cerrado en `feature/whatsapp-delivery` |
+| 11 | ~~Decidir el final del flujo~~ → **Resuelto**: pantalla final única con diagnóstico + 3 videos; la pregunta 2 determina cuál se destaca | Sub-pendientes: grabar los videos reales, host del player | Berni / Miled | Parcialmente resuelto |
+| 12 | **PDF personalizado por email (producción)**: existen el documento y generador base, sin descarga visible; falta la versión dinámica, Resend del negocio + pixel de apertura | Entrega definitiva del diagnóstico | Miled / Equipo dev | Pendiente — depende de Fase 0 (accesos) |
+| 13 | ~~**Teléfono + CTA WhatsApp**~~: teléfono obligatorio y mensaje con respuestas; el botón PDF transitorio fue retirado | Entrega transitoria solicitada para el MVP | Equipo dev | ✅ Cerrado |
 | 14 | **Hosting final** (Vercel o Netlify) para producción | Define rate limiting real (reemplazando el in-memory best-effort de `lib/rate-limit.js`) y configuración de headers/HSTS | Agustín / Miled | Abierto |
 | 15 | **Rate limiting "real"** (Upstash/Redis o WAF del hosting) reemplazando el in-memory | Anti-abuso del endpoint público | Equipo dev | Pendiente de #14 — call site en `lib/rate-limit.js` ya aislado |
 | 16 | **Ambito de seguridad con integraciones**: RLS de Supabase, Service Role Key solo server, IDOR/BOLA, SQLi, enmascaramiento de datos entre leads | Blocker de prod para Fase 1 | Equipo dev | Pendiente — checklist en `docs/09-security.md` §Supabase |

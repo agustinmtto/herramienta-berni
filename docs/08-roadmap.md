@@ -80,7 +80,7 @@ Por funcionalidad/responsabilidad (no por carpetas):
 
 ### Fase 1 — Captación
 **Objetivo:** wizard real, datos a Supabase y tracking mínimo, con el diagnóstico determinístico del prototipo (el prototipo sigue siendo referencia de comportamiento).
-- [x] Wizard en Next.js con preguntas genéricas config-driven (mientras Berni define las definitivas — bloqueante #1 de `docs/06`; el swap es barato: solo `lib/question-config.js`) — branch `feature/wizard-mvp`
+- [x] Wizard en Next.js con 8 preguntas definitivas config-driven y composición visual por rangos — actualización en `feature/quiz-funnel-ux`
 - [x] `POST` del JSON agnóstico (`docs/03` §2) — stub con validación (`app/api/lead`); falta apuntar a Supabase del negocio
 - [x] Tracking: `session_id` + dropoff por `sendBeacon` (`docs/03` §6)
 - [x] Suite de tests en `test/` (`npm test`, unit + integración + seguridad)
@@ -88,17 +88,17 @@ Por funcionalidad/responsabilidad (no por carpetas):
 - [ ] Migrations: tablas de leads/respuestas/sesiones + flag `hot_lead` (> 10.000 USD, bloqueante #8) — requiere Fase 0
 - [ ] Deploy en Netlify (conectar repo) y merge del PR
 
-**Salida (parcial):** flujo completo funcionando en local (pantallas wizard → segmentación → análisis → final única diagnóstico+videos) con lead visible en logs del endpoint.
+**Salida (parcial):** flujo completo funcionando en local (pantallas wizard → análisis → final única diagnóstico+videos) con lead visible en logs del endpoint.
 
 ### Fase 2 — Motor determinístico definitivo
 - [x] Motor determinístico stub (`lib/engine.js`) con reglas por tags sobre opciones múltiples, 4 secciones canónicas (`docs/03` §4)
-- [ ] Recalibrar reglas cuando Berni entregue las preguntas definitivas
+- [x] Recalibrar reglas con las preguntas definitivas de Berni
 
 **Salida:** diagnóstico determinístico real, visible en local.
 
 ### Fase 3 — Entrega y triaje
-- [x] **Pantalla final única** (`docs/03` §9): diagnóstico + grid de 3 video-cards placeholders (2 genéricos + 1 destacado según pregunta de segmentación) — mapeo config-driven
-- [x] PDF base por botón (`docs/03` §9.1), generado desde un documento HTML fijo personalizado por nombre
+- [x] **Pantalla final única** (`docs/03` §9): diagnóstico + grid de 3 video-cards placeholders (la pregunta 2 determina cuál se destaca) — mapeo config-driven
+- [x] Documento y generador PDF base conservados sin botón visible (`docs/03` §9.1)
 - [x] CTA a WhatsApp con mensaje generado desde todas las respuestas
 - [x] Documento HTML/PDF base y ajustes mobile-first
 - [ ] PDF por email vía Resend + tracking de apertura (bloqueante #12) y quitar botón dev
@@ -142,7 +142,7 @@ A/B de formatos (largo vs. pop-up de continuación, orden de preguntas), anális
 | Schema de producción sin historial de migrations | `db pull` captura el estado actual como baseline; de ahí en adelante todo es append-only |
 | Drift entre devs o con producción | `db reset` antes de cada PR; re-sincronizar con `db pull` si producción cambió |
 | Supabase cobra compute por branches | Local Docker = cero branches de DB; solo producción del negocio |
-| Berni tarda con las preguntas definitivas | Fase 1 con preguntas del prototipo; JSON agnóstico permite el swap sin refactor |
+| Cambios futuros en las preguntas | Config y JSON agnóstico permiten ajustar contenido sin rediseñar el endpoint |
 | Migrations destructivas sobre tablas del negocio | Review obligatoria de Miled en el PR de release; nunca `drop` sin migración inversa |
 | Secrets (Supabase/Resend) | Solo variables de entorno, nunca en repo (`docs/07` §5) |
 líneas 3-141

@@ -44,6 +44,9 @@ Cíclo de jerarquía característico: `eyebrow` (mono/Oswald, `letter-spacing:.4
 - **Plan de acción**: lista numerada, número Oswald dorado.
 - **Video box**: borde dorado, placeholder 16:9 con play circular, caption mono.
 - **CTA final**: tarjeta panel con glow radial dorado arriba.
+- **Vista previa del diagnóstico**: composición de tres tarjetas oscuras superpuestas, inspirada en una herramienta real y sin métricas/testimonios inventados. Debe anticipar situación, riesgo y plan antes de iniciar.
+- **Composición del portfolio**: cuatro tarjetas con icono y nombre (BTC, ETH, altcoins y stablecoins), cada una con una grilla de rangos táctiles. El texto acompaña siempre al icono.
+- **Progreso psicológico**: track más visible que el prototipo, relleno dorado con glow moderado y mensaje contextual debajo. No muestra fracción ni cantidad total de preguntas.
 
 ## Animación
 
@@ -51,9 +54,11 @@ Cíclo de jerarquía característico: `eyebrow` (mono/Oswald, `letter-spacing:.4
 - Barra de progreso: `.5s` mismo easing.
 - **Pantalla "analizando"**: steps secuenciales (EN COLA → PROCESANDO con "…" animado → ✓ LISTO) con 700–1200ms por paso — sensación de trabajo real de IA.
 - Respeto: `prefers-reduced-motion` desactiva todo.
+- Entre preguntas: confirmación de selección de 250–400 ms, salida breve y entrada de la siguiente tarjeta. No bloquear interacción ni autoavanzar la composición múltiple.
 
 ## Reglas
 
 - Uppercase + tracking generoso en títulos y metadatos (estética "premium fintech nocturna").
 - Dorado = valor/dinero/CTA; rojo solo para riesgos/errores; verde para "listo".
 - Textos de UI en español; código en inglés.
+- Diseñar mobile-first desde 320 px: una pregunta por pantalla, controles de al menos 48 px, CTA a ancho completo y sin depender de hover. Escritorio amplía espacios y grillas mediante `min-width`.

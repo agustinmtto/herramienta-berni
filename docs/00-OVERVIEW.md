@@ -12,8 +12,8 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 
 1. Berni publica en Instagram (orgánico, primero): *"comenta 'X' y te mando la herramienta"*.
 2. El lead abre el link de la herramienta → landing + wizard.
-3. El wizard hace preguntas (capital, perfil de riesgo, portfolio, miedos...). **Datos de contacto al final** (decisión clave).
-4. Al terminar → pantalla de análisis → **pantalla final única**: diagnóstico por pantalla + sección "tus recursos" con **3 videos placeholders** (2 genéricos + 1 variable según una pregunta de segmentación) + CTA a WhatsApp. El CTA abre una conversación con las respuestas precargadas. En esta etapa también se descarga un PDF base, igual para todos salvo por el nombre del lead; la personalización completa y el envío por email quedan para una iteración posterior.
+3. El wizard hace 8 preguntas definitivas (situación, dolor, composición, capital, horizonte, reacción a caídas, influencias y reglas). **Datos de contacto al final** (decisión clave).
+4. Al terminar → pantalla de análisis → **pantalla final única**: diagnóstico por pantalla + sección "tus recursos" con **3 videos placeholders** (la pregunta 2 determina cuál se destaca) + CTA a WhatsApp. El CTA abre una conversación con las respuestas precargadas. No hay descarga visible de PDF; la entrega personalizada por email queda para una iteración posterior.
 5. Las respuestas llegan como **JSON agnóstico** (`pregunta/respuesta`) a la base del negocio.
 6. Lead caliente (capital > 10.000 USD) → alerta al triaje → llamada rápida.
 7. Tracking mínimo: **hasta qué pregunta llega el lead** (dropoff / finalización). UTMs opcional.
@@ -24,12 +24,12 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 |---|---|
 | Integración | ~~Go High Level~~ → **código propio integrado en su stack: Supabase + GitHub** (branch + PR). Fue la decisión final pese a que en la reunión se evaluó GHL |
 | Clasificación/diagnóstico | ~~IA~~ → **determinístico por algoritmo** (respuestas todas de opción múltiple). El motor por reglas del prototipo es la base |
-| Preguntas | Las define **Berni** (enfoque psicológico: generar duda / vacío de conocimiento). Aún no definidas — BLOQUEANTE principal |
-| Final del flujo | **Pantalla final de video**: tras los datos, una pregunta determina cuál de los **3 videos** se muestra (2 genéricos + 1 variable según la respuesta del usuario). Pendiente: definir la pregunta de segmentación y grabar los videos |
+| Preguntas | **8 preguntas definitivas de Berni**, config-driven; la pregunta 3 captura composición por rangos |
+| Final del flujo | **Pantalla final única**: diagnóstico + 3 videos; la pregunta 2 determina cuál se destaca. Pendiente: grabar los videos reales |
 | Tracking | Mínimo: **hasta qué pregunta llega el lead** (si termina el cuestionario o no). Puede ampliarse luego |
 | Lead caliente | Capital **> 10.000 USD** → llamada de triaje rápida |
 | Contacto y CTA | Nombre + email + teléfono al final; CTA a WhatsApp `+54 9 3585 401429` con las respuestas precargadas |
-| PDF transitorio | Documento HTML breve y fijo, personalizado solo con el nombre del lead, descargable como PDF |
+| PDF transitorio | Documento HTML y generador conservados como base técnica, sin descarga visible |
 | Lanzamiento | Primero orgánico (testeo), si funciona → publicidad |
 
 ## Stack del negocio (donde integramos)
@@ -45,13 +45,13 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 ## Estado actual
 
 - **Prototipo funcional** en `prototipos/index.html` (landing + wizard + diagnóstico con reglas JS determinísticas — base del motor final)
-- **App MVP funcionando**: wizard con preguntas genéricas config-driven, motor determinístico stub, JSON agnóstico → `POST /api/lead` (stub con validación), tracking de dropoff y pantalla final única diagnóstico+videos
+- **App MVP funcionando**: wizard con preguntas definitivas config-driven, motor determinístico, JSON agnóstico → `POST /api/lead` (stub con validación), tracking de dropoff y pantalla final única diagnóstico+videos
 - **Entrega WhatsApp implementada** (`feature/whatsapp-delivery`): teléfono obligatorio y helper config-driven para mensaje/enlace `wa.me` con las respuestas del lead
 - **Documento transitorio implementado**: componente HTML fijo, personalizado solo por nombre, usado como fuente del PDF descargable
-- **Suite de tests** en `test/` (unit + integración + seguridad, 21/21)
+- **Suite de tests** en `test/` (unit + integración + seguridad, 39/39)
 - ✅ Design system extraído de landings del negocio
 - ✅ Reunión de integración realizada (ver `01-reunion-integracion.md`)
-- ⏳ Pendiente: preguntas de Berni → swap en `lib/question-config.js`, acceso Supabase del negocio (Fase 0), deploy Netlify, PDF por email real, videos reales
+- ⏳ Pendiente: acceso Supabase del negocio (Fase 0), deploy Netlify, PDF por email real y videos reales
 
 ## Mapa de esta documentación
 

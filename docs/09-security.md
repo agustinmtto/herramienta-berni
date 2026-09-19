@@ -60,7 +60,7 @@ Convención: ✅ implementado y verificado (tests + curl) · ♻️ cubierto por
 
 ## Verificación (luz verde as necessary)
 
-- Tests: `npm test` → 38/38 en verde (unit + integración + seguridad, `test/security.test.mjs` nuevo).
+- Tests: `npm test` → 39/39 en verde (unit + integración + seguridad).
 - Config-based rate limit en integración: el servidor de test se arranca con `LEAD_RATE_LIMIT_MAX=1000` para no interferir en tests múltiples; la lógica del limiter se cubre en unit (`test/security.test.mjs`).
 - Curl directo contra `next start` (prod build sin `NODE_ENV=development`): 405 en métodos no permitidos, 400/413/415/422 con payloads hostiles, 403 con `Origin` mismatch, 429 al exceder rate limit, headers de seguridad presentes en `/`, honeypot → 200 genérico, log de prod **sin PII**.
 

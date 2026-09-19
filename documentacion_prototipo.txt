@@ -4,7 +4,7 @@ Documento de síntesis para el trabajo conjunto previo a la reunión. Resume el 
 
 ## 1. Qué es y para qué sirve
 
-Lead magnet para Metacrypto Club: una landing con un wizard de preguntas sobre la situación del inversor, un diagnóstico de portfolio generado mediante reglas determinísticas, captura de nombre, email y teléfono, descarga de un PDF base y contacto por WhatsApp con las respuestas precargadas.
+Lead magnet para Metacrypto Club: una landing con un wizard de preguntas sobre la situación del inversor, un diagnóstico de portfolio generado mediante reglas determinísticas, captura de nombre, email y teléfono, y contacto por WhatsApp con las respuestas precargadas.
 
 El objetivo comercial es:
 
@@ -27,7 +27,7 @@ El MVP está desarrollado en Next.js y funciona localmente.
 - Captura de nombre, email y teléfono.
 - Consentimiento de contacto.
 - Diagnóstico determinístico basado en reglas.
-- Pregunta adicional de segmentación.
+- Selección del recurso destacado a partir de la pregunta 2.
 - Pantalla final con diagnóstico y tres videos de muestra.
 - CTA a WhatsApp.
 - Mensaje de WhatsApp con nombre y respuestas precargadas.
@@ -36,7 +36,7 @@ El MVP está desarrollado en Next.js y funciona localmente.
 - `session_id` para identificar cada recorrido.
 - Registro de la pregunta donde abandona el usuario.
 - Endpoint `POST /api/lead` con validaciones.
-- Tests unitarios, de integración y seguridad: `21/21`.
+- Tests unitarios, de integración y seguridad: `39/39`.
 - Configuración de despliegue para Netlify.
 
 ### Pendiente
@@ -45,7 +45,7 @@ El MVP está desarrollado en Next.js y funciona localmente.
 - Relacionarlos con los contactos o clientes existentes.
 - Implementar el flag de lead caliente en backend.
 - Crear notificaciones al equipo de triaje.
-- Definir las preguntas definitivas.
+- Validar con usuarios las preguntas definitivas y su orden.
 - Sustituir los videos de muestra por videos reales.
 - Crear el módulo administrativo de consulta, si entra en alcance.
 - Implementar UTMs y tracking avanzado.
@@ -62,15 +62,13 @@ Actualmente el endpoint valida los datos y los registra en la terminal, pero tod
 3. Responde preguntas sobre capital, liquidez, riesgo, experiencia y portfolio.
 4. Los datos de contacto se solicitan al final para reducir la fricción.
 5. El lead deja nombre, email, teléfono y consentimiento.
-6. Responde una pregunta adicional de segmentación.
-7. Se muestra una animación de análisis.
-8. El frontend construye un JSON con la sesión, contacto y respuestas.
-9. El JSON se envía a `POST /api/lead`.
-10. El motor determinístico genera el diagnóstico.
-11. La pantalla final muestra el resultado y los recursos.
-12. El usuario puede descargar un PDF base personalizado con su nombre.
-13. El usuario puede abrir WhatsApp con sus respuestas precargadas.
-14. Si abandona antes de terminar, se intenta registrar la pregunta donde abandonó.
+6. Se muestra una animación de análisis.
+7. El frontend construye un JSON con la sesión, contacto y respuestas.
+8. El JSON se envía a `POST /api/lead`.
+9. El motor determinístico genera el diagnóstico.
+10. La pantalla final muestra el resultado y los recursos; la pregunta 2 define cuál se destaca.
+11. El usuario puede abrir WhatsApp con sus respuestas precargadas.
+12. Si abandona antes de terminar, se intenta registrar la pregunta donde abandonó.
 
 ## 4. Decisiones firmes
 
@@ -80,7 +78,7 @@ Actualmente el endpoint valida los datos y los registra en la terminal, pero tod
 | CRM | GoHighLevel queda fuera de esta integración; continúa utilizándose para agendas y procesos comerciales existentes |
 | Arquitectura objetivo | Next.js + Supabase |
 | Diagnóstico | Algoritmo determinístico basado en respuestas de opción múltiple, sin IA |
-| Preguntas | Las preguntas definitivas las define Berni con enfoque psicológico y comercial |
+| Preguntas | 8 preguntas definitivas de Berni, en orden, con composición por rangos en la pregunta 3 |
 | Contacto | Nombre, email y teléfono al final del wizard |
 | WhatsApp | CTA al `+54 9 3585 401429` con nombre y respuestas precargadas |
 | Lead caliente | Objetivo comercial: capital superior a 10.000 USD |
@@ -124,7 +122,7 @@ El frontend produce un JSON agnóstico basado en registros `pregunta/respuesta`.
 }
 ```
 
-Actualmente todas las respuestas se envían como texto. Si se necesitan estructuras más complejas, como porcentajes separados de BTC, ETH y stablecoins, habrá que ampliar el contrato y la validación del endpoint.
+Todas las respuestas se envían como texto. La composición por rangos serializa BTC, ETH, altcoins y stablecoins en una sola respuesta legible, por lo que no requiere ampliar el contrato ni la validación del endpoint.
 
 El formato agnóstico permite cambiar preguntas sin tener que rediseñar completamente la API.
 

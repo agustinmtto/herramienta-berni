@@ -6,14 +6,14 @@ Lead magnet para el negocio de Berni (Metacrypto Club, cripto): landing con wiza
 
 ## Estado actual (sept 2026)
 
-- ✅ **App MVP** integrada en `main` (Next.js 15, deploy Netlify-ready): wizard con preguntas genéricas config-driven → pregunta de segmentación → análisis → **pantalla final única** con diagnóstico determinístico + 3 video placeholders + CTA
+- ✅ **App MVP** integrada (Next.js 15, deploy Netlify-ready): wizard con 8 preguntas definitivas config-driven → contacto → análisis → **pantalla final única** con diagnóstico determinístico + 3 video placeholders + CTA
 - ✅ Motor determinístico por reglas sobre las respuestas (`lib/engine.js`); sin IA (decisión firme)
 - ✅ JSON agnóstico `pregunta/respuesta` → `POST /api/lead` (stub con validación de seguridad; Supabase del negocio cuando estén los accesos)
-- ✅ Tracking mínimo: `session_id` + **hasta qué pregunta llega el lead** (dropoff por `sendBeacon`)
-- ✅ Documento HTML fijo personalizado por nombre + descarga PDF (`lib/pdf.js`)
+- ✅ Tracking mínimo: `session_id` + **hasta qué pregunta llega el lead** mediante IDs estables `q1`…`q8` (dropoff por `sendBeacon`)
+- ✅ Documento HTML y generador PDF conservados como base técnica, sin botón de descarga visible
 - ✅ Entrega WhatsApp: teléfono obligatorio, CTA al `+54 9 3585 401429` y mensaje con respuestas
-- ✅ Tests: `test/` — unitarios + integración + seguridad (38/38)
-- ⏳ **Pendiente crítico:** Berni define las preguntas finales (blocker #1) → swap en `lib/question-config.js`
+- ✅ Tests: `test/` — unitarios + integración + seguridad (39/39)
+- ✅ Preguntas finales incorporadas: 8 preguntas, con composición visual por rangos en la pregunta 3
 - ✅ Código y esquema actual de MetaCrypto OS incorporados en `metacrypto-os-app/` como base de integración
 - ⏳ Conexión efectiva con Supabase, deploy, PDF por email real (Resend) y videos reales
 
@@ -51,10 +51,10 @@ app/                    # app Next.js (App Router)
   globals.css           #   design system (negro + oro, docs/04)
   api/lead/route.js     #   endpoint único POST con validación (stub de Supabase)
 components/
-  flow.jsx              # máquina de estados: hero → wizard → segmentación → análisis → final
+  flow.jsx              # máquina de estados: hero → wizard → análisis → final
   diagnosis-document.jsx# documento HTML fijo para el PDF, personalizado por nombre
 lib/
-  question-config.js    # PREGUNTAS + videos + CTA (swap aquí las de Berni, sin tocar código)
+  question-config.js    # preguntas definitivas + videos + CTA
   engine.js             # motor determinístico: reglas por tags → diagnóstico
   pdf.js                # generador PDF desde el documento HTML (jsPDF + html2canvas)
   whatsapp.js           # genera mensaje y enlace wa.me con las respuestas
