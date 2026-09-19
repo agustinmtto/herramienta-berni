@@ -17,7 +17,7 @@ let server;
 const validPayload = JSON.stringify({
   session_id: "sess-00000000-0000-4000-8000-000000000000",
   lead: { name: "Test User", email: "test@example.com", phone: "+54 9 3585 000000", consent: true },
-  signals: { dropoff_question: null, finished_at: new Date().toISOString() },
+  signals: { dropoff_question: null, reached_stage: "result", visited_stages: ["start", "q1", "result"], finished_at: new Date().toISOString() },
   answers: [{ pregunta: "¿Cuánto capital total tenés invertido en cripto?", respuesta: "5k a 15k" }],
 });
 
@@ -55,7 +55,8 @@ test("integration: home page renders the hero", async () => {
   const res = await fetch(BASE);
   assert.equal(res.status, 200);
   const html = await res.text();
-  assert.match(html, /bajo la lupa/i);
+  assert.match(html, /qué está frenando/i);
+  assert.match(html, /menos de 3 minutos/i);
   assert.match(html, /Metacrypto/i);
 });
 
@@ -212,4 +213,11 @@ test("security: security headers present on responses", async () => {
   assert.equal(res.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
   assert.ok(res.headers.get("content-security-policy")?.includes("default-src"));
   assert.ok(res.headers.get("permissions-policy"));
+});
+
+test("security: unknown tracking stages are rejected with 422", async () => {
+  const payload = JSON.parse(validPayload);
+  payload.signals.reached_stage = "arbitrary-stage";
+  const res = await fetch(API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  assert.equal(res.status, 422);
 });

@@ -1,57 +1,84 @@
 "use client";
 
-// flow.jsx — máquina de estados de TODO el flujo del lead (docs/03-especificacion.md).
-// Estructura simple (pantallas definidas en SCREENS más abajo):
-//   HERO → WIZARD (preguntas + form de contacto dentro) → SEGMENT (pregunta de videos)
-//   → ANALYZING (animación mientras "se arma" el diagnóstico) → FINAL (diagnóstico + PDF + CTA WhatsApp).
-// Todo el contenido vive en lib/question-config.js; el diagnóstico lo arma lib/engine.js.
-
 import { useEffect, useMemo, useRef, useState } from "react";
-import { wizardConfig, questions, progressFor } from "../lib/question-config";
+import {
+  buildAllocationResponse,
+  progressFor,
+  progressMessageFor,
+  questions,
+  wizardConfig,
+} from "../lib/question-config";
 import { buildDiagnosis } from "../lib/engine";
 import { buildWhatsAppUrl } from "../lib/whatsapp";
-import DiagnosisDocument from "./diagnosis-document";
 
-// Pantallas del flujo: la UI actual se elige según el valor de `screen`.
-const SCREENS = { HERO: "hero", WIZARD: "wizard", SEGMENT: "segment", ANALYZING: "analyzing", FINAL: "final" };
+const SCREENS = { HERO: "hero", WIZARD: "wizard", ANALYZING: "analysis", FINAL: "result" };
 
 export default function Flow() {
-  // Estado del flujo, de arriba a abajo: pantalla actual, índice de pregunta,
-  // respuestas (por id de pregunta), opción de segmentación, progreso de la
-  // animación de análisis, error del form de contacto y flags de envío del lead.
   const [screen, setScreen] = useState(SCREENS.HERO);
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState({});
-  const [segIndex, setSegIndex] = useState(null);
   const [analyzing, setAnalyzing] = useState(0);
   const [contactError, setContactError] = useState(null);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [started, setStarted] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
 
-  // session_id estable durante la vida de la página (tracking, docs/03 §6).
   const sessionIdRef = useRef(typeof crypto !== "undefined" ? crypto.randomUUID() : null);
+  const visitedStagesRef = useRef([]);
+  const transitionTimerRef = useRef(null);
 
-  // Índice de la pregunta de contacto (última del config) y helpers de posición.
-  const contact = questions.length - 1;
-  const isContact = qIndex === contact;
+  const contactIndex = questions.length - 1;
+  const diagnosticQuestionCount = contactIndex;
+  const isContact = qIndex === contactIndex;
   const question = questions[qIndex];
-  const answered = Object.keys(answers).filter((k) => k !== "contact").length; // solo preguntas de opciones
 
-  // Arranca el wizard desde el hero.
+  const recordStage = (stage) => {
+    if (stage && !visitedStagesRef.current.includes(stage)) {
+      visitedStagesRef.current = [...visitedStagesRef.current, stage];
+    }
+    return visitedStagesRef.current;
+  };
+
   const startWizard = () => {
+    recordStage("start");
+    recordStage(questions[0].trackingId);
     setStarted(true);
     setScreen(SCREENS.WIZARD);
   };
 
-  // Registra la respuesta de la opción elegida: guarda label + tags para el motor.
-  const pick = (option) => {
-    setAnswers({ ...answers, [question.id]: { answer: option.label, tags: option.tags } });
+  const move = (delta) => {
+    clearTimeout(transitionTimerRef.current);
+    setTransitioning(false);
+    setQIndex((current) => Math.max(0, Math.min(current + delta, contactIndex)));
   };
-  // Navega adelante/atrás en el wizard, sin salirse del rango de preguntas.
-  const move = (delta) => setQIndex((i) => Math.max(0, Math.min(i + delta, contact)));
 
-  // Valida el form de contacto (obligatorio todo + consent) y avanza a la pantalla de segmentación.
+  const pick = (option) => {
+    if (transitioning) return;
+    setAnswers((current) => ({
+      ...current,
+      [question.id]: { answer: option.label, tags: option.tags, video: option.video },
+    }));
+    setTransitioning(true);
+    transitionTimerRef.current = setTimeout(() => {
+      setQIndex((current) => Math.min(current + 1, contactIndex));
+      setTransitioning(false);
+    }, 340);
+  };
+
+  const pickAllocation = (asset, range) => {
+    setAnswers((current) => {
+      const selections = { ...(current[question.id]?.selections || {}), [asset.id]: range };
+      const response = buildAllocationResponse(question, selections);
+      return {
+        ...current,
+        [question.id]: response
+          ? { ...response, selections }
+          : { answer: null, tags: [], selections },
+      };
+    });
+  };
+
   const submitContact = (form) => {
     setContactError(null);
     const contact = {
@@ -59,7 +86,6 @@ export default function Flow() {
       email: form.email.trim(),
       phone: form.phone.trim(),
       consent: form.consent,
-      // Honeypot: hidden field, humans never fill it (docs/09-security).
       website: (form.website || "").trim(),
     };
     if (!contact.name || !contact.email || !contact.phone || !contact.consent) {
@@ -75,11 +101,12 @@ export default function Flow() {
       setContactError("Ingresá un teléfono válido con código de país.");
       return;
     }
-    setAnswers({ ...answers, contact });
-    setScreen(SCREENS.SEGMENT);
+    setAnswers((current) => ({ ...current, contact }));
+    recordStage("analysis");
+    setAnalyzing(0);
+    setScreen(SCREENS.ANALYZING);
   };
 
-  // Envía el lead al endpoint. Silencioso para el lead: si falla no rompe el flujo (stub por ahora).
   const sendLead = async (payload) => {
     if (sending) return;
     setSending(true);
@@ -90,204 +117,200 @@ export default function Flow() {
         body: JSON.stringify(payload),
       });
     } catch {
-      // silent for now; stub endpoint
+      // El endpoint sigue siendo best-effort y no debe bloquear el diagnóstico.
     }
     setSending(false);
   };
 
-  // Cierra la segmentación (índice elegido) y arranca la animación de análisis.
-  const finishSegment = (index) => {
-    setSegIndex(index);
-    setAnalyzing(0);
-    setScreen(SCREENS.ANALYZING);
-  };
+  function buildPayload(abandoned = false, stages = visitedStagesRef.current) {
+    const payloadAnswers = questions
+      .filter((item) => item.type !== "contact" && answers[item.id]?.answer)
+      .map((item) => ({ pregunta: item.title, respuesta: answers[item.id].answer }));
+    const reachedStage = stages.at(-1) || "start";
 
-  // Avanza la animación de "procesando" y al terminar manda el lead una sola vez
-  // y muestra la pantalla final con el diagnóstico.
+    return {
+      session_id: sessionIdRef.current,
+      lead: abandoned
+        ? null
+        : {
+            name: answers.contact?.name || "",
+            email: answers.contact?.email || "",
+            phone: answers.contact?.phone || "",
+            consent: Boolean(answers.contact?.consent),
+            website: answers.contact?.website || "",
+          },
+      signals: {
+        dropoff_question: abandoned ? reachedStage : null,
+        reached_stage: reachedStage,
+        visited_stages: stages,
+        finished_at: abandoned ? null : new Date().toISOString(),
+      },
+      answers: payloadAnswers,
+    };
+  }
+
   const advanceAnalysis = () => {
     if (analyzing < 4) {
-      setAnalyzing((s) => s + 1);
+      setAnalyzing((step) => step + 1);
       return;
     }
     if (!sent) {
-      sendLead(buildPayload(false));
+      const finalStages = recordStage("result");
+      sendLead(buildPayload(false, finalStages));
       setSent(true);
     }
     setScreen(SCREENS.FINAL);
   };
 
-  // Arma el payload que viaja a POST /api/lead (formato docs/03 §2).
-  // abandoned=true → payload parcial de droppoff (sin lead, con pregunta donde abandonó).
-  function buildPayload(abandoned = false) {
-    if (abandoned) {
-      const partial = questions
-        .filter((q) => q.type !== "contact" && answers[q.id])
-        .map((q) => ({ pregunta: q.title, respuesta: answers[q.id].answer }));
-      return {
-        session_id: sessionIdRef.current,
-        lead: null,
-        signals: { dropoff_question: null, finished_at: new Date().toISOString() },
-        answers: partial,
-      };
-    }
-    const payloadAnswers = questions
-      .filter((q) => q.type !== "contact")
-      .map((q) => ({
-        pregunta: q.title,
-        respuesta: answers[q.id] ? answers[q.id].answer : null,
-      }));
-    payloadAnswers.push({
-      pregunta: wizardConfig.segmentQuestion.title,
-      respuesta: segIndex !== null ? wizardConfig.segmentQuestion.options[segIndex].label : null,
-    });
-    return {
-      session_id: sessionIdRef.current,
-      lead: {
-        name: answers.contact ? answers.contact.name : "",
-        email: answers.contact ? answers.contact.email : "",
-        phone: answers.contact ? answers.contact.phone : "",
-        consent: Boolean(answers.contact),
-        website: answers.contact ? answers.contact.website : "",
-      },
-      signals: { dropoff_question: null, finished_at: new Date().toISOString() },
-      answers: payloadAnswers,
-    };
-  }
-
-  // Diagnóstico memoizado: se recalcula solo al entrar a la pantalla final.
-  // Pasa cada respuesta (con sus tags) al motor determinístico lib/engine.js.
   const diagnosis = useMemo(() => {
     if (screen !== SCREENS.FINAL) return null;
-    const lead = questions.map((q) => {
-      const cur = answers[q.id];
-      return { type: q.type || "option", title: q.title, answer: cur ? cur.answer : null, tags: cur ? cur.tags : [] };
-    });
-    return buildDiagnosis(lead, wizardConfig.segmentQuestion.options[segIndex || 0]);
-  }, [screen, answers, segIndex]);
+    const lead = questions
+      .filter((item) => item.type !== "contact")
+      .map((item) => ({
+        type: item.type || "option",
+        title: item.title,
+        answer: answers[item.id]?.answer || null,
+        tags: answers[item.id]?.tags || [],
+      }));
+    return buildDiagnosis(lead);
+  }, [screen, answers]);
 
-  // Tracking de abandono — docs/03 §6: la métrica clave es hasta qué pregunta llega el lead.
-  // pagehide dispara una vez: si el lead se va sin completar, sendBeacon manda el payload parcial.
+  useEffect(() => {
+    if (screen === SCREENS.WIZARD && question?.trackingId) recordStage(question.trackingId);
+  }, [screen, question]);
+
+  useEffect(() => () => clearTimeout(transitionTimerRef.current), []);
+
   useEffect(() => {
     const onLeave = () => {
-      if (sent || !started) return;
-      const inWizard = screen === SCREENS.WIZARD;
-      const runProgress = [SCREENS.WIZARD, SCREENS.SEGMENT, SCREENS.ANALYZING].includes(screen);
-      if (runProgress) {
-        const payload = buildPayload(true);
-        payload.signals.dropoff_question = inWizard && question ? question.title : wizardConfig.segmentQuestion.title;
-        navigator.sendBeacon(
-          "/api/lead",
-          new Blob([JSON.stringify(payload)], { type: "application/json" })
-        );
-      }
+      if (sent || !started || screen === SCREENS.FINAL) return;
+      const payload = buildPayload(true);
+      navigator.sendBeacon(
+        "/api/lead",
+        new Blob([JSON.stringify(payload)], { type: "application/json" })
+      );
     };
     window.addEventListener("pagehide", onLeave);
     return () => window.removeEventListener("pagehide", onLeave);
   });
 
-  // ── Pantalla 1: HERO — gancho + chips + botón para empezar ──
   if (screen === SCREENS.HERO) {
     return (
       <main className="page-shell hero-section">
-        <span className="eyebrow">{wizardConfig.brand.eyebrow}</span>
-        <h1 className="hero-title">
-          {wizardConfig.brand.titleStart} <em>{wizardConfig.brand.titleEm}</em>
-        </h1>
-        <p className="hero-sub">
-          Respondé unas preguntas sobre tu situación y recibí un diagnóstico de lo que no está funcionando y qué
-          hacer al respecto.
-        </p>
-        <div className="chip-row">
-          {wizardConfig.brand.chips.map((c) => (
-            <span className="chip" key={c}>{c}</span>
+        <div className="hero-copy">
+          <span className="eyebrow">{wizardConfig.brand.eyebrow}</span>
+          <h1 className="hero-title">
+            {wizardConfig.brand.titleStart} <em>{wizardConfig.brand.titleEm}</em>
+          </h1>
+          <p className="hero-sub">{wizardConfig.brand.promise}</p>
+          <div className="chip-row">
+            {wizardConfig.brand.chips.map((chip) => <span className="chip" key={chip}>{chip}</span>)}
+          </div>
+        </div>
+
+        <div className="report-preview" aria-label="Vista previa del diagnóstico">
+          {wizardConfig.brand.preview.map((item, index) => (
+            <div className={`preview-card preview-card-${index + 1}`} key={item.label}>
+              <span className="preview-index">0{index + 1}</span>
+              <span className="preview-label">{item.label}</span>
+              <strong>{item.value}</strong>
+              <span className="preview-line" />
+            </div>
           ))}
         </div>
-        <button className="btn-gold" onClick={startWizard}>Empezar el diagnóstico</button>
-        <span className="trust-note">{wizardConfig.brand.trustNote}</span>
+
+        <div className="hero-action">
+          <p><span>✓</span> Detectá el principal desajuste de tu estrategia.</p>
+          <p><span>✓</span> Recibí un plan de acción basado en tus respuestas.</p>
+          <button className="btn-gold" onClick={startWizard}>Crear mi diagnóstico</button>
+          <span className="trust-note">{wizardConfig.brand.trustNote}</span>
+        </div>
       </main>
     );
   }
 
-  // ── Pantalla 2: WIZARD — una pregunta a la vez (o el form de contacto si es la última) ──
   if (screen === SCREENS.WIZARD) {
+    const progress = progressFor(qIndex, diagnosticQuestionCount);
+    const allocationComplete = question.type === "allocation" && Boolean(answers[question.id]?.answer);
     return (
       <main className="page-shell wizard-section">
-        <div className="progress-row">
-          <div className="progress-track">
-            <div className="progress-fill" style={{ width: `${progressFor(answered, contact)}%` }} />
+        <div className="progress-block">
+          <div
+            className="progress-track"
+            role="progressbar"
+            aria-label="Progreso del diagnóstico"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow={progress}
+          >
+            <div className="progress-fill" style={{ width: `${progress}%` }} />
+          </div>
+          <div className="progress-meta">
+            <span>{progressMessageFor(qIndex, diagnosticQuestionCount)}</span>
+            <strong>{progress}%</strong>
           </div>
         </div>
 
-        <h2 className="q-title">{question.title}</h2>
-        {question.hint && <p className="q-hint">{question.hint}</p>}
+        <section className={`question-card${transitioning ? " is-confirming" : ""}`} key={question.id}>
+          <span className="question-kicker">Análisis en curso</span>
+          <h2 className="q-title">{question.title}</h2>
+          {question.hint && <p className="q-hint">{question.hint}</p>}
 
-        {isContact ? (
-          <ContactForm onSubmit={submitContact} error={contactError} />
-        ) : (
-          <div className="opt-list">
-            {question.options.map((option) => (
-              <button
-                key={option.label}
-                className={`opt${answers[question.id] && answers[question.id].answer === option.label ? " selected" : ""}`}
-                onClick={() => pick(option)}
-                type="button"
-              >
-                <span className="opt-dot" />
-                {option.label}
-              </button>
-            ))}
-            {answers[question.id] && (
-              <button className="btn-gold opt-next" type="button" onClick={() => move(1)}>
-                Siguiente
-              </button>
-            )}
-          </div>
-        )}
+          {isContact ? (
+            <ContactForm onSubmit={submitContact} error={contactError} />
+          ) : question.type === "allocation" ? (
+            <AllocationQuestion question={question} answer={answers[question.id]} onPick={pickAllocation} />
+          ) : (
+            <div className="opt-list">
+              {question.options.map((option) => {
+                const selected = answers[question.id]?.answer === option.label;
+                return (
+                  <button
+                    key={option.label}
+                    className={`opt${selected ? " selected" : ""}`}
+                    onClick={() => pick(option)}
+                    type="button"
+                    disabled={transitioning}
+                    aria-pressed={selected}
+                  >
+                    <span className="opt-dot" />
+                    <span className="opt-copy">{option.label}</span>
+                    <span className="opt-arrow" aria-hidden="true">→</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-        <div className="wizard-nav">
-          <button className="nav-back" type="button" onClick={() => move(-1)} disabled={qIndex === 0}>
-            Anterior
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  // ── Pantalla 3: SEGMENT — pregunta final que elige cuál video ve el lead ──
-  if (screen === SCREENS.SEGMENT) {
-    return (
-      <main className="page-shell wizard-section">
-        <h2 className="q-title">{wizardConfig.segmentQuestion.title}</h2>
-        <div className="opt-list">
-          {wizardConfig.segmentQuestion.options.map((option, i) => (
-            <button key={option.label} className="opt" type="button" onClick={() => finishSegment(i)}>
-              <span className="opt-dot" />
-              {option.label}
+          {question.type === "allocation" && (
+            <button className="btn-gold opt-next" type="button" disabled={!allocationComplete} onClick={() => move(1)}>
+              Confirmar distribución
             </button>
-          ))}
-        </div>
+          )}
+        </section>
+
         <div className="wizard-nav">
-          <button className="nav-back" type="button" onClick={() => setScreen(SCREENS.WIZARD)}>
-            Anterior
+          <button className="nav-back" type="button" onClick={() => move(-1)} disabled={qIndex === 0 || transitioning}>
+            ← Anterior
           </button>
         </div>
       </main>
     );
   }
 
-  // ── Pantalla 4: ANALYZING — animación de "procesando" antes del diagnóstico ──
   if (screen === SCREENS.ANALYZING) {
-    const steps = ["perfil", "portfolio", "desajustes", "liquidez", "plan"];
+    const steps = ["situación", "portfolio", "riesgo", "decisiones", "plan"];
     return (
       <main className="page-shell analyzing-section">
-        <span className="eyebrow">Procesando</span>
-        <h2 className="analysis-title">Armando tu diagnóstico</h2>
+        <span className="eyebrow">Procesando tus respuestas</span>
+        <h2 className="analysis-title">Armando tu diagnóstico personalizado</h2>
+        <p className="analysis-sub">Estamos cruzando la estructura de tu cartera con tu forma de tomar decisiones.</p>
         <div className="step-row">
-          {steps.map((s, i) => (
-            <div className="step" key={s}>
-              <span>{s.toUpperCase()}</span>
-              <span className={i === analyzing ? "state-active" : i < analyzing ? "state-done" : "state-pending"}>
-                {i === analyzing ? "procesando..." : i < analyzing ? "✓ listo" : "en cola"}
+          {steps.map((step, index) => (
+            <div className="step" key={step}>
+              <span>{step.toUpperCase()}</span>
+              <span className={index === analyzing ? "state-active" : index < analyzing ? "state-done" : "state-pending"}>
+                {index === analyzing ? "procesando..." : index < analyzing ? "✓ listo" : "en cola"}
               </span>
             </div>
           ))}
@@ -297,88 +320,73 @@ export default function Flow() {
     );
   }
 
-  // ── Pantalla 5: FINAL — diagnóstico del motor + PDF + videos + CTA WhatsApp ──
   if (screen === SCREENS.FINAL && diagnosis) {
-    const mappedVideo = wizardConfig.videos.items.find(
-      (v) => v.id === wizardConfig.segmentQuestion.options[segIndex || 0].video
-    );
+    const selectedVideoId = answers[wizardConfig.videoSelectorQuestionId]?.video || "video1";
+    const mappedVideo = wizardConfig.videos.items.find((video) => video.id === selectedVideoId);
     const whatsappAnswers = questions
-      .filter((q) => q.type !== "contact" && answers[q.id])
-      .map((q) => ({ pregunta: q.title, respuesta: answers[q.id].answer }));
-    const segmentOption = wizardConfig.segmentQuestion.options[segIndex || 0];
+      .filter((item) => item.type !== "contact" && answers[item.id]?.answer)
+      .map((item) => ({ pregunta: item.title, respuesta: answers[item.id].answer }));
     const whatsappUrl = buildWhatsAppUrl({
       number: wizardConfig.finalCta.whatsappNumber,
       name: answers.contact?.name,
       answers: whatsappAnswers,
-      segment: { pregunta: wizardConfig.segmentQuestion.title, respuesta: segmentOption.label },
+      requestedVideo: mappedVideo?.label,
     });
+
     return (
       <main className="page-shell result-section">
-        <button
-          className="pdf-btn"
-          type="button"
-          onClick={() => import("../lib/pdf").then((m) => m.downloadDiagnosisPdf(answers.contact?.name))}
-        >
-          Descargar diagnóstico PDF
-        </button>
-
         <div className="diagnosis-sheet" id="diagnosis-sheet">
           <div className="result-head">
             <span className="eyebrow">Auditoría · Metacrypto Club</span>
-            <h2>Mi portfolio <em>bajo la lupa</em></h2>
+            <h2>{answers.contact?.name}, tu portfolio está <em>bajo la lupa</em></h2>
           </div>
 
-        <div className="section-block">
-          <h3>Tu problema principal</h3>
-          <Callout tone={diagnosis.sections[1].body.kind} text={diagnosis.sections[1].body.text} />
-        </div>
+          <div className="section-block">
+            <h3>Tu problema principal</h3>
+            <Callout tone={diagnosis.sections[1].body.kind} text={diagnosis.sections[1].body.text} />
+          </div>
 
-        <div className="section-block">
-          <h3>El coste de tu liquidez parada</h3>
-          <Callout tone={diagnosis.sections[2].body.kind} text={diagnosis.sections[2].body.text} />
-        </div>
+          <div className="section-block">
+            <h3>La señal que no conviene ignorar</h3>
+            <Callout tone={diagnosis.sections[2].body.kind} text={diagnosis.sections[2].body.text} />
+          </div>
 
-        <div className="section-block">
-          <h3>Tu plan de acción</h3>
-          <ol className="plan-list">
-            {diagnosis.sections[3].items.map((it) => (
-              <li key={it}>{it}</li>
-            ))}
-          </ol>
-        </div>
+          <div className="section-block">
+            <h3>Tu plan de acción</h3>
+            <ol className="plan-list">
+              {diagnosis.sections[3].items.map((item) => <li key={item}>{item}</li>)}
+            </ol>
+          </div>
 
-        <div className="metric-block">
-          <h3>Tu métrica norte</h3>
-          <p>Capital con plan estructurado + despliegue del dinero parado.</p>
-        </div>
+          <div className="metric-block">
+            <h3>Tu métrica norte</h3>
+            <p>Porcentaje de tu capital que responde a una regla de entrada, riesgo y salida definida.</p>
+          </div>
 
-        <div className="recursos-head">
-          <span className="eyebrow">Tus recursos para resolverlo</span>
-          <p>Todo lo que necesitás para ejecutar el plan, sin pagar nada.</p>
-        </div>
+          <div className="recursos-head">
+            <span className="eyebrow">Tus recursos para resolverlo</span>
+            <p>Seleccionamos el primero según el principal problema que marcaste.</p>
+          </div>
 
-        <div className="video-grid">
-          {wizardConfig.videos.items.map((v) => (
-            <div className={`video-card${mappedVideo && v.id === mappedVideo.id ? " featured" : ""}`} key={v.id}>
-              <div className="video-box">
-                <span className="video-tag">{v.id === mappedVideo?.id ? "Tu problema específico" : "Recurso"}</span>
-                <div className="play-circle">▶</div>
-                <div className="video-label">{v.label}</div>
+          <div className="video-grid">
+            {wizardConfig.videos.items.map((video) => (
+              <div className={`video-card${video.id === mappedVideo?.id ? " featured" : ""}`} key={video.id}>
+                <div className="video-box">
+                  <span className="video-tag">{video.id === mappedVideo?.id ? "Elegido para vos" : "Recurso"}</span>
+                  <div className="play-circle">▶</div>
+                </div>
+                <p className="video-desc">{video.label}</p>
               </div>
-              <p className="video-desc">{v.label}</p>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
 
-        <div className="final-cta">
-          <p>{wizardConfig.finalCta.text}</p>
-          <a className="btn-gold" href={whatsappUrl} target="_blank" rel="noopener noreferrer" style={{ alignSelf: "center" }}>
-            {wizardConfig.finalCta.button}
-          </a>
-        </div>
-        </div>
-        <div className="pdf-render-host" aria-hidden="true">
-          <DiagnosisDocument name={answers.contact?.name} />
+          <div className="final-cta">
+            <span className="eyebrow">{wizardConfig.finalCta.eyebrow}</span>
+            <p>{wizardConfig.finalCta.text}</p>
+            <a className="btn-gold" href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+              {wizardConfig.finalCta.button}
+            </a>
+          </div>
         </div>
       </main>
     );
@@ -387,37 +395,65 @@ export default function Flow() {
   return null;
 }
 
+function AllocationQuestion({ question, answer, onPick }) {
+  const selections = answer?.selections || {};
+  return (
+    <div className="allocation-list">
+      {question.assets.map((asset) => (
+        <fieldset className="allocation-card" key={asset.id}>
+          <legend className="allocation-head">
+            <span className={`asset-icon asset-${asset.id}`} aria-hidden="true">{asset.icon}</span>
+            <span>
+              <strong>{asset.label}</strong>
+              <small>{asset.detail || asset.ticker}</small>
+            </span>
+          </legend>
+          <div className="range-grid">
+            {asset.ranges.map((range) => {
+              const selected = selections[asset.id]?.label === range.label;
+              return (
+                <button
+                  className={`range-option${selected ? " selected" : ""}`}
+                  type="button"
+                  key={range.label}
+                  onClick={() => onPick(asset, range)}
+                  aria-pressed={selected}
+                >
+                  {range.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+      ))}
+    </div>
+  );
+}
+
 function Callout({ tone, text }) {
   if (!text) return null;
   return <div className={`section-callout ${tone || "info"}`}>{text}</div>;
 }
 
 function AnalysisTimer({ step, onDone }) {
-  const doneRef = useRef(false);
+  const onDoneRef = useRef(onDone);
+  useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
   useEffect(() => {
-    doneRef.current = false;
-    const t = setTimeout(() => {
-      if (!doneRef.current) {
-        doneRef.current = true;
-        onDone();
-      }
-    }, 950);
-    return () => {
-      doneRef.current = true;
-      clearTimeout(t);
-    };
-  }, [step, onDone]);
+    const timer = setTimeout(() => onDoneRef.current(), 850);
+    return () => clearTimeout(timer);
+  }, [step]);
   return null;
 }
 
-// Form de contacto al final del wizard: nombre + email + teléfono + consent + honeypot.
-// El honeypot (`website`) es invisible para humanos; los bots que lo llenan son descartados
-// por el endpoint (docs/09-security).
 function ContactForm({ onSubmit, error }) {
   const [form, setForm] = useState({ name: "", email: "", phone: "", consent: false, website: "" });
-  const update = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
   return (
     <div className="contact-grid">
+      <div className="contact-value-note">
+        <strong>¿Qué vas a recibir?</strong>
+        <span>Tu principal desajuste, un plan de acción y un video elegido según tus respuestas.</span>
+      </div>
       <div className="field">
         <label htmlFor="w-name">Nombre</label>
         <input id="w-name" value={form.name} onChange={update("name")} autoComplete="name" />
@@ -428,35 +464,19 @@ function ContactForm({ onSubmit, error }) {
       </div>
       <div className="field">
         <label htmlFor="w-phone">Teléfono (WhatsApp)</label>
-        <input
-          id="w-phone"
-          type="tel"
-          value={form.phone}
-          onChange={update("phone")}
-          autoComplete="tel"
-          inputMode="tel"
-          placeholder="+54 9 3585 000000"
-        />
+        <input id="w-phone" type="tel" value={form.phone} onChange={update("phone")} autoComplete="tel" inputMode="tel" placeholder="+54 9 3585 000000" />
       </div>
-      {/* Honeypot — hidden from humans, bots that autofill it get discarded (docs/09-security). */}
-      <div className="hp-field" style={{ position: "absolute", left: "-9999px", top: 0, height: 0, overflow: "hidden" }} aria-hidden="true">
+      <div className="hp-field" aria-hidden="true">
         <label htmlFor="w-website">No completar</label>
-        <input
-          id="w-website"
-          tabIndex={-1}
-          autoComplete="off"
-          value={form.website}
-          onChange={update("website")}
-        />
+        <input id="w-website" tabIndex={-1} autoComplete="off" value={form.website} onChange={update("website")} />
       </div>
-      <label className="opt" style={{ cursor: "pointer" }}>
-        <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
-        Acepto recibir mi diagnóstico por email y que Metacrypto Club me contacte por email, teléfono o WhatsApp con
-        base en mis respuestas
+      <label className="consent-option">
+        <input type="checkbox" checked={form.consent} onChange={(event) => setForm((current) => ({ ...current, consent: event.target.checked }))} />
+        <span>Acepto recibir mi diagnóstico y que Metacrypto Club me contacte por email, teléfono o WhatsApp según mis respuestas.</span>
       </label>
-      {error && <div className="contact-error">{error}</div>}
+      {error && <div className="contact-error" role="alert">{error}</div>}
       <button className="btn-gold opt-next" type="button" onClick={() => onSubmit(form)}>
-        Ver mi diagnóstico
+        Ver mi diagnóstico personalizado
       </button>
     </div>
   );

@@ -16,6 +16,7 @@ import { isRateLimited, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "../../../li
 
 const MAX_BODY_BYTES = 64 * 1024;    // cap de tamaño del body (anti DoS / flooding de logs)
 const MAX_ANSWER_TEXT = 1000;        // cap de longitud de cada respuesta ("respuesta")
+const TRACKING_STAGES = new Set(["start", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "contact", "analysis", "result"]);
 
 // Lee un int de env con fallback (para tunear el rate limit sin tocar código).
 const envInt = (name, fallback) => {
@@ -50,6 +51,18 @@ function isValidLead(payload) {
   if (typeof payload.website === "string" && payload.website.trim() !== "") return "honeypot";
 
   if (payload.signals !== undefined && (payload.signals === null || typeof payload.signals !== "object" || Array.isArray(payload.signals))) return "bad_signals";
+  if (payload.signals) {
+    for (const key of Object.keys(payload.signals)) {
+      if (!["dropoff_question", "reached_stage", "visited_stages", "finished_at"].includes(key)) return "unexpected_field";
+    }
+    if (payload.signals.reached_stage !== undefined && !TRACKING_STAGES.has(payload.signals.reached_stage)) return "bad_tracking_stage";
+    if (payload.signals.dropoff_question !== null && payload.signals.dropoff_question !== undefined && !TRACKING_STAGES.has(payload.signals.dropoff_question)) return "bad_tracking_stage";
+    if (payload.signals.visited_stages !== undefined) {
+      if (!Array.isArray(payload.signals.visited_stages) || payload.signals.visited_stages.length > TRACKING_STAGES.size) return "bad_tracking_stages";
+      if (payload.signals.visited_stages.some((stage) => !TRACKING_STAGES.has(stage))) return "bad_tracking_stage";
+    }
+    if (payload.signals.finished_at !== null && payload.signals.finished_at !== undefined && typeof payload.signals.finished_at !== "string") return "bad_finished_at";
+  }
   if (payload.lead !== null && payload.lead !== undefined && typeof payload.lead !== "object") return "bad_lead";
 
   if (payload.lead) {
@@ -140,11 +153,12 @@ export async function POST(request) {
 
     const answers = payload.answers;
     const dropped = payload.signals && payload.signals.dropoff_question;
+    const reached = payload.signals && payload.signals.reached_stage;
     const kind = payload.lead ? "COMPLETE" : "DROPOUT";
     const kindTag = payload.lead ? `${c.green}✓ ${kind}${c.reset}` : `${c.gold}⚠ ${kind}${c.reset}`;
 
     // Log de producción: solo indicadores (marca de sesión + conteo). Sin PII (docs/09).
-    console.log(`${c.dim}[${ts()}]${c.reset} ${kindTag} lead ${c.gold}${payload.session_id.slice(0, 8)}…${c.reset} · ${answers.length} answers${dropped ? " · dropoff (title omitted)" : ""} · ${Date.now() - start}ms`);
+    console.log(`${c.dim}[${ts()}]${c.reset} ${kindTag} lead ${c.gold}${payload.session_id.slice(0, 8)}…${c.reset} · ${answers.length} answers${reached ? ` · stage ${reached}` : ""}${dropped ? " · dropoff" : ""} · ${Date.now() - start}ms`);
     if (isDev) {
       // Volcado completo del payload SOLO en desarrollo.
       console.debug(`${c.dim}[${ts()}] [lead-payload]${c.reset}`, JSON.stringify(payload, null, 2));
