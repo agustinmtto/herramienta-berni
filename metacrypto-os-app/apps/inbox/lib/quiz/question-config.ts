@@ -16,6 +16,14 @@ export interface QuizOption {
   label: string;
   tags: string[];
   video?: string;
+  /** Valor canónico de la opción (ej. rangos de capital, docs/11 §4). Debe coincidir con la definición publicada. */
+  value?: {
+    currency: string;
+    min: number;
+    max: number | null;
+    min_inclusive: boolean;
+    max_inclusive?: boolean;
+  };
 }
 
 export interface QuizAssetRange {
@@ -164,12 +172,12 @@ export const questions: QuizQuestion[] = [  {
     title: "¿Con qué cantidad de capital estás trabajando actualmente o tienes previsto destinar a cripto durante este ciclo?",
     hint: "No necesitamos saber la cantidad exacta. El rango nos permite adaptar mejor el diagnóstico a tu situación.",
     options: [
-      { optionId: "capital_lt_10k", label: "Menos de 10.000 USD", tags: ["cap-low"] },
-      { optionId: "capital_10k_25k", label: "Entre 10.000 y 25.000 USD", tags: ["cap-mid", "hot-cap"] },
-      { optionId: "capital_25k_50k", label: "Entre 25.000 y 50.000 USD", tags: ["cap-mid", "hot-cap"] },
-      { optionId: "capital_50k_100k", label: "Entre 50.000 y 100.000 USD", tags: ["cap-high", "hot-cap"] },
-      { optionId: "capital_100k_250k", label: "Entre 100.000 y 250.000 USD", tags: ["cap-high", "hot-cap"] },
-      { optionId: "capital_gt_250k", label: "Más de 250.000 USD", tags: ["cap-very-high", "hot-cap"] },
+      { optionId: "capital_lt_10k", label: "Menos de 10.000 USD", tags: ["cap-low"], value: { currency: "USD", min: 0, max: 10000, min_inclusive: true, max_inclusive: false } },
+      { optionId: "capital_10k_25k", label: "Entre 10.000 y 25.000 USD", tags: ["cap-mid", "hot-cap"], value: { currency: "USD", min: 10000, max: 25000, min_inclusive: true, max_inclusive: false } },
+      { optionId: "capital_25k_50k", label: "Entre 25.000 y 50.000 USD", tags: ["cap-mid", "hot-cap"], value: { currency: "USD", min: 25000, max: 50000, min_inclusive: true, max_inclusive: false } },
+      { optionId: "capital_50k_100k", label: "Entre 50.000 y 100.000 USD", tags: ["cap-high", "hot-cap"], value: { currency: "USD", min: 50000, max: 100000, min_inclusive: true, max_inclusive: false } },
+      { optionId: "capital_100k_250k", label: "Entre 100.000 y 250.000 USD", tags: ["cap-high", "hot-cap"], value: { currency: "USD", min: 100000, max: 250000, min_inclusive: true, max_inclusive: false } },
+      { optionId: "capital_gt_250k", label: "Más de 250.000 USD", tags: ["cap-very-high", "hot-cap"], value: { currency: "USD", min: 250000, max: null, min_inclusive: true } },
     ],
   },
   {

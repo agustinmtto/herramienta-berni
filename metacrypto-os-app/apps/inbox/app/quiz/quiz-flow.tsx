@@ -19,6 +19,7 @@ import {
   wizardConfig,
   type AllocationSelection,
   type QuizAssetRange,
+  type QuizOption,
   type QuizQuestion,
 } from "@/lib/quiz/question-config";
 import { buildDiagnosis, type Diagnosis, type DiagnosisBody } from "@/lib/quiz/engine";
@@ -123,7 +124,7 @@ export function QuizFlow() {
     setQIndex((current) => Math.max(0, Math.min(current + delta, questions.length - 1)));
   };
 
-  const pick = (question: QuizQuestion, option: { optionId: string; label: string; tags: string[]; video?: string }) => {
+  const pick = (question: QuizQuestion, option: QuizOption) => {
     if (transitioning) return;
     setAnswers((current) => ({
       ...current,
@@ -131,6 +132,7 @@ export function QuizFlow() {
         answer: option.label,
         tags: option.tags,
         optionId: option.optionId,
+        optionValue: option.value,
         video: option.video,
         answeredAt: new Date().toISOString(),
       },

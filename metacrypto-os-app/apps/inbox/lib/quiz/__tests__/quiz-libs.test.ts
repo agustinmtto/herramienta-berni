@@ -194,7 +194,7 @@ describe("lead-payload", () => {
   test("buildContractAnswers mapea con IDs estables y orders 1..n", () => {
     const answers = {
       situation: { answer: "a", tags: [], optionId: "exposure_none", answeredAt: "2026-09-21T10:00:00.000Z" },
-      capital: { answer: "b", tags: [], optionId: "capital_10k_25k", answeredAt: "2026-09-21T10:01:00.000Z" },
+      capital: { answer: "b", tags: [], optionId: "capital_10k_25k", optionValue: { currency: "USD", min: 10000, max: 25000, min_inclusive: true, max_inclusive: false }, answeredAt: "2026-09-21T10:01:00.000Z" },
       allocation: {
         answer: "BTC: 50-75%",
         tags: ["btc-high"],
@@ -210,7 +210,7 @@ describe("lead-payload", () => {
     const contract = buildContractAnswers(answers, ["situation", "challenge", "allocation", "capital", "horizon", "drawdown", "influence", "rules"]);
     expect(contract).toHaveLength(3);
     expect(contract.find((c) => c.question_id === "situation")).toMatchObject({ answer_id: "exposure_none", order: 1, type: "single_choice" });
-    expect(contract.find((c) => c.question_id === "capital")).toMatchObject({ answer_id: "capital_10k_25k", order: 4, type: "range" });
+    expect(contract.find((c) => c.question_id === "capital")).toMatchObject({ answer_id: "capital_10k_25k", order: 4, type: "range", value: { currency: "USD", min: 10000, max: 25000 } });
     const allocation = contract.find((c) => c.question_id === "allocation")!;
     expect(allocation.type).toBe("allocation");
     expect(allocation.answer_id).toBeNull();

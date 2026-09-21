@@ -36,6 +36,7 @@ export interface QuizAnswerState {
   answer: string | null;
   tags: string[];
   optionId?: string;
+  optionValue?: unknown;
   video?: string;
   selections?: Record<string, AllocationSelection>;
   answeredAt?: string;
@@ -127,7 +128,7 @@ export function buildContractAnswers(
         ...base,
         answer_id: state.optionId ?? null,
         answer_text: state.answer ?? null,
-        value: null,
+        value: state.optionValue ?? null,
       });
     }
   }
