@@ -20,6 +20,7 @@ Herramienta de captación (lead magnet) para el negocio de Berni (Metacrypto Clu
 | `docs/09-security.md` | Checklist de seguridad pre-producción: qué está implementado, qué no aplica aún, aclaraciones acordadas | Al tocar `/api/lead`, headers, rate limiting o antes de un deploy |
 | `docs/10-levantar-metacrypto-os-local.md` | Guía paso a paso para levantar MetaCrypto OS + Supabase local (Docker) desde cero y en el día a día: setup, seed, reset, login de dev, puertos, problemas frecuentes | Antes de trabajar en `metacrypto-os-app/` o con la integración quiz↔OS |
 | `docs/11-migracion-modulo-leads.md` | Decisiones cerradas, pendientes (JSON + tablas, dueño: Agustín), matriz de identidad, regla de lead caliente, fases A–D y reglas fijas de la migración del módulo de leads | Antes de escribir la migración 0068, el RPC o el endpoint de leads |
+| `docs/12-spec-sdd-fases-migracion-leads.md` | Spec SDD: fases 0–D con criterios de inicio/salida verificables, comandos de validación por compuerta, trazabilidad requisito→fase y estado actual de cada fase | Al ejecutar cualquier fase de la migración; actualizar estado al cerrar cada una |
 | `ANALISIS_INTEGRACION_QUIZ_LEADS.md` | Análisis del Quiz Funnel, MetaCrypto OS, DDL y diseño del módulo de leads | Antes de implementar la integración con el sistema |
 
 Fuentes primarias (si hace falta el detalle crudo): `Transcripcion_Reunion.md` y `transcripcion_audio.md` en la raíz.
