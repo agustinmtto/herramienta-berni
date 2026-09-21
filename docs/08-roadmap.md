@@ -85,8 +85,8 @@ Por funcionalidad/responsabilidad (no por carpetas):
 - [x] Tracking: `session_id` + dropoff por `sendBeacon` (`docs/03` §6)
 - [x] Suite de tests en `test/` (`npm test`, unit + integración + seguridad)
 - [x] Captura de teléfono obligatoria en contacto + payload/API
-- [ ] Migrations: tablas de leads/respuestas/sesiones + flag `hot_lead` (> 10.000 USD, bloqueante #8) — requiere Fase 0
-- [ ] Deploy en Netlify (conectar repo) y merge del PR
+- [x] Migrations: tablas del módulo de leads + flag `hot_lead` — implementadas como `0068_quiz_leads.sql` + `0069_vinculacion_validacion_rollback.sql` en el repo del OS (`metacrypto-os-app/`), con RPC transaccional, RLS y validación de teléfono (ver `docs/11` y `docs/12`)
+- [ ] Deploy en Netlify (conectar repo) y merge del PR — el funnel vivirá dentro del OS (`/quiz`), no en Netlify (decisión D1 de `docs/11`); queda el despliegue del OS con Miled
 
 **Salida (parcial):** flujo completo funcionando en local (pantallas wizard → análisis → final única diagnóstico+videos) con lead visible en logs del endpoint.
 

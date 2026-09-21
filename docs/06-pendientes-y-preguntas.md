@@ -19,10 +19,22 @@
 | 13 | ~~**Teléfono + CTA WhatsApp**~~: teléfono obligatorio y mensaje con respuestas; el botón PDF transitorio fue retirado | Entrega transitoria solicitada para el MVP | Equipo dev | ✅ Cerrado |
 | 14 | **Hosting final** (Vercel o Netlify) para producción | Define rate limiting real (reemplazando el in-memory best-effort de `lib/rate-limit.js`) y configuración de headers/HSTS | Agustín / Miled | Abierto |
 | 15 | **Rate limiting "real"** (Upstash/Redis o WAF del hosting) reemplazando el in-memory | Anti-abuso del endpoint público | Equipo dev | Pendiente de #14 — call site en `lib/rate-limit.js` ya aislado |
-| 16 | **Ambito de seguridad con integraciones**: RLS de Supabase, Service Role Key solo server, IDOR/BOLA, SQLi, enmascaramiento de datos entre leads | Blocker de prod para Fase 1 | Equipo dev | Pendiente — checklist en `docs/09-security.md` §Supabase |
+| 16 | ~~**Ámbito de seguridad con integraciones**~~ | Implementado para el módulo de leads: RLS day 1, service_role solo server, IDOR cubierto, SQLi parametrizado — checklist verificado en `docs/09` §Quiz Funnel en el OS | Equipo dev | ✅ Cerrado (Fase D local) |
 | 17 | **Next 16** para cerrar las 2 vulnerabilidades transitivas (postcss) que quedan en prod deps | Cerrar `npm audit --omit=dev` en 0 | Equipo dev | Pendiente — breaking change, planear upgrade |
 | 18 | ~~**Retención de datos de leads**~~ | Sin vencimiento por decisión de negocio; mantener capacidad futura de eliminación/anonimización | Berni / Equipo dev | ✅ Cerrado |
-| 19 | ~~**Número de migración**~~ | Siguiente número local disponible asignado a esta integración: `0068_quiz_leads.sql` | Equipo dev | ✅ Cerrado |
+| 19 | ~~**Número de migración**~~ | Asignados `0068_quiz_leads.sql` y `0069_vinculacion_validacion_rollback.sql` — **falta confirmación formal con Miled antes del release** | Miled | 🟡 Confirmación pendiente |
+| 20 | **Upgrade de Next (bloqueante de prod)**: `npm audit --omit=dev` del OS muestra 1 vulnerabilidad **crítica** (RCE en next) + 3 high (postcss/sharp/nanoid) — preexisten al módulo de leads | No exponer `/quiz` en prod sin plan de upgrade | Miled / Equipo dev | Abierto — ver preguntas a Miled |
+
+## Preguntas para Miled (cierre Fase D — bloqueantes de producción)
+
+1. **Hosting del OS**: ¿dónde está desplegado hoy el OS en producción (Vercel, otro)? ¿Qué plan tiene? ¿El host ofrece WAF / rate limiting en el borde?
+2. **Rate limit definitivo**: ¿habilitamos Upstash Redis (requiere cuenta + token del negocio) o confiamos en el rate limiting del host? El endpoint público `/api/lead` hoy usa in-memory 10/min por IP (configurable con `LEAD_RATE_LIMIT_MAX` / `LEAD_RATE_LIMIT_WINDOW_MS`).
+3. **Números de migración**: confirmar que `0068` y `0069` no fueron reclamados por otra rama antes del release.
+4. **Permiso `leads`**: ¿quién del equipo lo recibe (Berni, Miled, closers)? Se asigna por `team_members.modulos`.
+5. **Orden de despliegue**: aplicar `0068` + `0069` a producción ANTES de deployar el código (sin eso, PostgREST responde 400 en silencio).
+6. **Variables de entorno en prod**: no se agregan claves nuevas; verificar que el deploy tenga `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `AUTH_TOKEN` (ya usadas por el OS). Opcionales: `LEAD_RATE_LIMIT_*`.
+7. **Upgrade de Next** (bloqueante #20): hay una RCE crítica en la versión actual de `next` — ¿cuándo se aborda? ¿Lo hace Miled o lo hacemos nosotros en una rama aparte?
+8. **HTTPS/HSTS**: verificar que el host fuerce HTTPS y configure HSTS al exponer `/quiz`.
 
 ## Roadmap
 

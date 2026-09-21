@@ -45,10 +45,30 @@ Convención: ✅ implementado y verificado (tests + curl) · ♻️ cubierto por
 
 | # | Ítem | Estado |
 |---|---|---|
-| 27 | RLS: lead no puede leer datos de otro lead | ⏳ Pendiente |
-| 28 | Service Role Key solo en servidor (nunca client-side ni logs) | ⏳ Pendiente |
-| 29 | IDOR/BOLA: intento de manipular session ids por recursos entre leads | ⏳ Pendiente |
-| 30 | SQL / DB injection (todos los campos que llegan a DB) | ⏳ Pendiente (usar client parameterizado de Supabase) |
+| 27 | RLS: lead no puede leer datos de otro lead | ✅ (2026-09-21) — `quiz_versiones`, `diagnostico_envios`, `diagnostico_respuestas` con RLS habilitado y SOLO política SELECT para `authenticated`. Sin políticas de escritura: todo entra por RPC con service_role. El funnel público no lee la base desde el navegador |
+| 28 | Service Role Key solo en servidor (nunca client-side ni logs) | ✅ — `lib/supabase.ts` (`server-only`) se usa solo en `app/api/lead/route.ts` y server actions; grep de client components limpio; sin `NEXT_PUBLIC_*` en el módulo; `.env.local` gitignoreado |
+| 29 | IDOR/BOLA: intento de manipular session ids por recursos entre leads | ✅ — el endpoint público solo escribe (no expone lecturas); la respuesta nunca devuelve `persona_id`; el módulo `/leads` exige sesión + permiso `leads` (`requireModulo`) en página, detalle y acciones; sesión identificable solo por UUID v4 validado |
+| 30 | SQL / DB injection (todos los campos que llegan a DB) | ✅ — todo va por PostgREST parametrizado y RPC plpgsql con validación cerrada contra la definición publicada; LIKE escapado con `patronLike`; UTMs solo en filtros `eq` con `encodeURIComponent`; cero SQL dinámico con input del cliente |
+
+## Quiz Funnel en el OS (migraciones 0068/0069, rama `feature/leads-a-migracion-rpc`)
+
+Ítems nuevos de la integración, revisados al cerrar Fase D (docs/12):
+
+| # | Ítem | Estado |
+|---|---|---|
+| Q1 | Rate limit en `/api/lead` (OS) | ✅ in-memory 10/min por IP configurable (`LEAD_RATE_LIMIT_*`, misma política que el prototipo). **Final pendiente de hosting** (ver aclaración de arriba) |
+| Q2 | Same-origin | ✅ `Origin` vs `Host` → 403. Probado con tests (`lead-route.test.ts`) |
+| Q3 | Honeypot | ✅ campo `website` oculto en el form; 200 falso `status: ignored` sin persistir |
+| Q4 | Body cap / JSON estricto | ✅ 64 KiB → 413; parseo estricto → 400 |
+| Q5 | Logs sin PII en producción | ✅ solo `evento → estado`, sesión truncada y conteos; errores del RPC sin valores del lead |
+| Q6 | Errores honestos sin detalles internos | ✅ códigos `quiz_leads/*` mapeados a 400/422/502 por `mapRpcError` |
+| Q7 | Lead caliente solo en servidor | ✅ derivado en el RPC desde la definición publicada + respuesta estructurada; `qualification_rule_version` y `motivo_calificacion` persistidos |
+| Q8 | Confirmación explícita al vincular con teléfonos distintos | ✅ RPC `telefono_no_coincide` + checkbox obligatorio en UI; flag auditado |
+| Q9 | Rollback de vinculación | ✅ `desvincular_lead` revierte exactamente los `envio_ids` auditados y restaura el temporal a `lead` |
+| Q10 | Timestamps del cliente | ✅ se validan con fallback a `now()` del servidor; `created_at`/recepción son autoritativos |
+| Q11 | npm audit del OS | 🔴 4 vulnerabilidades prod del toolchain (next: 1 **crítica RCE**; postcss/sharp/nanoid: high) — preexisten al módulo; **preguntar a Miled plan de upgrade de Next antes de exponer el funnel en prod** |
+| Q12 | HTTPS-only | ⏳ responsabilidad del hosting al deployar (ítem 33) |
+| Q13 | Retención | ✅ decisión de negocio (docs/11 D14): sin vencimiento; capacidad de borrado puntual disponible vía SQL/RPC si se exige |
 
 ## Consentimiento y privacidad
 
