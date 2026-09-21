@@ -15,13 +15,18 @@ export default function VincularLead({
   clientes: { id: string; nombre: string; email: string | null }[];
   personaEstado: string | null;
 }) {
-  const yaArchivado = personaEstado === "archivado";
   const [state, formAction, pending] = useActionState(vincularLeadAccion, { ok: false });
 
+  // Solo un lead TEMPORAL (estado 'lead') se puede vincular. Si el envío ya
+  // apunta al cliente definitivo, no hay nada que hacer — y ofrecerlo sería
+  // invitar a un error que el RPC rechazaría (cliente con teléfono ≠ lead).
   if (!leadPersonaId) {
     return <p className="vincular-nota">Este envío no llegó a completarse: no hay lead temporal que vincular.</p>;
   }
-  if (yaArchivado) {
+  if (personaEstado === "cliente") {
+    return <p className="vincular-nota">Los diagnósticos de este envío ya pertenecen al cliente definitivo.</p>;
+  }
+  if (personaEstado === "archivado") {
     return <p className="vincular-nota">El lead temporal de este envío ya fue vinculado y archivado.</p>;
   }
 

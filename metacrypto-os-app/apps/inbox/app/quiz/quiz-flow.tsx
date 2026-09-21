@@ -62,6 +62,8 @@ export function QuizFlow() {
 
   const sessionIdRef = useRef<string | null>(null);
   const sourceRef = useRef<SourceData | null>(null);
+  const answersRef = useRef<Record<string, QuizAnswerState>>({});
+  answersRef.current = answers; // en cada render, la versión actual
   const visitedStagesRef = useRef<string[]>([]);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedRef = useRef(false);
@@ -83,6 +85,7 @@ export function QuizFlow() {
             stepId: extra.stepId as string,
             stepIndex: extra.stepIndex as number,
             visited: visitedStagesRef.current,
+            answers: answersRef.current,
             ...extra,
           })
         ),
