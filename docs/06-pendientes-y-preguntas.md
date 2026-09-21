@@ -5,13 +5,13 @@
 | # | Ítem | Impacto | Propietario | Estado |
 |---|---|---|---|---|
 | 1 | ~~**Definir las preguntas finales** (psicológicas, orden, fricción)~~ | Desbloquea el JSON y el motor determinístico definitivo | Berni | ✅ Cerrado — 8 preguntas recibidas en orden; composición visual en la pregunta 3 |
-| 2 | **Formato JSON final** `pregunta/respuesta` | BLOQUEA la integración con Supabase | Agustín (diseño en curso; criterios en `docs/11` §2.1) | En diseño |
+| 2 | ~~**Formato JSON final y modelo de tablas**~~ | Cerrado: contrato versionado, respuestas genéricas y tres tablas nuevas en `docs/11` | Agustín | ✅ Cerrado |
 | 3 | ~~Validar branch de Supabase como entorno dev~~ | Resuelto en `docs/08` §1.1: se descarta la branch de Supabase (cobra compute); se usa **Supabase local (CLI + Docker)** con migrations | Agustín / Miled | ✅ Cerrado |
 | 4 | ~~**Módulo de leads dentro del sistema del negocio**~~ | Cerrado: lo implementa nuestro equipo (`docs/11` D7) | Nuestro equipo | ✅ Cerrado |
 | 5 | Benchmark del **quiz funnel de Ramiro** (grabar pantalla, extraer preguntas/flujo) | Alimenta diseño de preguntas | Lisandro | Por confirmar si se hizo |
 | 6 | Host de videos + embed trackeable (duración vista) | Requiere definir player (Loom/u otro con eventos) | Miled / dev | Abierto |
 | 7 | **PRD** que pidió Miled para arrancar la implementación conjunta | Seco para construir juntos | Agustín/Lisandro | Pendiente — este documento de `docs/` sirve de insumo |
-| 8 | Umbral lead caliente confirmado en 10.000 USD (los rangos definitivos comienzan en `$10k-25k`) | Ajustar config y motor sin inferir una cifra exacta | Equipo dev | En implementación |
+| 8 | ~~Umbral lead caliente~~: desde 10.000 USD inclusive; rangos 2-6 | Cerrado en `docs/11`: cálculo server-side por `answer_id` | Equipo dev | ✅ Cerrado |
 | 9 | Videos segmentados de Berni (3–4 por rango de capital) | Dependencia de contenido (si se mantiene el video — depende del final del flujo, ver #11) | Berni | Pendiente |
 | 10 | Entorno dev/producción dentro del negocio (hoy solo producción + local) | Coordinar branch/PR | Miled | Acordado armarlo |
 | 11 | ~~Decidir el final del flujo~~ → **Resuelto**: pantalla final única con diagnóstico + 3 videos; la pregunta 2 determina cuál se destaca | Sub-pendientes: grabar los videos reales, host del player | Berni / Miled | Parcialmente resuelto |
@@ -21,7 +21,8 @@
 | 15 | **Rate limiting "real"** (Upstash/Redis o WAF del hosting) reemplazando el in-memory | Anti-abuso del endpoint público | Equipo dev | Pendiente de #14 — call site en `lib/rate-limit.js` ya aislado |
 | 16 | **Ambito de seguridad con integraciones**: RLS de Supabase, Service Role Key solo server, IDOR/BOLA, SQLi, enmascaramiento de datos entre leads | Blocker de prod para Fase 1 | Equipo dev | Pendiente — checklist en `docs/09-security.md` §Supabase |
 | 17 | **Next 16** para cerrar las 2 vulnerabilidades transitivas (postcss) que quedan en prod deps | Cerrar `npm audit --omit=dev` en 0 | Equipo dev | Pendiente — breaking change, planear upgrade |
-| 18 | **Retención de datos** de leads (cuánto tiempo se conservan respuestas/eventos) | Cumplimiento/privacidad | Berni / Equipo dev | Abierto |
+| 18 | ~~**Retención de datos de leads**~~ | Sin vencimiento por decisión de negocio; mantener capacidad futura de eliminación/anonimización | Berni / Equipo dev | ✅ Cerrado |
+| 19 | ~~**Número de migración**~~ | Siguiente número local disponible asignado a esta integración: `0068_quiz_leads.sql` | Equipo dev | ✅ Cerrado |
 
 ## Roadmap
 
@@ -48,3 +49,36 @@ Métricas de la pantalla final (según host/player que se defina):
 - Video: % visto y duración (opcional, según bloqueante #6).
 - CTA final: clicks hacia la agenda de llamada / botón de WhatsApp.
 - Leads calientes: llamados por el triaje y tiempo de reacción.
+
+## Decisiones técnicas cerradas para la integración
+
+- Especificación autoritativa: `docs/11-migracion-modulo-leads.md`.
+- El contrato usa `schema_version` para la API y `quiz_version` para las preguntas/reglas.
+- Las preguntas y opciones viven en `quiz_versiones.definicion jsonb`; cambiar preguntas no cambia tablas.
+- La primera finalización de un contacto crea una fila en `personas` con `estado='lead'`; quizzes posteriores del mismo contacto reutilizan solo ese lead a través de los envíos del módulo.
+- Nunca se busca, reutiliza ni modifica una persona cliente u otro registro ajeno al módulo, aunque tenga el mismo email o teléfono.
+- Debido al `UNIQUE` existente de `personas.telefono_e164`, el teléfono del funnel se conserva en `diagnostico_envios.telefono_e164_capturado` y la fila nueva de persona usa teléfono `NULL`.
+- No existen `resolucion_identidad` ni `necesita_revision`.
+- Se crean únicamente `quiz_versiones`, `diagnostico_envios` y `diagnostico_respuestas`, con FKs desde las tablas nuevas.
+- La atribución se captura automáticamente desde la URL; todos los campos UTM son nullable.
+- El diagnóstico mostrado se persiste como snapshot JSON para conservar el resultado histórico.
+- Primera versión: `diagnostico-cripto-v1-a`; consentimiento: `contacto-v1`.
+- Lead caliente desde USD 10.000 inclusive.
+- El teléfono se captura con selector de país/prefijo y se normaliza a E.164.
+- La primera entrega persiste `started`, `progress`, `dropped` y `completed`.
+- La conversión se vincula después de registrar la venta existente: se reasignan diagnósticos al cliente y se archiva el lead temporal.
+- El módulo usa una clave de permiso propia `leads`.
+- La migración asignada es `0068_quiz_leads.sql`.
+- La alerta de triaje queda fuera de la primera migración.
+
+## Estado para comenzar
+
+La especificación de migración, contrato, identidad, conversión, tracking y módulo está cerrada en `docs/11`. Hay luz verde para comenzar las fases A-C en desarrollo local.
+
+Pendientes que no bloquean el desarrollo:
+
+- Videos y hosting del player.
+- Hosting final y rate limiting distribuido.
+- Upgrade a Next 16.
+- Alertas de triaje.
+- PDF y envío por email.

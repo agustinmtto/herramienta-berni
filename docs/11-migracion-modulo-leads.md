@@ -1,124 +1,538 @@
-# 11 — Migración del módulo de leads: decisiones y enfoque
+# 11 - Migracion del modulo de leads: especificacion cerrada
 
-Doc de trabajo para la integración Quiz Funnel → MetaCrypto OS (persistencia de leads). Consolida lo decidido, deja explícito lo pendiente y fija las reglas de juego del desarrollo para que no queden dudas ni peligros.
+Documento autoritativo para implementar la persistencia del Quiz Funnel y el modulo `/leads` dentro de MetaCrypto OS. El alcance se limita al dominio nuevo de leads: no se modifica la estructura ni el comportamiento de las tablas existentes.
 
-> **Estado:** borrador activo. Las secciones marcadas `PENDIENTE (dueño: Agustín)` se completan cuando se definan el JSON y las tablas; recién ahí arranca la implementación (migración + RPC + endpoint).
+> **Estado:** especificacion cerrada y con luz verde para desarrollar. Migracion asignada: `0068_quiz_leads.sql`.
 >
-> Insumos: `docs/03` (spec), `docs/08` (fases), `docs/09` (seguridad), `ANALISIS_INTEGRACION_QUIZ_LEADS.md` (diseño completo), `metacrypto-os-app/CLAUDE.md` (reglas del repo del negocio).
+> Insumos: `docs/03-especificacion.md`, `docs/06-pendientes-y-preguntas.md`, `docs/08-roadmap.md`, `docs/09-security.md`, `docs/10-levantar-metacrypto-os-local.md`, `ANALISIS_INTEGRACION_QUIZ_LEADS.md` y `metacrypto-os-app/CLAUDE.md`.
 
-## 1. Decisiones cerradas
+## 1. Alcance y decisiones cerradas
 
-| # | Decisión | Resolución |
+| # | Decision | Resolucion |
 |---|---|---|
-| D1 | **Dónde vive el funnel** | **Portado al OS** (`apps/inbox`, ruta pública `/quiz`). Un solo deploy en el hosting del negocio, sin secretos interservicio ni CORS. El repo actual (`herramienta-berni`) queda como prototipo de referencia. |
-| D2 | **Contacto obligatorio** | Nombre + email + teléfono + consentimiento son **obligatorios** para pedir el diagnóstico (ya implementado en el wizard). No existen envíos "solo email" ni "solo teléfono". |
-| D3 | **Atribución** | Columnas UTM (`utm_source/medium/campaign/content/term` + `referrer`) desde la migración v1, nullable. El wizard las captura si están presentes en la URL. |
-| D4 | **Consentimiento** | Validado por el negocio (texto aprobado existe). Al implementar, el JSON debe llevar `consentimiento_version` + timestamp; el texto queda versionado en el repo. |
-| D5 | **Rangos de capital** | 6 rangos confirmados (§4). El primero termina justo en el umbral de 10.000 USD. |
-| D6 | **Lead caliente** | Regla **server-side** derivada del `answer_id` del rango de capital. Nunca se confía en un flag del cliente. |
-| D7 | **Módulo `/leads`** | Lo implementa nuestro equipo (cierra bloqueante #4 de `docs/06`). Permisos y navegación según patrones del OS. |
-| D8 | **Alerta de triaje** | **Fase separada** (después de persistencia y módulo). No se implementa en la entrega de la migración. |
+| D1 | Ubicacion | El funnel se porta a `apps/inbox` como ruta publica `/quiz`. Hay un solo deploy en el hosting del negocio. |
+| D2 | Contacto | Para completar el quiz son obligatorios nombre, email, telefono y consentimiento. Los abandonos anteriores al contacto pueden no tener estos datos. |
+| D3 | Aislamiento | La integracion no busca, reutiliza, actualiza, fusiona ni degrada clientes u otras personas existentes. La primera finalizacion de un contacto crea una fila de `personas` con `estado='lead'`; nuevos quizzes del mismo contacto reutilizan solo ese lead creado previamente por este modulo. |
+| D4 | Esquema existente | No se modifica ninguna columna, indice, restriccion, RPC ni comportamiento existente. Solo se agregan tablas, FKs desde tablas nuevas y codigo nuevo del modulo. |
+| D5 | Versiones del quiz | El contrato y las tablas son agnosticos a las preguntas. Cada variante A/B tiene una fila inmutable en `quiz_versiones`. |
+| D6 | Atribucion | Las UTMs y el referrer son opcionales y se capturan automaticamente desde la URL y el navegador. El usuario no los completa. |
+| D7 | Consentimiento | El payload incluye aceptacion, version del texto y timestamp. El texto legal versionado vive en el repositorio. |
+| D8 | Lead caliente | Se calcula en servidor a partir de la definicion y respuesta estructurada de la pregunta de capital. Nunca se confia en un flag del navegador. |
+| D9 | Modulo `/leads` | Lo implementa nuestro equipo respetando permisos, navegacion y CSS del OS. |
+| D10 | Conversion | Se incluye en la primera entrega como vinculacion posterior a la venta: el flujo existente crea/encuentra al cliente y luego el modulo reasigna sus diagnosticos y archiva el lead temporal. |
+| D11 | Tracking | La primera entrega persiste `started`, `progress`, `dropped` y `completed`. |
+| D12 | Telefono | El formulario usa selector de pais/prefijo y el servidor normaliza a E.164. |
+| D13 | Permiso | `/leads` usa una clave de permiso propia `leads`. |
+| D14 | Retencion | Leads, respuestas y diagnosticos se conservan sin vencimiento, salvo solicitud o cambio futuro de politica. |
+| D15 | Alertas | Push/email de triaje se implementan en una fase posterior, no en la migracion inicial. |
 
-## 2. Pendientes de definición — bloquean el arranque del código
+No existen los campos `resolucion_identidad` ni `necesita_revision`: el modulo no resuelve identidades contra datos existentes.
 
-### 2.1 Contrato JSON final — `PENDIENTE (dueño: Agustín)`
+## 2. Consideracion obligatoria sobre `personas.telefono_e164`
 
-Cierra el bloqueante #2 de `docs/06`. Criterios mínimos que debe cumplir (el diseño fino es de Agustín):
+El esquema actual declara `personas.telefono_e164` como `UNIQUE`. Por tanto, no se pueden insertar dos filas de `personas` con el mismo telefono, aunque una sea `cliente` y otra `lead`.
 
-- [ ] `session_id`: UUID real generado en cliente, estable durante todo el recorrido (idempotencia).
-- [ ] `schema_version` (contrato API) y `questionnaire_version` (versión de preguntas) como strings/ints explícitos.
-- [ ] Respuestas con **identidad estable** por pregunta y por opción (IDs que no cambien si se edita un texto). Sugerencia del análisis: `question_id`, `answer_id`, `answer_text`, `answer_value` estructurado (para rangos/porcentajes), `question_order` — decisión final abierta entre "IDs estables", "texto libre" o "IDs + snapshot de texto".
-- [ ] `signals` de tracking: `reached_stage`, `dropoff_question`, `visited_stages`, `finished_at` (ya existe en el stub).
-- [ ] `lead`: `name`, `email`, `phone`, `consent: true`, `consentimiento_version`.
-- [ ] UTMs capturadas al inicio del funnel y adjuntas al payload.
-- [ ] El mismo payload sirve para finalización y para abandono (beacon), como hoy.
+Para cumplir D3 y D4 al mismo tiempo:
 
-### 2.2 Diseño de tablas — `PENDIENTE (dueño: Agustín)`
+- La primera finalizacion de un contacto crea una fila de `personas` con `estado='lead'`.
+- Las finalizaciones posteriores con el mismo email normalizado y telefono capturado reutilizan ese lead a traves de los envios anteriores del modulo.
+- Nunca se busca ni reutiliza una persona `cliente`, `reservado`, `ex_cliente` o `archivado`, aunque tenga el mismo contacto.
+- Se copian `nombre`, `email` y `pais` cuando esten disponibles.
+- `personas.telefono_e164` se inserta como `NULL` para los leads originados por este funnel.
+- El telefono obligatorio y normalizado se conserva en `diagnostico_envios.telefono_e164_capturado`.
+- El modulo `/leads` muestra el contacto desde el snapshot de `diagnostico_envios`, no desde `personas`.
 
-- [ ] Tablas del módulo (base propuesta por el análisis: `diagnostico_envios` + `diagnostico_respuestas`, opcional `diagnostico_eventos` más adelante).
-- [ ] `session_id` único por envío (upsert idempotente), FK a `personas` nullable, estado del funnel (`started/in_progress/dropped/completed`), snapshot de contacto capturado, flag `es_lead_caliente` + `motivo_calificacion`, `necesita_revision`.
-- [ ] Columnas UTM (D3) y campos de consentimiento (D4).
-- [ ] **Decisión abierta dentro de este punto:** ¿se persiste `diagnosis_result` (jsonb) o solo `diagnosis_version`?
-- [ ] RLS habilitado + índices mínimos: `(es_lead_caliente, created_at DESC)`, `(estado, created_at DESC)`, `persona_id`, `UNIQUE(envio_id, question_id)` para respuestas.
-- [ ] Retención de datos: **pendiente de decisión de negocio** (bloqueante #18). No bloquea escribir la migración, sí bloquea producción.
+PostgreSQL permite multiples `NULL` bajo una restriccion `UNIQUE`, por lo que esta estrategia no modifica ni viola el esquema existente.
 
-### 2.3 Número de migración
+Consecuencia aceptada: los RPC existentes que buscan personas por `telefono_e164` no encontraran automaticamente estos leads temporales. El flujo de ventas existente crea o encuentra al cliente definitivo y, despues de la venta, la accion nueva `vincular_lead_convertido` conecta los diagnosticos con ese cliente y archiva el lead temporal. No se modifica el flujo de ventas.
 
-- [ ] Confirmar con Miled el número antes de escribir el archivo (siguiente libre visible: **0068**; puede estar reclamado en ramas sin merge — trampa #5 del CLAUDE.md del OS).
+## 3. Modelo de datos final
 
-## 3. Identidad y deduplicación (simplificada por D2)
+Se agregan tres tablas:
 
-Como el wizard exige **email y teléfono juntos**, desaparecen los casos parciales. Solo quedan tres situaciones, resueltas por el RPC:
+```text
+quiz_versiones
+       1
+       |
+       | N
+diagnostico_envios N ---- 1 personas (existente)
+       1
+       |
+       | N
+diagnostico_respuestas
+```
 
-| Situación al recibir el envío | Acción |
-|---|---|
-| Email **y** teléfono coinciden con la misma persona existente | Vincular el envío a esa persona. Si ya es cliente, **no** degradarla a lead. |
-| No coincide nada (normalizado) | Crear `personas` con `estado='lead'` y vincular. |
-| Coincide algo pero **contradice** (email de una persona con teléfono de otra, o email/teléfono de personas distintas) | **No crear, no fusionar, no sobrescribir.** Guardar el envío con `necesita_revision=true` y `resolucion_identidad='revision'` para que un humano decida. |
+### 3.1 `quiz_versiones`
 
-Normalización previa en servidor antes de comparar: email trim + minúsculas; teléfono a E.164 (máx. 15 dígitos). Nunca confiar en el formato del navegador. Nunca exponer en la respuesta del endpoint si hubo coincidencias con personas existentes.
+Una fila por version o variante A/B. Contiene la definicion completa usada para validar, interpretar y comparar el quiz.
 
-## 4. Regla de lead caliente (D5/D6)
+| Campo | Tipo | Regla |
+|---|---|---|
+| `id` | `uuid` | PK, `gen_random_uuid()` |
+| `codigo` | `text` | UNIQUE, identificador enviado por el frontend, por ejemplo `diagnostico-cripto-v1-a` |
+| `funnel` | `text` | Familia del funnel, por ejemplo `diagnostico-cripto` |
+| `variante` | `text` | Variante experimental, por ejemplo `control` o `capital-first` |
+| `version` | `integer` | Mayor que cero |
+| `estado` | `text` | `draft`, `active`, `paused` o `archived` |
+| `definicion` | `jsonb` | Preguntas, opciones, reglas y configuracion completa |
+| `publicada_at` | `timestamptz` | Momento de publicacion |
+| `created_at` | `timestamptz` | Creacion del registro |
 
-Rangos confirmados de la pregunta de capital:
+Restricciones:
 
-1. Menos de 10.000 USD
-2. Entre 10.000 y 25.000 USD
-3. Entre 25.000 y 50.000 USD
-4. Entre 50.000 y 100.000 USD
-5. Entre 100.000 y 250.000 USD
-6. Más de 250.000 USD
+- `UNIQUE(codigo)`.
+- `UNIQUE(funnel, variante, version)`.
+- Una version publicada es inmutable.
+- Para cambiar preguntas, opciones, orden o reglas se crea otra version.
+- Primera version publicada: `diagnostico-cripto-v1-a`.
 
-**Regla:** lead caliente = respuesta en los rangos 2–6 (capital > 10.000 USD). Se calcula **en el RPC** a partir del `answer_id` estructurado, se guarda `es_lead_caliente` + `motivo_calificacion` + versión de la regla (`hot-lead-v1`). Si un envío viejo trae un rango ambiguo respecto del umbral, el flag queda `NULL` (indeterminado), nunca `false`.
+### 3.2 `diagnostico_envios`
 
-## 5. Plan de desarrollo (fases separadas, PRs acotados)
+Una fila por recorrido del usuario. Puede representar un inicio, progreso, abandono o finalizacion.
 
-### Fase A — Persistencia segura (arranca cuando §2 esté completa)
+| Campo | Tipo | Regla |
+|---|---|---|
+| `id` | `uuid` | PK |
+| `session_id` | `uuid` | UNIQUE, idempotencia del recorrido |
+| `quiz_version_id` | `uuid` | FK obligatoria a `quiz_versiones` |
+| `persona_id` | `uuid` | FK a `personas`; nullable antes de completar, obligatoria al completar |
+| `schema_version` | `integer` | Version del contrato API, inicialmente `1` |
+| `estado` | `text` | `started`, `in_progress`, `dropped` o `completed` |
+| `nombre_capturado` | `text` | Snapshot del nombre enviado |
+| `email_capturado` | `text` | Snapshot del email normalizado |
+| `telefono_e164_capturado` | `text` | Telefono obligatorio normalizado; fuente del modulo de leads |
+| `pais_capturado` | `text` | Pais informado o derivado |
+| `consentimiento_aceptado` | `boolean` | Debe ser `true` al completar |
+| `consentimiento_version` | `text` | Version del texto aceptado |
+| `consentimiento_at` | `timestamptz` | Momento de aceptacion |
+| `started_at` | `timestamptz` | Inicio del recorrido |
+| `last_activity_at` | `timestamptz` | Ultima actividad recibida |
+| `finished_at` | `timestamptz` | Finalizacion real |
+| `dropped_at` | `timestamptz` | Abandono conocido |
+| `last_step_id` | `text` | Ultimo paso visitado |
+| `last_step_index` | `integer` | Posicion del ultimo paso |
+| `utm_source` | `text` | Capturado automaticamente de la URL; nullable |
+| `utm_medium` | `text` | Capturado automaticamente de la URL; nullable |
+| `utm_campaign` | `text` | Capturado automaticamente de la URL; nullable |
+| `utm_content` | `text` | Capturado automaticamente de la URL; nullable |
+| `utm_term` | `text` | Capturado automaticamente de la URL; nullable |
+| `referrer` | `text` | `document.referrer`, si esta disponible |
+| `capital_min_usd` | `numeric(14,2)` | Limite inferior derivado de la respuesta |
+| `capital_max_usd` | `numeric(14,2)` | Limite superior; `NULL` para rango abierto |
+| `es_lead_caliente` | `boolean` | Calculado por servidor; `NULL` si no es determinable |
+| `qualification_rule_version` | `text` | Version de la regla, inicialmente `hot-lead-v1` |
+| `motivo_calificacion` | `text` | Explicacion reproducible de la clasificacion |
+| `diagnosis_version` | `text` | Version del motor de diagnostico |
+| `diagnosis_result` | `jsonb` | Snapshot del resultado mostrado al usuario |
+| `created_at` | `timestamptz` | Creacion |
+| `updated_at` | `timestamptz` | Ultimo upsert |
 
-1. `0068_diagnostico.sql` (número confirmado): tablas + CHECKs + índices + **RLS day 1**.
-2. RPC transaccional de ingesta en la misma migración: identidad (§3) → upsert envío por `session_id` → upsert respuestas → derivar capital → lead caliente (§4) → marca de revisión. Todo-o-nada.
-3. Idempotencia: mismo `session_id` no duplica; un `completed` nunca vuelve a `in_progress` por un beacon tardío; respuestas repetidas se actualizan.
-4. Endpoint en el OS: `apps/inbox/app/api/lead/route.ts` (port del endurecimiento del stub actual: allow-list, honeypot, body cap, same-origin, rate limit, logs sin PII en prod) que llama al RPC con `service_role` **solo en servidor**.
-5. Wizard portado a `apps/inbox` como ruta pública `/quiz` (React 19 → 18: portar componentes, **no** copiar el lockfile).
-6. Tests: nuevos (RPC/identidad/idempotencia/endpoint) + los 1.246 del OS en verde + suite del quiz adaptada.
-7. `supabase db reset` en limpio antes del PR.
+`diagnosis_result` se persiste. Esto permite reproducir exactamente lo que vio el usuario aunque las reglas cambien despues.
 
-**Salida:** los leads persisten en Supabase aunque el reporte aún no exista.
+La version inicial del consentimiento es `contacto-v1`.
 
-### Fase B — Módulo `/leads` (consulta)
+Checks principales:
 
-- Permiso `leads` (`ModuloKey` + asignación a quién define Miled/Berni), entrada en `OsNav`, `requireModulo`.
-- Listado: fecha, nombre, contacto, capital, calificación, estado del funnel, último paso (dropoff), estado de identidad, conversión.
-- Filtros: fechas, caliente, estado funnel, revisión, banda de capital, pregunta de abandono, búsqueda.
-- Detalle: contacto y consentimiento, UTMs, timeline, todas las respuestas en orden, motivo de calificación, aviso de conflicto de identidad, link a la persona.
-- CSS nuevo a `app/inbox.css` (nunca `globals.css` — trampa #3).
+- `completed` exige `persona_id`, contacto completo, consentimiento y `finished_at`.
+- `dropped` exige `dropped_at`.
+- `last_step_index >= 0` cuando exista.
+- Capital no negativo y `capital_max_usd >= capital_min_usd` cuando ambos existan.
+- Un estado `completed` nunca puede volver a un estado anterior.
 
-### Fase C — Alerta de triaje (D8)
+Indices iniciales:
 
-- Novedad `entidad='diagnostico', accion='lead_caliente'` en la lista blanca de `lib/novedades.ts`.
-- Push/email al triaje solo con aprobación de privacidad (sin capital exacto en la notificación).
+- `UNIQUE(session_id)`.
+- `(quiz_version_id, created_at DESC)`.
+- `(estado, created_at DESC)`.
+- `(es_lead_caliente, created_at DESC)`.
+- `(telefono_e164_capturado, email_capturado)` para localizar el lead propio del modulo.
+- `persona_id`.
 
-### Fase D — Producción (con Miled)
+### 3.3 `diagnostico_respuestas`
 
-- Revisión del PR de release, `db pull` si producción cambió mientras desarrollábamos.
-- Migración aplicada a mano por Miled **antes** de desplegar código (trampa #4).
-- Smoke test con datos de prueba + hosting definido (bloqueante #14: ahí se define el rate limit real).
+Una fila por pregunta respondida dentro de un envio. No existen columnas especificas para preguntas concretas.
 
-## 6. Reglas fijas (peligros acordados)
+| Campo | Tipo | Regla |
+|---|---|---|
+| `id` | `uuid` | PK |
+| `envio_id` | `uuid` | FK a `diagnostico_envios`, `ON DELETE CASCADE` |
+| `question_id` | `text` | ID estable dentro de la version |
+| `question_type` | `text` | Tipo generico de respuesta |
+| `question_text` | `text` | Snapshot del texto mostrado |
+| `question_order` | `integer` | Orden mostrado |
+| `answer_id` | `text` | ID de opcion, cuando corresponda |
+| `answer_text` | `text` | Snapshot legible de la respuesta |
+| `answer_value` | `jsonb` | Valor canonico y extensible |
+| `answered_at` | `timestamptz` | Momento informado por el cliente |
+| `created_at` | `timestamptz` | Persistencia |
 
-1. **Migración antes que código**: aplicar la migración antes de desplegar código que lea las tablas nuevas; si no, PostgREST devuelve 400 en silencio y las pantallas quedan vacías (trampa #4).
-2. **Migraciones append-only**: nunca editar una ya mergeada; se agrega una nueva encima.
-3. **RLS habilitado desde la creación** de las tablas nuevas; `service_role` únicamente en código de servidor; el endpoint público nunca expone la clave.
-4. **Endpoint público endurecido**: validación con esquema cerrado, límites de tamaño/cantidad/longitud, rate limit por IP, honeypot, `session_id` UUID real, códigos HTTP honestos, **cero PII en logs de producción**.
-5. **Identidad conservadora**: nunca fusionar ni sobrescribir automáticamente; contradicción → `necesita_revision` (§3).
-6. **Lead caliente solo en servidor** (D6); el cliente puede decorar la UI, no decide prioridad comercial.
-7. **Idempotencia de beacons**: el abandono no puede pisar una finalización (§5 Fase A.3).
-8. **Tests primero en el repo del OS** (tests → verlos fallar → implementar); `supabase db reset` en limpio antes de cada PR.
-9. **Retención de datos**: decisión pendiente de Berni (bloqueante #18) — el snapshot de contacto en el envío duplica PII; definir política antes de producción.
-10. **Nada bajo `app/c/` ni `app/e/` ni envío de comunicaciones reales** sin validación explícita (reglas del CLAUDE.md del OS).
+Restricciones e indices:
 
-## 7. Cómo seguimos
+- `UNIQUE(envio_id, question_id)` para upsert idempotente.
+- `question_order >= 0`.
+- Indice `(question_id, answer_id)`.
 
-1. Agustín completa §2.1 (JSON) y §2.2 (tablas) → se actualiza este doc.
-2. Con eso cerrado, se escribe `0068_diagnostico.sql` + RPC, se valida con `supabase db reset` en local (guía `docs/10`).
-3. Fase A completa → PR → Fase B → PR → Fase C.
+Tipos iniciales soportados sin cambiar tablas:
+
+```text
+single_choice
+multiple_choice
+range
+allocation
+number
+boolean
+text
+```
+
+`answer_value jsonb` permite agregar formatos futuros sin migraciones. El endpoint valida el contenido contra `quiz_versiones.definicion`.
+
+## 4. Definicion de preguntas y opciones
+
+Las preguntas no viven en columnas ni requieren una tabla por version. Se guardan dentro de `quiz_versiones.definicion`:
+
+```json
+{
+  "schema_version": 1,
+  "questions": [
+    {
+      "id": "capital_disponible",
+      "type": "range",
+      "required": true,
+      "text": "¿Que capital podrias desplegar?",
+      "options": [
+        {
+          "id": "capital_lt_10k",
+          "text": "Menos de 10.000 USD",
+          "value": {
+            "currency": "USD",
+            "min": 0,
+            "max": 10000,
+            "min_inclusive": true,
+            "max_inclusive": false
+          }
+        },
+        {
+          "id": "capital_10k_25k",
+          "text": "Entre 10.000 y 25.000 USD",
+          "value": {
+            "currency": "USD",
+            "min": 10000,
+            "max": 25000,
+            "min_inclusive": true,
+            "max_inclusive": false
+          }
+        }
+      ]
+    }
+  ],
+  "qualification": {
+    "version": "hot-lead-v1",
+    "question_id": "capital_disponible",
+    "hot_answer_ids": [
+      "capital_10k_25k",
+      "capital_25k_50k",
+      "capital_50k_100k",
+      "capital_100k_250k",
+      "capital_gt_250k"
+    ]
+  },
+  "diagnosis": {
+    "version": "diagnostico-v1"
+  }
+}
+```
+
+Puede haber dos o tres variantes con preguntas completamente distintas. Solo deben compartir el contrato exterior y declarar su propia definicion.
+
+## 5. Contrato JSON final
+
+`schema_version` versiona la API. `quiz_version` identifica las preguntas y reglas. Cambiar preguntas no cambia `schema_version`.
+
+```json
+{
+  "schema_version": 1,
+  "quiz_version": "diagnostico-cripto-v1-a",
+  "session_id": "68cf2bd5-7c57-4cd3-9548-9197de2ebc44",
+  "event": "completed",
+  "occurred_at": "2026-09-21T15:40:00.000Z",
+  "source": {
+    "utm_source": "instagram",
+    "utm_medium": "organic",
+    "utm_campaign": "diagnostico-septiembre",
+    "utm_content": "reel-mercado",
+    "utm_term": null,
+    "referrer": "https://www.instagram.com/"
+  },
+  "progress": {
+    "step_id": "contact",
+    "step_index": 9
+  },
+  "lead": {
+    "name": "Juan Perez",
+    "email": "juan@example.com",
+    "phone": "+5493585000000",
+    "country": "AR",
+    "consent": {
+      "accepted": true,
+      "version": "contacto-v1",
+      "accepted_at": "2026-09-21T15:39:40.000Z"
+    }
+  },
+  "answers": [
+    {
+      "question_id": "experiencia",
+      "type": "single_choice",
+      "question_text": "¿Como describis tu experiencia?",
+      "order": 1,
+      "answer_id": "intermedia",
+      "answer_text": "Intermedia",
+      "value": {
+        "code": "intermedia"
+      },
+      "answered_at": "2026-09-21T15:32:00.000Z"
+    },
+    {
+      "question_id": "capital_disponible",
+      "type": "range",
+      "question_text": "¿Que capital podrias desplegar?",
+      "order": 2,
+      "answer_id": "capital_10k_25k",
+      "answer_text": "Entre 10.000 y 25.000 USD",
+      "value": {
+        "currency": "USD",
+        "min": 10000,
+        "max": 25000,
+        "min_inclusive": true,
+        "max_inclusive": false
+      },
+      "answered_at": "2026-09-21T15:35:00.000Z"
+    }
+  ],
+  "client_context": {
+    "locale": "es-AR",
+    "timezone": "America/Argentina/Cordoba"
+  }
+}
+```
+
+Reglas:
+
+- `started`, `progress` y `dropped` pueden no incluir `lead`.
+- `completed` exige `lead`, consentimiento y todas las preguntas requeridas por esa version.
+- `source` es opcional; sus campos son nullable.
+- El backend obtiene la version por `quiz_version`, valida cada `question_id`, `type` y `answer_id`, y no acepta preguntas ajenas a esa version.
+- El backend recalcula valores derivados y no confia en una clasificacion enviada por el cliente.
+- La respuesta publica no expone `persona_id`.
+
+Respuesta del endpoint:
+
+```json
+{
+  "ok": true,
+  "session_id": "68cf2bd5-7c57-4cd3-9548-9197de2ebc44",
+  "submission_id": "8447869a-a77a-4f4c-b4c8-45507bd5eb21",
+  "status": "completed"
+}
+```
+
+## 6. Captura automatica de atribucion
+
+El usuario no completa UTMs. Al iniciar el recorrido, el frontend lee:
+
+```text
+utm_source
+utm_medium
+utm_campaign
+utm_content
+utm_term
+document.referrer
+```
+
+Los valores se guardan junto con el `session_id` para no perderlos durante la navegacion. Si no vienen en la URL, se envian como `null`. El backend aplica limites de longitud y no los usa para construir SQL dinamico.
+
+## 7. Flujo transaccional del RPC
+
+Para `completed`, una sola transaccion:
+
+1. Valida `schema_version`, `quiz_version` activa y contrato cerrado.
+2. Normaliza email y telefono E.164.
+3. Crea o bloquea la fila de `diagnostico_envios` por `session_id`; si ya esta `completed`, devuelve el resultado existente sin crear otra persona.
+4. Toma un advisory lock transaccional derivado del email normalizado y el telefono para evitar carreras entre dos sesiones del mismo contacto.
+5. Busca en `diagnostico_envios` un envio completado anterior con el mismo email + telefono y una `persona_id` cuyo estado siga siendo `lead`.
+6. Si encuentra ese lead del modulo, lo reutiliza sin actualizarlo. Si no lo encuentra, crea una nueva `personas` con `estado='lead'` y `telefono_e164=NULL`, segun §2.
+7. Actualiza el envio reclamado y le asigna la `persona_id`.
+8. Hace upsert de respuestas por `(envio_id, question_id)`.
+9. Deriva capital y lead caliente desde la definicion almacenada.
+10. Persiste el snapshot del diagnostico.
+11. Confirma todo o revierte todo.
+
+El bloqueo por `session_id` evita duplicados por reintentos. El advisory lock por contacto evita que dos sesiones distintas y simultaneas creen dos personas lead para el mismo email + telefono.
+
+Transiciones permitidas:
+
+```text
+started -> in_progress
+started -> dropped
+in_progress -> dropped
+started -> completed
+in_progress -> completed
+dropped -> completed
+completed -> completed (idempotente)
+```
+
+Nunca se permite `completed -> dropped` ni `completed -> in_progress`.
+
+## 8. Regla de lead caliente
+
+Rangos confirmados:
+
+1. Menos de 10.000 USD.
+2. Entre 10.000 y 25.000 USD.
+3. Entre 25.000 y 50.000 USD.
+4. Entre 50.000 y 100.000 USD.
+5. Entre 100.000 y 250.000 USD.
+6. Mas de 250.000 USD.
+
+Para `hot-lead-v1`, los `answer_id` de los rangos 2 a 6 producen `es_lead_caliente=true`. La regla se ejecuta en servidor y se registra junto con `qualification_rule_version` y `motivo_calificacion`.
+
+La regla efectiva es capital **desde 10.000 USD inclusive** (`>= 10.000`), de acuerdo con las bandas confirmadas.
+
+## 9. Conversion posterior a la venta
+
+La conversion forma parte de la primera entrega, pero no reemplaza ni modifica el flujo actual de ventas.
+
+Secuencia:
+
+1. El equipo registra la venta mediante el flujo existente del OS.
+2. Ese flujo crea o encuentra la persona cliente definitiva y registra su programa.
+3. Desde `/leads`, un usuario con permiso `leads` selecciona el cliente definitivo.
+4. La accion server-side llama a `vincular_lead_convertido(p_lead_id, p_cliente_id)`.
+5. La funcion verifica que el origen sea una persona `lead` creada y referenciada por este modulo.
+6. Verifica que el destino sea una persona `cliente` y que tenga al menos un programa.
+7. Actualiza solo las tablas nuevas: todos los `diagnostico_envios.persona_id` del lead pasan al cliente.
+8. Actualiza la persona temporal creada por el modulo a `estado='archivado'`; no la elimina y no le asigna telefono.
+9. Devuelve el cliente vinculado y la cantidad de envios reasignados.
+
+La operacion es transaccional e idempotente. Repetirla con el mismo origen y destino no duplica ni pierde datos. No modifica nombre, email, telefono, programas ni ningun otro dato del cliente definitivo.
+
+## 10. Modulo `/leads`
+
+El listado representa envios del quiz, no una tabla raiz adicional llamada `leads`.
+
+Columnas:
+
+- Fecha.
+- Version/variante.
+- Nombre, email y telefono capturados.
+- Capital.
+- Calificacion.
+- Estado del funnel.
+- Ultimo paso.
+- Campaña.
+- Conversion: pendiente o vinculada a un cliente con programa.
+
+Filtros:
+
+- Fechas.
+- Version/variante.
+- Lead caliente.
+- Estado del funnel.
+- Banda de capital.
+- Pregunta/paso de abandono.
+- UTMs.
+- Busqueda por nombre, email o telefono capturados.
+
+Detalle:
+
+- Contacto y consentimiento.
+- Version del quiz.
+- UTMs y referrer.
+- Tiempos y progreso.
+- Respuestas en orden.
+- Diagnostico mostrado.
+- Regla y motivo de calificacion.
+- Link a la persona asociada: lead temporal antes de convertir o cliente definitivo despues de vincular.
+- Accion manual para vincular el lead con un cliente despues de que la venta exista.
+
+Permisos:
+
+- Nueva clave logica `leads` en el mecanismo existente de modulos.
+- Proteccion en pagina, APIs y acciones de servidor; no basta con ocultar la navegacion.
+- CSS nuevo en `app/inbox.css`, nunca en `globals.css`.
+
+## 11. Seguridad y privacidad
+
+- RLS habilitado al crear las tres tablas.
+- Sin escrituras directas desde el navegador a Supabase.
+- `service_role` solo en servidor.
+- Esquema de validacion cerrado, con limites de cuerpo, respuestas y longitudes.
+- Rate limit compartido o WAF antes de produccion.
+- Honeypot y validacion de origen segun `docs/09-security.md`.
+- Cero PII en logs de produccion.
+- Timestamps del cliente se validan; `created_at` y recepcion del servidor son autoritativos.
+- Retencion sin vencimiento por decision de negocio. Debe existir capacidad futura de eliminacion o anonimizacion ante una solicitud aplicable.
+
+## 12. Plan de desarrollo
+
+### Fase A - Migracion y RPC
+
+1. Crear `0068_quiz_leads.sql`.
+2. Crear `quiz_versiones`, `diagnostico_envios` y `diagnostico_respuestas`.
+3. Crear CHECKs, FKs, indices y RLS.
+4. Insertar `diagnostico-cripto-v1-a` con la definicion vigente.
+5. Implementar RPC transaccional e idempotente de ingesta.
+6. Implementar `vincular_lead_convertido` para la conversion posterior a la venta.
+7. Probar migracion con `supabase db reset`.
+
+### Fase B - Endpoint y funnel
+
+1. Portar el wizard a `/quiz` dentro de `apps/inbox`.
+2. Incorporar selector de pais/prefijo para normalizacion E.164.
+3. Capturar automaticamente UTMs y referrer.
+4. Implementar eventos `started`, `progress`, `dropped` y `completed`.
+5. Implementar `POST /api/lead` con validacion y controles de seguridad.
+6. Persistir el contacto antes de mostrar el resultado final.
+7. Adaptar tests del quiz y mantener la suite del OS en verde.
+
+### Fase C - Modulo `/leads`
+
+1. Agregar permiso y navegacion.
+2. Crear listado server-side con paginacion y filtros.
+3. Crear detalle del envio.
+4. Mostrar respuestas dinamicamente desde los snapshots, sin asumir preguntas fijas.
+5. Agregar la accion de vinculacion posterior a la venta con selector de cliente.
+
+### Fase D - Alertas y produccion
+
+1. Definir canal y destinatarios de triaje.
+2. Implementar alerta idempotente en un PR separado.
+3. Implementar rate limiting final.
+4. Miled aplica la migracion manualmente antes del codigo.
+5. Ejecutar smoke test con datos falsos.
+
+## 13. Criterios de aceptacion
+
+- Cambiar preguntas o lanzar otra variante no requiere migracion ni cambios del endpoint.
+- Dos variantes pueden recibir trafico simultaneamente.
+- Un `session_id` nunca crea dos envios ni dos personas por reintentos.
+- La primera finalizacion de un contacto crea una persona con `estado='lead'`; quizzes posteriores del mismo contacto reutilizan solo ese lead del modulo.
+- Ninguna operacion consulta, reutiliza o modifica clientes u otras personas ajenas al modulo.
+- La vinculacion posterior a una venta solo reasigna diagnosticos al cliente seleccionado y archiva el lead temporal.
+- Nombre, email, telefono y consentimiento quedan disponibles en el modulo de leads.
+- Un beacon tardio no degrada un envio completado.
+- La clasificacion se reproduce desde version, respuesta y regla almacenadas.
+- El modulo renderiza preguntas desconocidas usando sus snapshots.
+- No se cambia ninguna tabla, restriccion ni RPC existente.
+- Migracion, tests y TypeScript pasan antes del PR.
+
+## 14. Luz verde
+
+No quedan decisiones funcionales o tecnicas bloqueantes para comenzar el desarrollo local. El orden de ejecucion es:
+
+1. Tests de migracion/RPC que fallen.
+2. `0068_quiz_leads.sql`.
+3. RPC de ingesta y vinculacion posterior a venta.
+4. Endpoint y port del funnel.
+5. Modulo `/leads`.
+
+Hosting y rate limiting distribuido siguen pendientes para produccion, pero no bloquean la implementacion local ni los PRs de las fases A-C.
