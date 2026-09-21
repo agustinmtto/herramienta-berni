@@ -91,7 +91,9 @@ function Picker({
           <strong>Teléfonos distintos.</strong> Quiz: <code>{leadTelefono || "sin teléfono"}</code> · Cliente:{" "}
           <code>{cliente!.telefono_e164 || "sin teléfono"}</code>
           <label>
-            <input type="checkbox" checked={confirmado} onChange={(e) => setConfirmado(e.target.checked)} />
+            {/* name="confirmar" es OBLIGATORIO: sin name el dato nunca llega
+                en el FormData y el RPC rechaza aunque el usuario lo marque. */}
+            <input type="checkbox" name="confirmar" checked={confirmado} onChange={(e) => setConfirmado(e.target.checked)} />
             Confirmo que es la misma persona y quiero vincular de todos modos
           </label>
         </div>
