@@ -1,5 +1,8 @@
 # Análisis integral: Quiz Funnel y módulo de leads de MetaCrypto OS
 
+> ⚠️ **ARCHIVADO / OBSOLETO** (16-sep-2026, diseño técnico previo a la implementación).
+> El diseño que se implementó y está vigente es `docs/11-migracion-modulo-leads.md` (spec funcional) + `docs/12-spec-sdd-fases-migracion-leads.md` (fases). Este análisis se conserva como referencia del DDL y del razonamiento previo; **no lo uses como spec**.
+
 Fecha del análisis: 16 de septiembre de 2026
 
 Estado: diseño técnico previo a implementación

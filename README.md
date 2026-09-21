@@ -6,28 +6,23 @@ Lead magnet para el negocio de Berni (Metacrypto Club, cripto): landing con wiza
 
 ## Estado actual (sept 2026)
 
-- ✅ **App MVP** integrada (Next.js 15, deploy Netlify-ready): wizard con 8 preguntas definitivas config-driven → contacto → análisis → **pantalla final única** con diagnóstico determinístico + 3 video placeholders + CTA
-- ✅ Motor determinístico por reglas sobre las respuestas (`lib/engine.js`); sin IA (decisión firme)
-- ✅ JSON agnóstico `pregunta/respuesta` → `POST /api/lead` (stub con validación de seguridad; Supabase del negocio cuando estén los accesos)
-- ✅ Tracking mínimo: `session_id` + **hasta qué pregunta llega el lead** mediante IDs estables `q1`…`q8` (dropoff por `sendBeacon`)
-- ✅ Documento HTML y generador PDF conservados como base técnica, sin botón de descarga visible
-- ✅ Entrega WhatsApp: teléfono obligatorio, CTA al `+54 9 3585 401429` y mensaje con respuestas
-- ✅ Tests: `test/` — unitarios + integración + seguridad (39/39)
-- ✅ Preguntas finales incorporadas: 8 preguntas, con composición visual por rangos en la pregunta 3
-- ✅ Código y esquema actual de MetaCrypto OS incorporados en `metacrypto-os-app/` como base de integración
-- ⏳ Conexión efectiva con Supabase, deploy, PDF por email real (Resend) y videos reales
+- ✅ **Integración implementada en el OS del negocio** (rama `feature/leads-a-migracion-rpc`): funnel portado a `metacrypto-os-app/apps/inbox` como ruta pública `/quiz`, persistencia real en Supabase local (migraciones `0068`/`0069` + RPC transaccional `registrar_diagnostico`), módulo privado `/leads` con permiso propio, vinculación post-venta con validación de teléfono + rollback auditado
+- ✅ Fases 0–C cerradas y Fase D cierre local (ver `docs/12` §6) — pendiente solo externo (Miled + negocio)
+- ✅ Suite del OS: 1.304 tests en verde · `tsc` limpio
+- ✅ **MVP standalone en la raíz** (histórico, conservado como referencia): wizard con 8 preguntas config-driven, motor determinístico (`lib/engine.js`), JSON `pregunta/respuesta` → `POST /api/lead` (stub), tests 39/39 en `test/`
+- ⏳ Pendiente externo: hosting/rate limit definitivo, confirmación de migraciones con Miled, upgrade de Next (RCE crítica), videos reales, alerta de triaje, PDF por email (Resend)
 
 ## Repositorio unificado
 
 Este repositorio contiene ahora los dos lados de la integración:
 
-- La raíz conserva el Quiz Funnel.
-- `metacrypto-os-app/` contiene una copia limpia del sistema interno y sus migraciones, tomada de su `main` en el commit `f2aee5c`.
-- `ANALISIS_INTEGRACION_QUIZ_LEADS.md` documenta la arquitectura, el modelo de datos y el plan de implementación.
+- La raíz conserva el Quiz Funnel del MVP standalone (histórico, referencia de comportamiento).
+- `metacrypto-os-app/` contiene una copia limpia del sistema interno y sus migraciones, tomada de su `main` en el commit `f2aee5c` — **acá vive la implementación vigente** (`/quiz` + `/leads`).
+- `docs/archive/ANALISIS_INTEGRACION_QUIZ_LEADS-v1.0-20260916.md` es el análisis técnico previo (obsoleto como spec; la vigente es `docs/11`).
 - `documentacion_prototipo.txt` resume el alcance y estado funcional del funnel.
 - `metacrypto-os-app/esquema-metacrypto-os.sql` es el DDL standalone analizado.
 
-La incorporación del sistema no significa que el funnel ya persista datos: deja todo el código y la documentación en un único Git para implementar la integración desde aquí.
+La implementación de la integración ya ocurrió (fases 0–C cerradas, `docs/12`): el funnel persiste vía RPC en el Supabase del OS.
 
 ## Cómo correrlo y testearlo
 
@@ -66,8 +61,8 @@ prototipos/
   referencia/landings/  # landings del negocio = fuente del design system
   frames/               # capturas del prototipo
 docs/                   # documentación viva (fuente de verdad del proyecto)
-metacrypto-os-app/      # sistema interno, Supabase, migraciones y DDL de referencia
-ANALISIS_INTEGRACION_QUIZ_LEADS.md # análisis técnico consolidado
+  archive/              # transcripciones crudas + análisis previo (obsoletos, referencia)
+metacrypto-os-app/      # sistema interno, Supabase, migraciones y DDL de referencia (implementación vigente)
 documentacion_prototipo.txt        # síntesis funcional del prototipo
 scripts/transcribe.py   # utilidad: transcribe audios con Whisper
 ```
@@ -75,10 +70,9 @@ scripts/transcribe.py   # utilidad: transcribe audios con Whisper
 ## Cómo funcionan los datos
 
 1. El wizard guarda las respuestas en estado del componente (nada persiste en el navegador).
-2. Al terminar: build del **JSON agnóstico** `{session_id, lead{name,email,phone,consent}, signals{dropoff_question,finished_at}, answers[{pregunta,respuesta}]}` → `POST /api/lead`.
-3. **Hoy:** el endpoint valida (413/400/422) y loguea en consola; no se persiste nada.
-4. **Siguiente fase:** contrato versionado → `personas` + tablas nuevas de envíos y respuestas en Supabase, con clasificación backend e idempotencia. El diseño completo está en `ANALISIS_INTEGRACION_QUIZ_LEADS.md`.
-5. Si el lead **abandona** a mitad del wizard, un `sendBeacon` en `pagehide` manda el payload parcial con `dropoff_question` (la métrica clave del negocio).
+2. MVP standalone (raíz): build del **JSON agnóstico** `{session_id, lead, signals, answers[{pregunta,respuesta}]}` → `POST /api/lead` (stub con validación, loguea en consola).
+3. **Implementación vigente (OS, `metacrypto-os-app/`):** contrato versionado con eventos `started/progress/dropped/completed` → `POST /api/lead` → RPC transaccional `registrar_diagnostico` → `personas` + `quiz_versiones` + `diagnostico_envios` + `diagnostico_respuestas`, con clasificación server-side, idempotencia y deduplicación. El diseño completo está en `docs/11`.
+4. Si el lead **abandona** a mitad del wizard, un `sendBeacon` en `pagehide` manda el payload parcial con las respuestas acumuladas (la métrica clave del negocio: hasta qué pregunta llegó).
 
 ## Documentación
 
@@ -88,14 +82,17 @@ scripts/transcribe.py   # utilidad: transcribe audios con Whisper
 | `docs/00-OVERVIEW.md` | Objetivo, flujo de negocio, decisiones, stack, estado |
 | `docs/01-reunion-integracion.md` | Reunión con el negocio (transcripción fiel + nota de decisiones posteriores) |
 | `docs/02-audio-berni-requisitos.md` | Requisitos de Berni: qué preguntar y por qué, ganchos |
-| `docs/03-especificacion.md` | Spec técnica: JSON, wizard, motor, integración, tracking, final+PDF |
+| `docs/03-especificacion.md` | ⚠️ Histórica (MVP standalone): JSON, wizard, motor, tracking, final+PDF — la spec vigente es `docs/11` |
 | `docs/04-design-system.md` | Colores (oro/negro), tipografía, componentes |
 | `docs/05-prototipo.md` | Qué hace `prototipos/index.html` y qué conservar |
 | `docs/06-pendientes-y-preguntas.md` | Bloqueantes y **roadmap vivo** |
 | `docs/07-scm-gestion-configuracion.md` | Nombrado, estructura, branches, commits |
 | `docs/08-roadmap.md` | Modelo de trabajo (fases) y fases de implementación |
 | `docs/09-security.md` | Seguridad del endpoint, rate limiting y checklist preproducción |
-| `ANALISIS_INTEGRACION_QUIZ_LEADS.md` | Análisis integral del funnel, MetaCrypto OS, DDL y módulo de leads |
+| `docs/10-levantar-metacrypto-os-local.md` | Guía para levantar el OS + Supabase local |
+| `docs/11-migracion-modulo-leads.md` | **Spec funcional autoritativa** de la migración del módulo de leads |
+| `docs/12-spec-sdd-fases-migracion-leads.md` | Fases SDD con compuertas y estado |
+| `docs/archive/` | Transcripciones crudas y análisis previo, archivados (obsoletos, solo referencia) |
 | `documentacion_prototipo.txt` | Síntesis funcional y decisiones del prototipo |
 
 ## Cómo desarrollar (flujo de trabajo)

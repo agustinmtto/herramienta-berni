@@ -75,7 +75,7 @@ Convención: ✅ implementado y verificado (tests + curl) · ♻️ cubierto por
 | # | Ítem | Estado |
 |---|---|---|
 | 31 | Consentimiento explícito en el wizard antes de guardar PII | ✅ — se actualizó el texto del checkbox en la página de contacto para que sea claro y específico: acepta recibir el diagnóstico y que Metacrypto Club lo contacte |
-| 32 | Retención de datos (cuánto tiempo se conservan leads/responses/events) | ⏳ Pendiente — definir con el negocio |
+| 32 | Retención de datos (cuánto tiempo se conservan leads/responses/events) | ✅ Cerrado — decisión de negocio: sin vencimiento (docs/06 #18, docs/11 D14); capacidad de borrado puntual disponible vía SQL/RPC |
 | 33 | HTTPS-only en producción | ⏳ El host debe forzar. En producción: artefacto de build en `next start` detrás del servidor ( servidor del hosting). Verificar al deployar |
 
 ## Verificación (luz verde as necessary)

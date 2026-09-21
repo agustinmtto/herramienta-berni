@@ -9,7 +9,7 @@ Reglas obligatorias sobre el ciclo de vida del repo: nombrado de archivos, estru
 - **Código:** `kebab-case` para archivos/paths; `camelCase` para identificadores JS/TS; `PascalCase` para clases/componentes.
 - **Assets (imágenes, video, fuentes):** `contexto-descripcion.ext` (ej. `landing-hero-fondo.webp`), minúsculas, sin espacios ni acentos.
 - **Prohibido:** mezclar idiomas en un mismo filename, espacios, mayúsculas aleatorias, y sufijos tipo `final`, `final2`, `nuevo`, `copia`, `v2_DEFINITIVO-ok-ahora`. Versionado explícito solo vía git.
-- Las fuentes primarias crudas de la raíz (`Transcripcion_Reunion.md`, `transcripcion_audio.md`) **no se renombran**: son referidas por scripts/documentación; el contenido nuevo entra directo a `docs/`.
+- Las fuentes primarias crudas de la raíz (`Transcripcion_Reunion.md`, `transcripcion_audio.md`) ya fueron **archivadas** en `docs/archive/` con sufijo `-OBSOLETO-fuente-primaria-<fecha>` (su contenido vivo vive sintetizado en `docs/01` y `docs/02`); el contenido nuevo entra directo a `docs/`.
 
 **R:** la documentación es spec-driven y se referencia por ruta estable; renombrar archivos rompe el índice de `AGENTS.md` y los links entre docs.
 

@@ -2,9 +2,9 @@
 
 Documento autoritativo para implementar la persistencia del Quiz Funnel y el modulo `/leads` dentro de MetaCrypto OS. El alcance se limita al dominio nuevo de leads: no se modifica la estructura ni el comportamiento de las tablas existentes.
 
-> **Estado:** especificacion cerrada y con luz verde para desarrollar. Migracion asignada: `0068_quiz_leads.sql`.
+> **Estado:** especificacion cerrada y con luz verde para desarrollar. Migraciones asignadas: `0068_quiz_leads.sql` (esquema + RPC de ingesta) y `0069_vinculacion_validacion_rollback.sql` (validación de teléfono, auditoría y rollback de la vinculación). **Pendiente única confirmación formal de ambos números con Miled antes del release** (docs/06 #19).
 >
-> Insumos: `docs/03-especificacion.md`, `docs/06-pendientes-y-preguntas.md`, `docs/08-roadmap.md`, `docs/09-security.md`, `docs/10-levantar-metacrypto-os-local.md`, `ANALISIS_INTEGRACION_QUIZ_LEADS.md` y `metacrypto-os-app/CLAUDE.md`.
+> Insumos: `docs/03-especificacion.md`, `docs/06-pendientes-y-preguntas.md`, `docs/08-roadmap.md`, `docs/09-security.md`, `docs/10-levantar-metacrypto-os-local.md`, `docs/archive/ANALISIS_INTEGRACION_QUIZ_LEADS-v1.0-20260916.md` (histórico) y `metacrypto-os-app/CLAUDE.md`.
 
 ## 1. Alcance y decisiones cerradas
 

@@ -20,10 +20,10 @@
 | 14 | **Hosting final** (Vercel o Netlify) para producción | Define rate limiting real (reemplazando el in-memory best-effort de `lib/rate-limit.js`) y configuración de headers/HSTS | Agustín / Miled | Abierto |
 | 15 | **Rate limiting "real"** (Upstash/Redis o WAF del hosting) reemplazando el in-memory | Anti-abuso del endpoint público | Equipo dev | Pendiente de #14 — call site en `lib/rate-limit.js` ya aislado |
 | 16 | ~~**Ámbito de seguridad con integraciones**~~ | Implementado para el módulo de leads: RLS day 1, service_role solo server, IDOR cubierto, SQLi parametrizado — checklist verificado en `docs/09` §Quiz Funnel en el OS | Equipo dev | ✅ Cerrado (Fase D local) |
-| 17 | **Next 16** para cerrar las 2 vulnerabilidades transitivas (postcss) que quedan en prod deps | Cerrar `npm audit --omit=dev` en 0 | Equipo dev | Pendiente — breaking change, planear upgrade |
+| 17 | **Upgrade de Next** para cerrar las vulnerabilidades de prod deps: repo raíz 2 transitivas (postcss, alto) vía `next@15`; **el OS (`metacrypto-os-app`) tiene 1 RCE crítica en `next` + 3 high (postcss/sharp/nanoid)** — ver #20 | Cerrar `npm audit --omit=dev` en 0 en ambos repos | Equipo dev | 🟡 Fusionado con #20 (mismo plan de upgrade) |
 | 18 | ~~**Retención de datos de leads**~~ | Sin vencimiento por decisión de negocio; mantener capacidad futura de eliminación/anonimización | Berni / Equipo dev | ✅ Cerrado |
 | 19 | ~~**Número de migración**~~ | Asignados `0068_quiz_leads.sql` y `0069_vinculacion_validacion_rollback.sql` — **falta confirmación formal con Miled antes del release** | Miled | 🟡 Confirmación pendiente |
-| 20 | **Upgrade de Next (bloqueante de prod)**: `npm audit --omit=dev` del OS muestra 1 vulnerabilidad **crítica** (RCE en next) + 3 high (postcss/sharp/nanoid) — preexisten al módulo de leads | No exponer `/quiz` en prod sin plan de upgrade | Miled / Equipo dev | Abierto — ver preguntas a Miled |
+| 20 | **Upgrade de Next del OS (bloqueante de prod)**: `npm audit --omit=dev` del OS muestra 1 vulnerabilidad **crítica** (RCE en next) + 3 high (postcss/sharp/nanoid) — preexisten al módulo de leads. Incluye el caso del repo raíz (#17) | No exponer `/quiz` en prod sin plan de upgrade | Miled / Equipo dev | Abierto — ver preguntas a Miled |
 
 ## Preguntas para Miled (cierre Fase D — bloqueantes de producción)
 

@@ -1,4 +1,9 @@
-# Especificación técnica (v1 — integración con Supabase)
+# Especificación técnica (v1 — MVP standalone) — HISTÓRICA
+
+> ⚠️ **Documento histórico del MVP standalone** (la app propia de este repo, pre-integración).
+> **La spec vigente y autoritativa de la integración con el OS del negocio es `docs/11-migracion-modulo-leads.md`**, con las fases de ejecución en `docs/12`.
+> Diferencias clave ya implementadas: el funnel vive en el OS (`/quiz`, decisión D1), el JSON `pregunta/respuesta` de §2 fue reemplazado por el contrato versionado (`schema_version`, eventos `started/progress/dropped/completed`, respuestas por `question_id`, consent versionado `contacto-v1`), y el endpoint persiste en Supabase vía RPC (ya no hay stub ni logs efímeros).
+> Este documento se conserva por trazabilidad: pantallas, orden del wizard, motor determinístico y restricciones de experiencia siguen vigentes como diseño de producto.
 
 Versión unificada a partir del prototipo + decisiones de la reunión. Los cambios de requisitos se empiezan editando aquí.
 
@@ -15,6 +20,8 @@ Versión unificada a partir del prototipo + decisiones de la reunión. Los cambi
 - El PDF no se ofrece en la experiencia visible. Se conservan el documento HTML y el generador existentes como base técnica para una iteración posterior por email.
 
 ## 2. Formato de datos
+
+> ⚠️ Histórico: este fue el formato del MVP standalone. El contrato implementado (contrato versionado, eventos, respuestas por `question_id`, snapshot de diagnóstico) está en `docs/11` §5 y en la migración `0068`.
 
 Principio acordado: JSON **agnóstico**, registros `pregunta / respuesta`. La composición conserva el contrato textual y serializa los cuatro rangos en una sola respuesta legible:
 
@@ -78,8 +85,10 @@ Restricciones de experiencia:
 
 ## 6. Tracking (mínimo requerido)
 
+> ✅ Implementado y superado: hoy todo se **persiste** (`diagnostico_envios` + `diagnostico_respuestas`) vía RPC, con estados `started/in_progress/dropped/completed`. La descripción de logs efímeros de abajo aplica solo al MVP standalone histórico.
+
 - **Métrica clave: hasta qué pregunta llega el lead** — si termina el cuestionario o en cuál abandona (`dropoff_question`). Los identificadores estables son `start`, `q1`…`q8`, `contact`, `analysis` y `result`; no dependen del copy visible.
-- El cliente conserva también el recorrido acumulado de etapas y lo incluye en el envío final o en el beacon de abandono. Mientras el endpoint siga sin persistencia, estos hitos se registran como metadatos no sensibles en logs y no constituyen todavía un reporte histórico durable.
+- El cliente conserva también el recorrido acumulado de etapas y lo incluye en el envío final o en el beacon de abandono. Mientras el endpoint siga sin persistencia, estos hitos se registran como metadatos no sensibles en logs y no constituyen todavía un reporte histórico durable. *(Histórico MVP: ver nota arriba.)*
 - Opcional/ampliable a futuro: UTMs, tiempo por pregunta, aperturas de email, video. No es requisito de lanzamiento.
 - Sesión identificable vía `session_id` (permite reproducir y ampliar tracking después).
 

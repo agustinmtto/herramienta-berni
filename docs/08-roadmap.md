@@ -104,7 +104,7 @@ Por funcionalidad/responsabilidad (no por carpetas):
 - [ ] PDF por email vía Resend + tracking de apertura (bloqueante #12) y quitar botón dev
 - [ ] Videos reales de Berni + host del player + embed trackeable (sub-pendiente del #11)
 - [ ] Alerta al triaje para lead caliente (notificación en el sistema)
-- [ ] Módulo de leads en el sistema (menú lateral, reporte filtrable — bloqueante #4, definir con Miled quién lo hace)
+- [x] Módulo de leads en el sistema (menú lateral, reporte filtrable — bloqueante #4) — ✅ hecho por nuestro equipo: Fase C de `docs/12` cerrada (permiso `leads`, listado con filtros y paginación, detalle con snapshots, vinculación con validación de teléfono + rollback auditado)
 
 **Salida:** flujo punta a punta funcionando en local: wizard → diagnóstico → entrega (video + PDF) → alerta → reporte.
 
@@ -145,4 +145,3 @@ A/B de formatos (largo vs. pop-up de continuación, orden de preguntas), anális
 | Cambios futuros en las preguntas | Config y JSON agnóstico permiten ajustar contenido sin rediseñar el endpoint |
 | Migrations destructivas sobre tablas del negocio | Review obligatoria de Miled en el PR de release; nunca `drop` sin migración inversa |
 | Secrets (Supabase/Resend) | Solo variables de entorno, nunca en repo (`docs/07` §5) |
-líneas 3-141

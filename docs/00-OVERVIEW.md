@@ -14,7 +14,7 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 2. El lead abre el link de la herramienta → landing + wizard.
 3. El wizard hace 8 preguntas definitivas (situación, dolor, composición, capital, horizonte, reacción a caídas, influencias y reglas). **Datos de contacto al final** (decisión clave).
 4. Al terminar → pantalla de análisis → **pantalla final única**: diagnóstico por pantalla + sección "tus recursos" con **3 videos placeholders** (la pregunta 2 determina cuál se destaca) + CTA a WhatsApp. El CTA abre una conversación con las respuestas precargadas. No hay descarga visible de PDF; la entrega personalizada por email queda para una iteración posterior.
-5. Las respuestas llegan como **JSON agnóstico** (`pregunta/respuesta`) a la base del negocio.
+5. Las respuestas llegan a la base del negocio vía el endpoint `POST /api/lead` del OS → RPC transaccional `registrar_diagnostico` (contrato versionado, `docs/11` §5).
 6. Lead caliente (capital > 10.000 USD) → alerta al triaje → llamada rápida.
 7. Tracking mínimo: **hasta qué pregunta llega el lead** (dropoff / finalización). UTMs opcional.
 
@@ -42,16 +42,15 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 - **Fathom** — grabación/análisis de llamadas de venta
 - Meta (Instagram) eventualmente
 
-## Estado actual
+## Estado actual (septiembre 2026)
 
-- **Prototipo funcional** en `prototipos/index.html` (landing + wizard + diagnóstico con reglas JS determinísticas — base del motor final)
-- **App MVP funcionando**: wizard con preguntas definitivas config-driven, motor determinístico, JSON agnóstico → `POST /api/lead` (stub con validación), tracking de dropoff y pantalla final única diagnóstico+videos
-- **Entrega WhatsApp implementada** (`feature/whatsapp-delivery`): teléfono obligatorio y helper config-driven para mensaje/enlace `wa.me` con las respuestas del lead
-- **Documento transitorio implementado**: componente HTML fijo, personalizado solo por nombre, usado como fuente del PDF descargable
-- **Suite de tests** en `test/` (unit + integración + seguridad, 39/39)
-- ✅ Design system extraído de landings del negocio
-- ✅ Reunión de integración realizada (ver `01-reunion-integracion.md`)
-- ⏳ Pendiente: acceso Supabase del negocio (Fase 0), deploy Netlify, PDF por email real y videos reales
+**La herramienta vive dentro del OS del negocio** (`metacrypto-os-app/`, ruta pública `/quiz` + módulo privado `/leads`). La migración está implementada y validada en local, rama `feature/leads-a-migracion-rpc`:
+
+- ✅ **Fases 0–C cerradas y Fase D cierre local** (ver `docs/12` §6): migraciones `0068`/`0069` aplicadas, RPC transaccional `registrar_diagnostico`, vinculación post-venta con validación de teléfono y rollback auditado, funnel portado con eventos `started/progress/dropped/completed`, endpoint endurecido, módulo `/leads` con permiso propio
+- ✅ Suite del OS: 1.304 tests en verde · `tsc` limpio
+- ✅ Persistencia real en Supabase (ya no hay stub: el JSON agnóstico de la etapa MVP fue reemplazado por el contrato versionado de `docs/11` §5)
+- 🟡 Pendiente externo (Miled + negocio): hosting/rate limit definitivo, confirmación formal de números de migración, permiso `leads`, orden de despliegue, upgrade de Next (RCE crítica, bloqueante #20), videos reales, alerta de triaje, PDF por email (Resend)
+- ❌ Ya no aplica: deploy en Netlify del funnel (decisión D1 de `docs/11` — el funnel va dentro del OS)
 
 ## Mapa de esta documentación
 
@@ -60,9 +59,13 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 | `00-OVERVIEW.md` | Este archivo: objetivo, flujo, decisiones, stack, estado |
 | `01-reunion-integracion.md` | Síntesis de la reunión con Miled/Berni (decisión de arquitectura) |
 | `02-audio-berni-requisitos.md` | Ideas de Berni del audio de WhatsApp (qué preguntas y por qué) |
-| `03-especificacion.md` | Especificación técnica del producto: pantallas, datos, wireflow |
+| `03-especificacion.md` | Especificación técnica del MVP standalone (histórica — la spec vigente de la integración es `docs/11`) |
 | `04-design-system.md` | Colores, tipografía, componentes (fuente de verdad visual) |
 | `05-prototipo.md` | Descripción del prototipo `prototipos/index.html` y cómo migrarlo |
 | `06-pendientes-y-preguntas.md` | Todo lo que falta definir + acciones de cada persona |
 | `07-scm-gestion-configuracion.md` | Nombrado, estructura del repo, branches, commits |
 | `08-roadmap.md` | Modelo de trabajo (Supabase local + Docker, migrations, PRs) y fases de implementación |
+| `09-security.md` | Checklist de seguridad pre-producción |
+| `10-levantar-metacrypto-os-local.md` | Guía para levantar MetaCrypto OS + Supabase local |
+| `11-migracion-modulo-leads.md` | **Spec funcional autoritativa de la migración del módulo de leads** |
+| `12-spec-sdd-fases-migracion-leads.md` | Fases SDD con compuertas de validación y estado |

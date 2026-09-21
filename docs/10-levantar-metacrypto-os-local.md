@@ -32,8 +32,9 @@ Desde la **raíz del repo** (`herramienta-berni/`):
 # 1) Levantar la base (descarga imágenes de Docker la primera vez, ~2-5 min)
 cd metacrypto-os-app
 supabase start
-#    → la primera vez aplica las 67 migraciones automáticamente y siembra
-#      `supabase/seed.sql` (datos de prueba).
+#    → la primera vez aplica todas las migraciones (69 a la fecha, incluyendo
+#      `0068_quiz_leads` y `0069_vinculacion_validacion_rollback`) automáticamente
+#      y siembra `supabase/seed.sql` (datos de prueba).
 #    → anota las URLs que imprime (API :54321, Studio :54323, DB :54322).
 
 # 2) Configurar las credenciales de la app
@@ -85,7 +86,7 @@ Copiá las dos claves JWT de la salida de `supabase status` (o `./scripts/dev.sh
 
 ## 5. Reset y datos de prueba
 
-`supabase db reset` (= `./scripts/dev.sh reset`) **borra todo** y vuelve a aplicar: 67 migraciones + `supabase/seed.sql`. Es el comando obligatorio antes de abrir un PR que toque DB (`docs/08` §1.3) y la forma rápida de volver a un estado conocido.
+`supabase db reset` (= `./scripts/dev.sh reset`) **borra todo** y vuelve a aplicar: todas las migraciones (69 a la fecha) + `supabase/seed.sql`. Es el comando obligatorio antes de abrir un PR que toque DB (`docs/08` §1.3) y la forma rápida de volver a un estado conocido.
 
 El seed deja datos en **todas las tablas** del esquema (2–3 filas por tabla, salvo catálogos), con fechas relativas a hoy para que los estados (vencida, agendada…) siempre tengan sentido:
 

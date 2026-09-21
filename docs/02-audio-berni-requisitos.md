@@ -1,6 +1,6 @@
 # Audio de Berni — Requisitos del formulario prediagnóstico
 
-Fuente: `transcripcion_audio.md` (audio de WhatsApp, 4 sept 2026, ~5 min). Es la fuente de los requisitos de negocio sobre el **qué** debe preguntar y **por qué**.
+Fuente: `docs/archive/transcripcion_audio-OBSOLETO-fuente-primaria-20260904.md` (audio de WhatsApp, 4 sept 2026, ~5 min, archivado). Es la fuente de los requisitos de negocio sobre el **qué** debe preguntar y **por qué**.
 
 ## Mensaje central de Berni
 

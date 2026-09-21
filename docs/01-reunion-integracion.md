@@ -1,6 +1,6 @@
 # Reunión de Integración (Miled + Berni + equipo dev)
 
-Fuente: `Transcripcion_Reunion.md` (transcripción completa en la raíz del repo).
+Fuente: `docs/archive/Transcripcion_Reunion-OBSOLETO-fuente-primaria-20260917.md` (transcripción completa, archivada — su contenido vivo está sintetizado acá y en `docs/00`).
 
 Participantes: **Berni Pérez** (dueño del negocio), **Miled Gassibe** (cerebro técnico/operativo del negocio), **Lisandro Pecchenino** y **Agustín Maretto** (equipo que desarrolla la herramienta).
 
