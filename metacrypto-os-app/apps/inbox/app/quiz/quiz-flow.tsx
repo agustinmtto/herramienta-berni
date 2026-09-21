@@ -240,14 +240,14 @@ export function QuizFlow() {
     setScreen(SCREENS.ANALYZING);
   };
 
-  const advanceAnalysis = useCallback(() => {
-    setAnalyzing((step) => {
-      if (step < 4) return step + 1;
-      recordStage("result");
-      setScreen(SCREENS.FINAL);
-      return step;
-    });
-  }, [recordStage]);
+  const advanceAnalysis = () => {
+    if (analyzing < 4) {
+      setAnalyzing(analyzing + 1);
+      return;
+    }
+    recordStage("result");
+    setScreen(SCREENS.FINAL);
+  };
 
   useEffect(() => {
     if (screen === SCREENS.WIZARD && questions[qIndex]?.trackingId) recordStage(questions[qIndex].trackingId);
@@ -398,7 +398,7 @@ export function QuizFlow() {
             </div>
           ))}
         </div>
-        <AnalysisTimer onDone={advanceAnalysis} />
+        <AnalysisTimer step={analyzing} onDone={advanceAnalysis} />
       </main>
     );
   }
@@ -525,13 +525,15 @@ function Callout({ tone, text }: { tone: string; text: string }) {
   return <div className={`section-callout ${tone}`}>{text}</div>;
 }
 
-function AnalysisTimer({ onDone }: { onDone: () => void }) {
+function AnalysisTimer({ step, onDone }: { step: number; onDone: () => void }) {
   const onDoneRef = useRef(onDone);
   useEffect(() => { onDoneRef.current = onDone; }, [onDone]);
+  // [step]: re-dispara el timeout una vez por paso de la animación — con []
+  // corrió una sola vez y la pantalla se quedaba congelada en el paso 1.
   useEffect(() => {
     const timer = setTimeout(() => onDoneRef.current(), 850);
     return () => clearTimeout(timer);
-  }, []);
+  }, [step]);
   return null;
 }
 
