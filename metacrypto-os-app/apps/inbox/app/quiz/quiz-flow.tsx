@@ -271,6 +271,7 @@ export function QuizFlow() {
         stepId: visitedStagesRef.current.at(-1) || "start",
         stepIndex: visitedStagesRef.current.length,
         visited: visitedStagesRef.current,
+        answers: answersRef.current, // el beacon también informa lo respondido
       });
       navigator.sendBeacon("/api/lead", new Blob([JSON.stringify(payload)], { type: "application/json" }));
     };
