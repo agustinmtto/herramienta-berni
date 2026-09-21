@@ -233,6 +233,7 @@ describe("lead-payload", () => {
     const started = buildQuizPayload({ event: "started", ...base });
     expect(started).toMatchObject({ schema_version: 1, event: "started", quiz_version: "diagnostico-cripto-v1-a" });
     expect(started.lead).toBeUndefined();
+    expect(started.answers).toEqual([]); // sin respuestas aún, pero el campo viaja
 
     const completed = buildQuizPayload({
       event: "completed",

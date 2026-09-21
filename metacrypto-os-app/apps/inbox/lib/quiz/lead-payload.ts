@@ -157,6 +157,11 @@ export function buildQuizPayload(args: BuildPayloadArgs): Record<string, unknown
     occurred_at: new Date().toISOString(),
     source,
     progress: { step_id: stepId, step_index: stepIndex },
+    // Respuestas acumuladas en TODOS los eventos: si el lead abandona a mitad,
+    // sus respuestas parciales quedan guardadas (el RPC hace upsert idempotente
+    // por (envio_id, question_id)). Sin esto, un dropoff solo diría EN QUÉ
+    // pregunta cortó, no QUÉ respondió hasta ahí.
+    answers: buildContractAnswers(args.answers ?? {}, QUESTIONS_ORDER),
   };
 
   if (event === "completed") {
@@ -172,7 +177,6 @@ export function buildQuizPayload(args: BuildPayloadArgs): Record<string, unknown
         accepted_at: new Date().toISOString(),
       },
     };
-    payload.answers = buildContractAnswers(args.answers ?? {}, QUESTIONS_ORDER);
     if (args.diagnosisSnapshot) payload.diagnosis = args.diagnosisSnapshot;
     payload.client_context = {
       locale: typeof navigator !== "undefined" ? navigator.language : "es-AR",

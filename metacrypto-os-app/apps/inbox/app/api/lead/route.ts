@@ -85,7 +85,13 @@ export async function POST(request: Request): Promise<NextResponse> {
   );
 
   if (r.status === 200 && r.json?.ok) {
-    console.log(`[lead] ${r.json.status} sesion=${String(r.json.session_id).slice(0, 8)}… evento=${String(validation.payload.event)} respuestas=${Array.isArray(validation.payload.answers) ? validation.payload.answers.length : 0}`);
+    const evento = String(validation.payload.event);
+    const estado = r.json.status;
+    const nRespuestas = Array.isArray(validation.payload.answers) ? validation.payload.answers.length : 0;
+    // Idempotencia visible en el log: un evento llegó sobre un envío ya
+    // completado (ej. beacon tardío) y el RPC lo devolvió tal cual, sin tocar.
+    const ignorado = estado === "completed" && evento !== "completed" ? " (envio ya completed: ignorado)" : "";
+    console.log(`[lead] evento=${evento} → estado=${estado}${ignorado} sesion=${String(r.json.session_id).slice(0, 8)}… respuestas=${nRespuestas}`);
     return NextResponse.json({
       ok: true,
       session_id: r.json.session_id,
