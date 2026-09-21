@@ -301,7 +301,7 @@ d("quiz leads RPC (integración local, docs/11)", () => {
     expect(e2.persona_id).toBe(e1.persona_id);
   });
 
-  test("vincular_lead_convertido reasigna envíos, archiva el lead temporal y es idempotente", async () => {
+  test("vincular: mismo teléfono → ok; distinto → rechaza sin confirmar y ok con confirmar (docs/11 §9.1)", async () => {
     const s = session(30);
     const mail = email(30);
     const alta = await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: mail, capital: "capital_10k_25k" }) });
@@ -309,17 +309,24 @@ d("quiz leads RPC (integración local, docs/11)", () => {
     const e = await envio(s);
     const leadId = e.persona_id as string;
 
-    // cliente definitivo con programa (flujo de ventas existente)
-    const cliente = await rest("POST", "personas", "select=id", { estado: "cliente", nombre: "Cliente final prueba", email: mail.replace("quiz-rpc-", "cliente-"), divisa_preferida: "USD" });
+    // cliente con teléfono DISTINTO al del quiz (+5493585000001)
+    const clienteEmail = mail.replace("quiz-rpc-", "cliente-");
+    EMAILS.push(clienteEmail); // para el cleanup (evita 409 por teléfono en re-runs)
+    const cliente = await rest("POST", "personas", "select=id", { estado: "cliente", nombre: "Cliente final prueba", email: clienteEmail, telefono_e164: "+5491100009999", divisa_preferida: "USD" });
     expect(cliente.status).toBe(201);
     const clienteId = cliente.body[0].id;
     const programa = await rest("POST", "programas", "select=id", { persona_id: clienteId, tier: "3000", motivo: "nueva_venta", fecha_inicio: "2026-09-01", monto: 3000, divisa: "EUR" });
     expect(programa.status).toBe(201);
     PROGRAMA_IDS.push(programa.body[0].id);
 
-    const v1 = await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteId });
+    // sin confirmar → rechazo por teléfonos distintos
+    const v0 = await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteId });
+    expect(v0.status).toBeGreaterThanOrEqual(400);
+    expect(v0.body.message).toContain("telefono_no_coincide");
+
+    // con confirmar → pasa
+    const v1 = await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteId, p_confirmar: true });
     expect(v1.status).toBe(200);
-    expect(v1.body.ok).toBe(true);
     expect(v1.body.envios_reasignados).toBeGreaterThanOrEqual(1);
 
     const eTras = await envio(s);
@@ -328,15 +335,67 @@ d("quiz leads RPC (integración local, docs/11)", () => {
     expect(leadTras.body[0].estado).toBe("archivado");
     expect(leadTras.body[0].telefono_e164).toBeNull();
 
+    // auditoría: la vinculación quedó registrada con envio_ids y confirmado
+    const audit = await rest("GET", "auditoria", `entidad=eq.persona&accion=eq.vinculacion&entidad_id=eq.${leadId}&select=datos&order=created_at.desc&limit=1`);
+    expect(audit.body[0].datos.envios_reasignados).toBeGreaterThanOrEqual(1);
+    expect(audit.body[0].datos.confirmado).toBe(true);
+    expect(audit.body[0].datos.telefono_lead).toBe("+5493585000001");
+
     // idempotente: repetir no rompe ni duplica
-    const v2 = await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteId });
+    const v2 = await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteId, p_confirmar: true });
     expect(v2.status).toBe(200);
     expect(v2.body.envios_reasignados).toBe(0);
+  });
 
-    // el cliente no se tocó (mismo nombre, sigue cliente)
-    const clienteTras = await rest("GET", "personas", `id=eq.${clienteId}&select=estado,nombre`);
-    expect(clienteTras.body[0].estado).toBe("cliente");
-    expect(clienteTras.body[0].nombre).toBe("Cliente final prueba");
+  test("vincular: MISMO teléfono en quiz y cliente → pasa sin confirmación", async () => {
+    const s = session(31);
+    const mail = email(31);
+    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: mail, capital: "capital_25k_50k" }) });
+    const e = await envio(s);
+    const leadId = e.persona_id as string;
+    const tel = e.telefono_e164_capturado as string;
+
+    const clienteEmail = mail.replace("quiz-rpc-", "clientemismo-");
+    EMAILS.push(clienteEmail);
+    const cliente = await rest("POST", "personas", "select=id", { estado: "cliente", nombre: "Cliente mismo tel", email: clienteEmail, telefono_e164: tel, divisa_preferida: "USD" });
+    const clienteId = cliente.body[0].id;
+    PROGRAMA_IDS.push((await rest("POST", "programas", "select=id", { persona_id: clienteId, tier: "3000", motivo: "nueva_venta", fecha_inicio: "2026-09-01", monto: 3000, divisa: "EUR" })).body[0].id);
+
+    const v = await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteId });
+    expect(v.status).toBe(200); // sin p_confirmar: teléfonos iguales no friccionan
+    expect(v.body.envios_reasignados).toBeGreaterThanOrEqual(1);
+  });
+
+  test("desvincular_lead revierte la vinculación exactamente (docs/11 §9.3)", async () => {
+    const s = session(32);
+    const mail = email(32);
+    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: mail, capital: "capital_10k_25k" }) });
+    const e = await envio(s);
+    const leadId = e.persona_id as string;
+
+    const clienteEmail = mail.replace("quiz-rpc-", "rollback-");
+    EMAILS.push(clienteEmail);
+    const cliente = await rest("POST", "personas", "select=id", { estado: "cliente", nombre: "Cliente rollback", email: clienteEmail, telefono_e164: "+5493585000002", divisa_preferida: "USD" });
+    const clienteId = cliente.body[0].id;
+    PROGRAMA_IDS.push((await rest("POST", "programas", "select=id", { persona_id: clienteId, tier: "3000", motivo: "nueva_venta", fecha_inicio: "2026-09-01", monto: 3000, divisa: "EUR" })).body[0].id);
+
+    await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteId, p_confirmar: true });
+    expect((await envio(s)).persona_id).toBe(clienteId);
+
+    // rollback
+    const d = await rpc("desvincular_lead", { p_cliente_id: clienteId });
+    expect(d.status).toBe(200);
+    expect(d.body.envios_restaurados).toBeGreaterThanOrEqual(1);
+
+    const eRestaurado = await envio(s);
+    expect(eRestaurado.persona_id).toBe(leadId); // el envío volvió al temporal
+    const leadRestaurado = await rest("GET", "personas", `id=eq.${leadId}&select=estado`);
+    expect(leadRestaurado.body[0].estado).toBe("lead"); // el temporal volvió a lead
+
+    // segunda desvinculación → nada que revertir
+    const d2 = await rpc("desvincular_lead", { p_cliente_id: clienteId });
+    expect(d2.status).toBeGreaterThanOrEqual(400);
+    expect(d2.body.message).toContain("nada_que_desvincular");
   });
 
   test("un envío completed no puede retroceder ni siquiera por escritura directa", async () => {

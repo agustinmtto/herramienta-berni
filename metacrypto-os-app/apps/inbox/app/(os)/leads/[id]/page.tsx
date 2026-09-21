@@ -130,7 +130,12 @@ export default async function LeadDetallePage({ params }: { params: Promise<{ id
                 <small>Estado: <span className="pill">{lead.persona_estado === "lead" ? "Lead temporal" : lead.persona_estado}</span></small>
               </p>
               <h4>Vinculación post-venta</h4>
-              <VincularLead leadPersonaId={lead.persona_id} clientes={clientes} personaEstado={lead.persona_estado} />
+              <VincularLead
+                leadPersonaId={lead.persona_id}
+                leadTelefono={lead.telefono_e164_capturado}
+                clientes={clientes}
+                personaEstado={lead.persona_estado}
+              />
             </>
           ) : (
             <p>Sin persona: el envío no llegó a completarse (los leads temporales se crean solo al completar).</p>

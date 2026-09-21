@@ -1921,3 +1921,14 @@ body { font-family: var(--sans); }
   padding: 12px; background: var(--surface-2); border: 1px solid var(--border);
   border-radius: var(--radius-sm); font-size: var(--t0); line-height: 1.5;
 }
+
+/* Aviso de teléfonos distintos (docs/11 §9.1) y botón de rollback (§9.3). */
+.vincular-warning {
+  width: 100%; padding: 9px 12px;
+  background: var(--yellow-soft); border: 1px solid rgba(250, 204, 21, .35);
+  border-radius: var(--radius-sm); color: var(--text-1); font-size: var(--t1);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.vincular-warning code { font-size: var(--t0); }
+.vincular-warning label { display: flex; gap: 8px; align-items: center; }
+.vincular-rollback { color: var(--red); }

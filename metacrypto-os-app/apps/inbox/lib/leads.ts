@@ -201,10 +201,10 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
 
 // Clientes definitivos (con programa) para el picker de vinculación post-venta
 // (docs/11 §9). Solo estado 'cliente' — el RPC revalida igual.
-export async function getClientesParaVincular(): Promise<{ id: string; nombre: string; email: string | null }[]> {
-  const r = await rest<{ id: string; nombre: string; email: string | null }[]>(
+export async function getClientesParaVincular(): Promise<{ id: string; nombre: string; email: string | null; telefono_e164: string | null }[]> {
+  const r = await rest<{ id: string; nombre: string; email: string | null; telefono_e164: string | null }[]>(
     "GET",
-    "personas?estado=eq.cliente&select=id,nombre,email&order=nombre.asc&limit=500",
+    "personas?estado=eq.cliente&select=id,nombre,email,telefono_e164&order=nombre.asc&limit=500",
   );
   return r.json ?? [];
 }
