@@ -1872,3 +1872,52 @@ body { font-family: var(--sans); }
   padding: 9px 12px; margin: 10px 0; line-height: 1.5;
   font-size: var(--t2);
 }
+
+/* ── Módulo de Leads (docs/11 §10) ───────────────────────────────────────────
+   Todo lo específico de /leads: filtros GET sin JS, grid de fichas del
+   detalle y el formulario de vinculación. Compiten contra nada: las clases
+   son nuevas; la tabla, las pills y las cards reusan las de globals.css. */
+
+.filtros-leads {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin: 0 0 14px; padding: 10px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+}
+.filtros-leads input, .filtros-leads select {
+  padding: 7px 9px; border: 1px solid var(--border-2); border-radius: var(--radius-sm);
+  background: var(--surface-2); color: var(--text-1); font-size: var(--t1);
+}
+.filtros-leads input[name="q"] { min-width: 220px; }
+.filtros-leads .link-limpio { color: var(--text-3); }
+
+.lead-link { color: var(--text-1); font-weight: 500; }
+.lead-link:hover { color: var(--gold); }
+
+.lead-calificacion p { display: inline; margin-left: 10px; color: var(--text-2); }
+.lead-calificacion h3 { display: inline; margin-right: 12px; }
+.lead-calificacion .pill { margin-right: 2px; }
+
+.lead-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px; margin-bottom: 12px;
+}
+.lead-grid .card { padding: 14px 16px; }
+.lead-grid h3 { font-size: var(--t2); margin-bottom: 8px; }
+.lead-grid h4 { margin-top: 12px; font-size: var(--t2); }
+.lead-datos { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; }
+.lead-datos dt { color: var(--text-3); font-size: var(--t1); white-space: nowrap; }
+.lead-datos dd { margin: 0; font-size: var(--t1); overflow-wrap: anywhere; }
+
+.vincular-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vincular-form select { min-width: 240px; }
+.vincular-ok { color: var(--green); }
+.vincular-error { color: var(--red); }
+.vincular-nota { color: var(--text-3); font-size: var(--t1); width: 100%; }
+
+.paginacion-leads { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: var(--text-2); }
+.leads-nota { display: block; margin-top: 10px; color: var(--text-3); }
+.lead-diag-json {
+  max-height: 420px; overflow: auto; margin: 8px 0 0;
+  padding: 12px; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); font-size: var(--t0); line-height: 1.5;
+}

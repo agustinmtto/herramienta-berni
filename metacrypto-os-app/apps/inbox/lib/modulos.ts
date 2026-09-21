@@ -12,7 +12,11 @@ export type ModuloKey =
   // Módulo propio: una devolución resta dinero y descuenta comisión, así
   // que no se hereda de `ingresos` ni de `ventas`. Hoy lo tienen Berni,
   // Alex y Milo por `acceso_total`; Manuel (Clientes + Inbox + Sesiones) no.
-  | "devoluciones";
+  | "devoluciones"
+  // Módulo propio del Quiz Funnel (docs/11 D13): los leads capturados por
+  // /quiz. NO se hereda de `clientes` a propósito — ver quién puede hacer
+  // triaje comercial es decisión del negocio, no un accidente de herencia.
+  | "leads";
 export type UserPerms = { acceso_total: boolean; modulos: string[] | null };
 
 // Orden de preferencia para la landing de un usuario limitado.
@@ -29,6 +33,9 @@ const HOME_ORDER: { key: ModuloKey; ruta: string }[] = [
   { key: "ventas", ruta: "/nueva-venta" },
   // Nunca puede faltar de esta lista, por el mismo motivo que `estrategias`.
   { key: "devoluciones", ruta: "/devoluciones" },
+  // El funnel es captación comercial de primer nivel: quien lo trabaja debe
+  // aterrizar acá, no en novedades.
+  { key: "leads", ruta: "/leads" },
   { key: "inicio", ruta: "/" }, { key: "ingresos", ruta: "/ingresos" },
   { key: "cuotas", ruta: "/cuotas" }, { key: "pnl", ruta: "/pnl" }, { key: "gastos", ruta: "/gastos" },
 ];

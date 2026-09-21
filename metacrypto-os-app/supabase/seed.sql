@@ -220,3 +220,88 @@ insert into public.push_enviados (mensaje_id, team_member_id, enviado_at) values
   ('1d000000-0000-4000-8000-000000000001', 'f0000000-0000-4000-8000-000000000002', now() - interval '20 days'),
   ('1d000000-0000-4000-8000-000000000003', 'f0000000-0000-4000-8000-000000000001', now() - interval '3 days')
 on conflict do nothing;
+
+-- ============================================================
+-- 15) Leads del Quiz Funnel (docs/11): envíos en todos los estados para
+--     probar el módulo /leads. El quiz_version_id se resuelve por codigo.
+--     Los leads temporales de personas nacen por el RPC; acá los insertamos
+--     a mano con el MISMO invariant: telefono_e164 NULL en personas, el
+--     teléfono real vive en el snapshot del envío.
+-- ============================================================
+insert into public.personas (id, estado, nombre, email, pais, telefono_e164, divisa_preferida) values
+  ('a0000000-0000-4000-8000-000000000011', 'lead',      'Nicolás Ferrari', 'lead.caliente@test.local', 'AR', null, 'USD'),
+  ('a0000000-0000-4000-8000-000000000012', 'lead',      'Valeria Ortiz',   'lead.frio@test.local',     'CL', null, 'USD'),
+  ('a0000000-0000-4000-8000-000000000013', 'cliente',   'Martín Ávalos',   'lead.convertido@test.local','AR', '+5493585000999', 'USD')
+on conflict (id) do nothing;
+
+insert into public.programas (id, persona_id, tier, motivo, fecha_inicio, meses_duracion, monto, divisa) values
+  ('b0000000-0000-4000-8000-000000000011', 'a0000000-0000-4000-8000-000000000013', '3000', 'nueva_venta', current_date - 5, 8, 3000, 'EUR')
+on conflict (id) do nothing;
+
+insert into public.diagnostico_envios
+  (id, session_id, quiz_version_id, persona_id, schema_version, estado,
+   nombre_capturado, email_capturado, telefono_e164_capturado, pais_capturado,
+   consentimiento_aceptado, consentimiento_version, consentimiento_at,
+   started_at, finished_at, last_step_id, last_step_index,
+   utm_source, utm_medium, utm_campaign,
+   capital_min_usd, capital_max_usd, es_lead_caliente, qualification_rule_version, motivo_calificacion,
+   diagnosis_version, diagnosis_result, dropped_at)
+values
+  -- lead caliente completado (sin vincular)
+  ('b1000000-0000-4000-8000-000000000001', '0d000000-0000-4000-8000-000000000001',
+   (select id from public.quiz_versiones where codigo = 'diagnostico-cripto-v1-a'),
+   'a0000000-0000-4000-8000-000000000011', 1, 'completed',
+   'Nicolás Ferrari', 'lead.caliente@test.local', '+5493585000101', 'AR',
+   true, 'contacto-v1', now() - interval '2 days',
+   now() - interval '2 days - 12 minutes', now() - interval '2 days' + interval '6 minutes', 'result', 10,
+   'instagram', 'organic', 'diagnostico-septiembre',
+   100000, 250000, true, 'hot-lead-v1', 'hot-lead-v1: capital_100k_250k (capital >= 10000 USD)',
+   'diagnostico-v1', '{"hot": true, "sections": [{"title": "Tu situación real"}, {"title": "El desajuste principal"}, {"title": "La señal que no conviene ignorar"}, {"title": "Tu plan de acción"}]}'::jsonb, null),
+  -- lead frío completado
+  ('b1000000-0000-4000-8000-000000000002', '0d000000-0000-4000-8000-000000000002',
+   (select id from public.quiz_versiones where codigo = 'diagnostico-cripto-v1-a'),
+   'a0000000-0000-4000-8000-000000000012', 1, 'completed',
+   'Valeria Ortiz', 'lead.frio@test.local', '+56910000102', 'CL',
+   true, 'contacto-v1', now() - interval '6 days',
+   now() - interval '6 days', now() - interval '6 days' + interval '9 minutes', 'result', 10,
+   null, null, null,
+   5000, 10000, false, 'hot-lead-v1', 'hot-lead-v1: capital_lt_10k (capital < 10000 USD)',
+   'diagnostico-v1', '{"hot": false, "sections": []}'::jsonb, null),
+  -- lead ya vinculado a un cliente (para ver el estado "convertido")
+  ('b1000000-0000-4000-8000-000000000003', '0d000000-0000-4000-8000-000000000003',
+   (select id from public.quiz_versiones where codigo = 'diagnostico-cripto-v1-a'),
+   'a0000000-0000-4000-8000-000000000013', 1, 'completed',
+   'Martín Ávalos', 'lead.convertido@test.local', '+5493585000999', 'AR',
+   true, 'contacto-v1', now() - interval '30 days',
+   now() - interval '30 days', now() - interval '30 days' + interval '5 minutes', 'result', 10,
+   'instagram', 'organic', 'diagnostico-septiembre',
+   25000, 50000, true, 'hot-lead-v1', 'hot-lead-v1: capital_25k_50k (capital >= 10000 USD)',
+   'diagnostico-v1', '{"hot": true, "sections": []}'::jsonb, null),
+  -- abandono en portfolio (sin contacto, sin persona)
+  ('b1000000-0000-4000-8000-000000000004', '0d000000-0000-4000-8000-000000000004',
+   (select id from public.quiz_versiones where codigo = 'diagnostico-cripto-v1-a'),
+   null, 1, 'dropped',
+   null, null, null, null,
+   null, null, null,
+   now() - interval '1 day', null, 'allocation', 3,
+   'instagram', 'organic', 'diagnostico-septiembre',
+   null, null, null, null, null,
+   null, null,
+   -- dropped_at: la CHECK exige fecha cuando estado=dropped
+   now() - interval '1 day')
+on conflict (id) do nothing;
+
+-- Respuestas de ejemplo para el lead caliente (el módulo renderiza desde
+-- snapshots: cualquier pregunta sirve, con sus IDs estables).
+insert into public.diagnostico_respuestas
+  (envio_id, question_id, question_type, question_text, question_order, answer_id, answer_text, answer_value, answered_at)
+values
+  ('b1000000-0000-4000-8000-000000000001', 'situation', 'single_choice', '¿Qué describe mejor tu situación actual con las criptomonedas?', 1, 'exposure_full_unclear', 'Estoy 100% expuesto, pero no tengo claro si mi portfolio está bien', null, now() - interval '2 days - 11 minutes'),
+  ('b1000000-0000-4000-8000-000000000001', 'challenge', 'single_choice', '¿Qué es lo que más te cuesta ahora mismo?', 2, 'pain_risk', 'Gestionar el riesgo', null, now() - interval '2 days - 10 minutes'),
+  ('b1000000-0000-4000-8000-000000000001', 'allocation', 'allocation', '¿Cómo se distribuye tu portfolio hoy?', 3, null, 'BTC: 50-75% · ETH: 1-10%', '[{"asset_id":"btc","level":"high"},{"asset_id":"eth","level":"minimal"},{"asset_id":"alts","level":"zero"},{"asset_id":"stables","level":"zero"}]'::jsonb, now() - interval '2 days - 9 minutes'),
+  ('b1000000-0000-4000-8000-000000000001', 'capital', 'range', '¿Con qué cantidad de capital estás trabajando actualmente o tienes previsto destinar a cripto durante este ciclo?', 4, 'capital_100k_250k', 'Entre 100.000 y 250.000 USD', '{"currency":"USD","min":100000,"max":250000,"min_inclusive":true,"max_inclusive":false}'::jsonb, now() - interval '2 days - 8 minutes'),
+  ('b1000000-0000-4000-8000-000000000001', 'horizon', 'single_choice', '¿Cuál es tu horizonte de tiempo con estas inversiones?', 5, 'horizon_cycle_3y', 'El ciclo cripto completo (3 años aprox.)', null, now() - interval '2 days - 7 minutes'),
+  ('b1000000-0000-4000-8000-000000000001', 'drawdown', 'single_choice', 'Imagina que mañana hay una noticia negativa y tu portfolio ha caído un 30%. ¿Qué harías?', 6, 'drawdown_hold', 'Mantengo, no toco nada', null, now() - interval '2 days - 6 minutes'),
+  ('b1000000-0000-4000-8000-000000000001', 'influence', 'single_choice', '¿Qué influye más en tus decisiones de inversión?', 7, 'decision_social', 'Sigo principalmente análisis de personas que veo en redes', null, now() - interval '2 days - 5 minutes'),
+  ('b1000000-0000-4000-8000-000000000001', 'rules', 'single_choice', '¿Tienes reglas claras sobre cuándo aumentar, reducir o cerrar una posición?', 8, 'rules_none', 'No tengo reglas claras', null, now() - interval '2 days - 4 minutes')
+on conflict (envio_id, question_id) do nothing;

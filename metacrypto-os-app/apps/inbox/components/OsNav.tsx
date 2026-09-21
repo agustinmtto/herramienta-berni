@@ -121,6 +121,16 @@ export default function OsNav({
       label: "Comunicación",
       items: [{ href: "/inbox", label: "Inbox WhatsApp", count: counts.inboxPendientes, modulo: "inbox" }],
     },
+    {
+      // Grupo "Captación" (docs/11 §10): los leads del Quiz Funnel. Grupo
+      // propio y módulo propio (`leads`) para que el negocio decida quién hace
+      // el triaje sin tocar los permisos de `clientes` ni de `ventas`.
+      // SIN contador: los leads no se "vacían" como las cuotas — el volumen
+      // depende de la campaña y un badge que solo crece enseña a ignorarlo.
+      // El número que importa (calientes sin gestionar) vive en la página.
+      label: "Captación",
+      items: [{ href: "/leads", label: "Leads", modulo: "leads" }],
+    },
   ];
 
   const groups = allGroups
