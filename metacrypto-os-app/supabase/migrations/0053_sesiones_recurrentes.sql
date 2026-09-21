@@ -44,13 +44,22 @@ create unique index if not exists sesiones_recurrente_ocurrencia_key
 
 -- Las dos sesiones fijas de la semana. Idempotente por (dia_semana, coach_id):
 -- reaplicar la migración no duplica las filas.
+--
+-- El join con team_members es obligatorio, no decorativo: los UUID son los de
+-- producción y no vienen en ninguna migración (son datos, no esquema). Sin el
+-- filtro, un `supabase db reset` desde cero —lo que exige docs/08 §1.3 antes
+-- de cada PR— muere aquí por la FK. Donde los coaches existen el resultado es
+-- idéntico al insert literal de antes.
 insert into sesiones_recurrentes (dia_semana, coach_id)
 select v.dia_semana, v.coach_id
 from (values
   (3, 'bb8f5cbe-65f0-4652-9f86-2d8c6f0584c1'::uuid), -- miércoles con Manuel
   (0, '6cbb5982-6051-4c00-bc98-97310140e23f'::uuid)  -- domingo con Berni
 ) as v(dia_semana, coach_id)
-where not exists (
+where exists (
+  select 1 from public.team_members m where m.id = v.coach_id
+)
+and not exists (
   select 1 from sesiones_recurrentes r
   where r.dia_semana = v.dia_semana and r.coach_id = v.coach_id
 );

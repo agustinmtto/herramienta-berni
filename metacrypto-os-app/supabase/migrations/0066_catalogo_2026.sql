@@ -256,6 +256,16 @@ begin
 
   -- Testigo 1: cuántas filas. El número esperado (59 = 22+19+18) sale de la
   -- foto de Task 1, hecha minutos antes de escribir esto.
+  --
+  -- La excepción es la base VACÍA: un `supabase db reset` desde cero (docs/08
+  -- §1.3) no tiene ninguna persona, no hay nada que congelar y los tres
+  -- testigos no miden nada — ahí se saltan. En producción hay población y el
+  -- testigo corre igual que siempre: 59 o excepción.
+  if v_congelados = 0
+     and not exists (select 1 from public.personas limit 1) then
+    return;
+  end if;
+
   if v_congelados <> 59 then
     raise exception
       'congelado: se esperaban 59 personas (22 tier 2000 + 19 tier 3500 + 18 tier 5000, foto de Task 1 del 16-sep) y el UPDATE tocó % — si tocó 0, comprueba primero si esta migración ya se aplicó antes de reintentar; si tocó otro número, el alcance cambió desde la foto y hay que decidir con datos frescos, no forzar el que traíamos',
@@ -396,6 +406,12 @@ begin
     and p.consultorias_ajuste_motivo = 'catalogo_2026';
 
   if v_2000 <> 22 or v_3500 <> 19 or v_5000 <> 18 or v_total_ajuste <> 59 then
+    -- Base vacía (reset local): nada se congeló, el recuento no aplica. El
+    -- candado del catálogo de arriba sí corrió — ese no depende de datos.
+    if v_total_ajuste = 0
+       and not exists (select 1 from public.personas limit 1) then
+      return;
+    end if;
     raise exception
       'congelado no cuadra tras tocar el catálogo: tier 2000=% (esperado 22), 3500=% (esperado 19), 5000=% (esperado 18), total=% (esperado 59)',
       v_2000, v_3500, v_5000, v_total_ajuste;
