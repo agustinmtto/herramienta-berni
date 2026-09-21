@@ -6,13 +6,16 @@
 // `leads` conecta los diagnósticos del lead temporal con ese cliente.
 // El RPC revalida todo (lead temporal propio, cliente con programa,
 // idempotencia) — acá solo se exige sesión con permiso y se revalida.
+//
+// Firma (formData) y no (prev, formData): mismo criterio que crearVenta.
+// useActionState NO existe en React 18 — el formulario la llama directo
+// desde un onSubmit (ver components/VincularLead.tsx).
 // ============================================================
 import { revalidatePath } from "next/cache";
 import { rest } from "@/lib/supabase";
 import { requireModulo } from "@/lib/guard";
 
 export async function vincularLeadAccion(
-  _prev: { ok: boolean; error?: string; mensaje?: string },
   formData: FormData
 ): Promise<{ ok: boolean; error?: string; mensaje?: string }> {
   await requireModulo("leads");

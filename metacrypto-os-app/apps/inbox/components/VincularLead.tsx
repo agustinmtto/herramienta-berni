@@ -1,10 +1,17 @@
 "use client";
 // Picker de vinculación post-venta (docs/11 §9): elegir el cliente definitivo
 // (creado por el flujo de ventas existente) y conectar los diagnósticos del
-// lead temporal. Usa useActionState para el resultado de la server action.
+// lead temporal.
+//
+// ⚠ El OS corre React 18: useActionState NO existe allí (llegó en React 19)
+// y un componente que lo use se crashea en la hidratación — el HTML se ve
+// bien pero NINGÚN click hace nada. Por eso esto es un onSubmit manual con
+// useTransition, que sí existe en 18.
 
-import { useActionState } from "react";
+import { useState, useTransition } from "react";
 import { vincularLeadAccion } from "@/app/leads-actions";
+
+type Resultado = { ok: boolean; error?: string; mensaje?: string };
 
 export default function VincularLead({
   leadPersonaId,
@@ -15,7 +22,8 @@ export default function VincularLead({
   clientes: { id: string; nombre: string; email: string | null }[];
   personaEstado: string | null;
 }) {
-  const [state, formAction, pending] = useActionState(vincularLeadAccion, { ok: false });
+  const [resultado, setResultado] = useState<Resultado | null>(null);
+  const [pending, startTransition] = useTransition();
 
   // Solo un lead TEMPORAL (estado 'lead') se puede vincular. Si el envío ya
   // apunta al cliente definitivo, no hay nada que hacer — y ofrecerlo sería
@@ -30,8 +38,16 @@ export default function VincularLead({
     return <p className="vincular-nota">El lead temporal de este envío ya fue vinculado y archivado.</p>;
   }
 
+  const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    startTransition(async () => {
+      setResultado(await vincularLeadAccion(formData));
+    });
+  };
+
   return (
-    <form action={formAction} className="vincular-form">
+    <form onSubmit={onSubmit} className="vincular-form">
       <input type="hidden" name="leadPersonaId" value={leadPersonaId} />
       <select name="clienteId" defaultValue="" required>
         <option value="" disabled>
@@ -46,8 +62,8 @@ export default function VincularLead({
       <button type="submit" disabled={pending}>
         {pending ? "Vinculando…" : "Vincular con cliente"}
       </button>
-      {state.ok && state.mensaje && <span className="vincular-ok">{state.mensaje}</span>}
-      {!state.ok && state.error && <span className="vincular-error">{state.error}</span>}
+      {resultado?.ok && resultado.mensaje && <span className="vincular-ok">{resultado.mensaje}</span>}
+      {resultado && !resultado.ok && resultado.error && <span className="vincular-error">{resultado.error}</span>}
       <small className="vincular-nota">
         Los diagnósticos pasan al cliente elegido y el lead temporal se archiva. No modifica ningún dato del cliente.
       </small>
