@@ -320,6 +320,7 @@ Reglas:
 - `started`, `progress` y `dropped` pueden no incluir `lead`.
 - `completed` exige `lead`, consentimiento y todas las preguntas requeridas por esa version.
 - `source` es opcional; sus campos son nullable.
+- Para `completed`, el payload puede incluir `diagnosis` con `{ "version": "...", "result": {...} }`: el snapshot del diagnostico que el motor deterministico mostro al usuario. El backend lo persiste tal cual en `diagnosis_version` / `diagnosis_result` (§3.2). Es un snapshot de presentacion, no una clasificacion comercial: la unica clasificacion (lead caliente) se calcula siempre en servidor.
 - El backend obtiene la version por `quiz_version`, valida cada `question_id`, `type` y `answer_id`, y no acepta preguntas ajenas a esa version.
 - El backend recalcula valores derivados y no confia en una clasificacion enviada por el cliente.
 - La respuesta publica no expone `persona_id`.
