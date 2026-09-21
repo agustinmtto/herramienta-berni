@@ -5,9 +5,9 @@
 | # | Ítem | Impacto | Propietario | Estado |
 |---|---|---|---|---|
 | 1 | ~~**Definir las preguntas finales** (psicológicas, orden, fricción)~~ | Desbloquea el JSON y el motor determinístico definitivo | Berni | ✅ Cerrado — 8 preguntas recibidas en orden; composición visual en la pregunta 3 |
-| 2 | **Formato JSON final** `pregunta/respuesta` | BLOQUEA la integración con Supabase | Equipo dev (con Berni las preguntas) | Boceto en `03-especificacion.md` |
+| 2 | **Formato JSON final** `pregunta/respuesta` | BLOQUEA la integración con Supabase | Agustín (diseño en curso; criterios en `docs/11` §2.1) | En diseño |
 | 3 | ~~Validar branch de Supabase como entorno dev~~ | Resuelto en `docs/08` §1.1: se descarta la branch de Supabase (cobra compute); se usa **Supabase local (CLI + Docker)** con migrations | Agustín / Miled | ✅ Cerrado |
-| 4 | **Módulo de leads dentro del sistema del negocio** (nueva entrada menú lateral, reporte filtrable) — ¿lo hacemos nosotros o lo hacen ellos? | Duda abierta | Por definir con Miled |
+| 4 | ~~**Módulo de leads dentro del sistema del negocio**~~ | Cerrado: lo implementa nuestro equipo (`docs/11` D7) | Nuestro equipo | ✅ Cerrado |
 | 5 | Benchmark del **quiz funnel de Ramiro** (grabar pantalla, extraer preguntas/flujo) | Alimenta diseño de preguntas | Lisandro | Por confirmar si se hizo |
 | 6 | Host de videos + embed trackeable (duración vista) | Requiere definir player (Loom/u otro con eventos) | Miled / dev | Abierto |
 | 7 | **PRD** que pidió Miled para arrancar la implementación conjunta | Seco para construir juntos | Agustín/Lisandro | Pendiente — este documento de `docs/` sirve de insumo |
