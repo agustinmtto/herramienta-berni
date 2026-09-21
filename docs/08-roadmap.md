@@ -73,7 +73,7 @@ Por funcionalidad/responsabilidad (no por carpetas):
 **Objetivo:** poder desarrollar sin tocar producción, con el repo del negocio listo.
 - [ ] Accesos: repo GitHub del negocio, Supabase (lectura), coordinación con Miled
 - [ ] `db pull` → schema de producción como migration baseline (commit en branch `feature/infra-local-supabase`)
-- [ ] Supabase local (Docker) corriendo para ambos devs + seed de prueba
+- [x] Supabase local (Docker) corriendo + seed de prueba completo — guía en `docs/10` (`metacrypto-os-app/` levanta con `supabase start` + `apps/inbox` con `npm run dev`; login de dev en el seed)
 - [ ] Estructura del módulo dentro del repo Next.js definida
 
 **Salida:** ambos devs levantan el sistema completo en local (`supabase start` + `npm run dev`).
