@@ -38,6 +38,8 @@ export interface QuizQuestion {
   title: string;
   hint?: string;
   type?: "allocation" | "contact";
+  /** Cómo viaja en el contrato JSON cuando no coincide con el tipo UI (ej. capital = range, docs/11 §4). */
+  contractType?: "range";
   options?: QuizOption[];
   assets?: QuizAsset[];
 }
@@ -158,6 +160,7 @@ export const questions: QuizQuestion[] = [  {
   {
     id: "capital",
     trackingId: "q4",
+    contractType: "range",
     title: "¿Con qué cantidad de capital estás trabajando actualmente o tienes previsto destinar a cripto durante este ciclo?",
     hint: "No necesitamos saber la cantidad exacta. El rango nos permite adaptar mejor el diagnóstico a tu situación.",
     options: [

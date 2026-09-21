@@ -210,7 +210,7 @@ describe("lead-payload", () => {
     const contract = buildContractAnswers(answers, ["situation", "challenge", "allocation", "capital", "horizon", "drawdown", "influence", "rules"]);
     expect(contract).toHaveLength(3);
     expect(contract.find((c) => c.question_id === "situation")).toMatchObject({ answer_id: "exposure_none", order: 1, type: "single_choice" });
-    expect(contract.find((c) => c.question_id === "capital")).toMatchObject({ answer_id: "capital_10k_25k", order: 4 });
+    expect(contract.find((c) => c.question_id === "capital")).toMatchObject({ answer_id: "capital_10k_25k", order: 4, type: "range" });
     const allocation = contract.find((c) => c.question_id === "allocation")!;
     expect(allocation.type).toBe("allocation");
     expect(allocation.answer_id).toBeNull();

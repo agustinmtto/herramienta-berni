@@ -109,7 +109,7 @@ export function buildContractAnswers(
     const idx = order.indexOf(question.id);
     const base = {
       question_id: question.id,
-      type: question.type === "allocation" ? "allocation" : "single_choice",
+      type: question.type === "allocation" ? "allocation" : (question.contractType ?? "single_choice"),
       question_text: question.title,
       order: idx >= 0 ? idx + 1 : 0,
       answered_at: state.answeredAt ?? null,

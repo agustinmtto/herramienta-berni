@@ -135,15 +135,11 @@ export function QuizFlow() {
         answeredAt: new Date().toISOString(),
       },
     }));
-    setTransitioning(true);
+    const next = Math.min(qIndex + 1, questions.length - 1);
     transitionTimerRef.current = setTimeout(() => {
-      setQIndex((current) => Math.min(current + 1, questions.length - 1));
+      goTo(next);
       setTransitioning(false);
     }, 340);
-    // El progress se emite con el índice siguiente al que ya se movió el foco
-    // visual: si el usuario abandona en la transición, el beacon llega con el
-    // último paso confirmado, no con el que no llegó a ver.
-    goTo(Math.min(qIndex + 1, questions.length - 1));
   };
 
   const pickAllocation = (question: QuizQuestion, asset: { id: string }, range: QuizAssetRange) => {
@@ -160,11 +156,11 @@ export function QuizFlow() {
   };
 
   const confirmAllocation = () => {
-    setTransitioning(true);
+    const next = Math.min(qIndex + 1, questions.length - 1);
     transitionTimerRef.current = setTimeout(() => {
+      goTo(next);
       setTransitioning(false);
     }, 200);
-    goTo(Math.min(qIndex + 1, questions.length - 1));
   };
 
   const submitContact = async (form: {

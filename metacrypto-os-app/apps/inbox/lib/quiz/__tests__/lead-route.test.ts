@@ -240,6 +240,28 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
     expect(res.status).toBe(403);
   });
 
+  test("los tipos del contrato del cliente coinciden con la definición publicada (regresión tipo_incorrecto)", async () => {
+    // Regresión del bug real: el cliente mandaba capital como single_choice y
+    // la definición publicada dice range → el RPC rechazaba TODO completed.
+    // Este test compara SIEMPRE el cliente contra la definición de la base.
+    const { buildContractAnswers } = await import("@/lib/quiz/lead-payload");
+    const { questions } = await import("@/lib/quiz/question-config");
+    const answers = Object.fromEntries(
+      questions.filter((q) => q.type !== "contact").map((q) => [q.id, { answer: "x", tags: [] }])
+    );
+    const contract = buildContractAnswers(answers, questions.filter((q) => q.type !== "contact").map((q) => q.id));
+
+    const defRes = await fetch(`${URL_BASE}/rest/v1/quiz_versiones?codigo=eq.diagnostico-cripto-v1-a&select=definicion`, {
+      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
+    });
+    const [version] = (await defRes.json()) as { definicion: { questions: { id: string; type: string }[] } }[];
+    for (const answer of contract) {
+      const defQuestion = version.definicion.questions.find((q) => q.id === answer.question_id);
+      expect(defQuestion).toBeDefined();
+      expect(answer.type).toBe(defQuestion!.type); // si difiere → tipo_incorrecto en el RPC
+    }
+  });
+
   test("origin propio pasa el chequeo", async () => {
     const res = await call(
       {
