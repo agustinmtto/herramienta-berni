@@ -229,6 +229,6 @@ Cada fase produce algo **usable por la siguiente** y nada rompe lo anterior.
 |---|---|---|
 | 0 — Preparación | 🟡 Baseline completo (1.246 tests, tsc, db reset limpios; rama `feature/leads-a-migracion-rpc`). Pendiente: confirmar número de migración con Miled | — |
 | A — Migración + RPCs | 🟡 Criterios locales completos: `0068_quiz_leads.sql` (3 tablas + RLS + definición `diagnostico-cripto-v1-a` + RPCs `registrar_diagnostico` y `vincular_lead_convertido`), 11 tests de integración nuevos (suite total 1.257 en verde, tsc limpio). Pendiente: confirmación del número + PR | — |
-| B — Endpoint + funnel | ☐ pendiente | — |
+| B — Endpoint + funnel | 🟡 Criterios locales completos: funnel portado a `/quiz` (layout con fuentes propias + `app/quiz.css` scopeado a `.quiz-page`), middleware con excepciones públicas, selector de país + E.164, UTMs automáticas, eventos `started/progress/dropped/completed`, endpoint `app/api/lead/route.ts` endurecido con RPC, contacto persistido antes del resultado. 37 tests nuevos (suite total 1.294 en verde, tsc limpio, `db reset` limpio, smoke end-to-end contra `next dev`). Pendiente: PR | — |
 | C — Módulo /leads | ☐ pendiente | — |
 | D — Pre-producción | ☐ pendiente | — |

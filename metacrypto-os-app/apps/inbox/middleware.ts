@@ -44,6 +44,13 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/api/wa-ingest") ||
     pathname.startsWith("/api/login") ||
     pathname.startsWith("/api/logout") ||
+    // El Quiz Funnel (docs/11 D1): ruta PÚBLICA a propósito — es la captación.
+    // Su protección no es el middleware sino el diseño: /quiz no expone nada,
+    // y /api/lead valida, limita y persiste solo por el RPC server-side. Sin
+    // estas líneas el funnel devolvería el redirect a /login (HTML) a todo
+    // lead real, en silencio.
+    pathname.startsWith("/quiz") ||
+    pathname.startsWith("/api/lead") ||
     pathname.startsWith("/api/inbox/media-backfill") ||
     pathname.startsWith("/api/sesiones/sync") ||
     // Cron de notas del evento 26/08. Como los otros dos crons: sin esta
