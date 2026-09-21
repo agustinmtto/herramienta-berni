@@ -416,6 +416,39 @@ Secuencia:
 
 La operacion es transaccional e idempotente. Repetirla con el mismo origen y destino no duplica ni pierde datos. No modifica nombre, email, telefono, programas ni ningun otro dato del cliente definitivo.
 
+### 9.1 Validacion de telefono y confirmacion explicita
+
+Antes de reasignar, `vincular_lead_convertido` compara el telefono capturado en el quiz
+(`diagnostico_envios.telefono_e164_capturado` del envio completado mas reciente del lead)
+con el telefono del cliente definitivo (`personas.telefono_e164`):
+
+- Si **coinciden** → la vinculación sigue sin friccion.
+- Si **no coinciden** → el RPC rechaza con `quiz_leads/telefono_no_coincide`, salvo que el
+  operador envie `p_confirmar=true`. La UI muestra el aviso ("los telefonos no coinciden")
+  y exige marcar "confirmo que es la misma persona" — los telefonos cambian legitimately,
+  asi que el bloque es blando pero NUNCA silencioso.
+- El flag `p_confirmar` queda registrado en la auditoria junto con ambos telefonos.
+
+### 9.2 Auditoria de cada vinculacion
+
+Cada vinculacion escribe una fila en `auditoria` (entidad `persona`, accion `vinculacion`)
+con: autor (team_member), cliente destino, lista exacta de `envio_ids` reasignados, telefono
+del lead y del cliente, y si fue confirmada manualmente. Esta fila es lo que permite el
+rollback exacto y deja rastro de quien hizo que.
+
+### 9.3 Rollback: desvincular
+
+`desvincular_lead(p_cliente_id)` revierte la ULTIMA vinculacion de ese cliente leyendo su
+fila de auditoria:
+
+1. Reasigna EXACTAMENTE los `envio_ids` registrados (solo los que sigan apuntando al cliente)
+   de vuelta a la persona temporal.
+2. Restaura la persona temporal a `estado='lead'`.
+3. Escribe auditoria `desvinculacion`.
+4. Si no hay vinculacion registrada para ese cliente, rechaza con `quiz_leads/nada_que_desvincular`.
+
+Idempotente y transaccional, igual que la vinculacion.
+
 ## 10. Modulo `/leads`
 
 El listado representa envios del quiz, no una tabla raiz adicional llamada `leads`.
