@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "ffmpeg-static": "^5.3.0",
-    "next": "^15.0.0",
+    "next": "^15.5.25",
     "pdfkit": "^0.20.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -26,5 +26,9 @@
     "@types/web-push": "^3.6.4",
     "typescript": "^5.6.0",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "nanoid": "^3.3.18",
+    "sharp": "^0.35.4"
   }
 }

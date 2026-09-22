@@ -52,7 +52,22 @@ const nextConfig = {
   // vieja, sigue pintando las notificaciones con el código antiguo y no hay
   // forma cómoda de echarlo: el usuario tendría que desinstalar la app.
   async headers() {
+    // Headers globales de seguridad (en el PR del funnel, acordado con el
+    // negocio): nosniff + referrer + permissions + HSTS (HTTPS lo fuerza el
+    // host; el header es aditivo y en HTTP dev no molesta). Sin CSP ni
+    // frame-deny por ahora: necesitan iteración contra las pantallas
+    // existentes (portales /e/ y /c/, embeds de video) y su propio ticket.
+    const globales = [
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+      { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+    ];
     return [
+      {
+        source: "/:path*",
+        headers: globales,
+      },
       {
         source: "/sw.js",
         headers: [
