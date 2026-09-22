@@ -16,7 +16,7 @@ Frase para enviar:
 
 > **"¿Podés entrar al repo del OS y fijarte si ya existen migraciones que empiecen con `0068`, `0069` o `0070`? Si no tenés acceso o no sabés dónde verlo, pasanos acceso de lectura al repo y lo revisamos nosotros."**
 
-**Por qué:** las migraciones forman parte de una secuencia global del OS. Si alguno de esos números ya fue utilizado, tenemos que ajustar la numeración antes de aplicar los cambios en producción.
+**Por qué:** las migraciones forman parte de una secuencia global del OS. Si alguno de esos números ya fue utilizado, tenemos que ajustar la numeración antes de aplicar los cambios en producción. **Y si algún otro entorno ya llegó a aplicar `0068`/`0069`, avisarlo: como sus correcciones se hicieron editando esos archivos in place (estaban sin usar en producción y aún no se despliegan), un entorno que las aplicó antes del fix quedaría híbrido — ese caso convierte el fix en una migración de parche nueva.**
 
 ---
 

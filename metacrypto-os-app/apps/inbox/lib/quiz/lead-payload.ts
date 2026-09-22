@@ -96,6 +96,16 @@ export function composePhone(countryPrefix: string, localNumber: string): string
   return `+${countryPrefix}${digits}`;
 }
 
+// Resuelve el PREFIJO desde el CÓDIGO de país del selector ("AR" → "54").
+// El formulario manda código, no prefijo: llamar composePhone() directo con el
+// código componía "+AR…" — hoy lo salvaba el strip de letras del servidor,
+// pero el contrato pide mandar E.164 ya compuesto (docs/11 §5).
+export function composePhonePorPais(codigoPais: string, localNumber: string): string | null {
+  const pais = COUNTRIES.find((c) => c.code === codigoPais);
+  if (!pais) return null;
+  return composePhone(pais.prefix, localNumber);
+}
+
 // Mapea el estado de respuestas del wizard al arreglo de respuestas del
 // contrato: IDs estables + snapshot de texto + valor estructurado.
 export function buildContractAnswers(

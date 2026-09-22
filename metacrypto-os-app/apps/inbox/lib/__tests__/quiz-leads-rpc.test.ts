@@ -482,6 +482,13 @@ d("quiz leads RPC (integración local, docs/11)", () => {
     conFechaBasura.lead.consent.accepted_at = "ayer";
     const rFecha = await rpc("registrar_diagnostico", { p_payload: conFechaBasura });
     expect(rFecha.body.message).toContain("contacto_incompleto");
+
+    // (M9) la fecha de aceptación en el FUTURO también es contrato inválido
+    const conFechaFutura = JSON.parse(JSON.stringify(base));
+    conFechaFutura.session_id = session(66);
+    conFechaFutura.lead.consent.accepted_at = "2099-01-01T00:00:00Z";
+    const rFuturo = await rpc("registrar_diagnostico", { p_payload: conFechaFutura });
+    expect(rFuturo.body.message).toContain("contacto_incompleto");
   });
 
   test("(B6) allocation con activos duplicados → rechazada", async () => {
@@ -607,6 +614,51 @@ d("quiz leads RPC (integración local, docs/11)", () => {
 
     const audit = await rest("GET", "auditoria", `accion=eq.descarte&entidad_id=eq.${leadId}&select=datos`);
     expect(audit.body.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("(M8) retry/beacon tardío sobre un envío completed: devuelve el resultado sin revalidar", async () => {
+    const s = session(65);
+    const alta = await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: email(65), capital: "capital_10k_25k" }) });
+    expect(alta.status).toBe(200);
+    expect(alta.body.submission_id).not.toBeNull();
+
+    // progress con respuestas INVALIDAS sobre el completed: no revalida ni toca
+    const progres = payload({ session_id: s, event: "progress", occurred_at: "2026-09-21T12:00:00Z", progress: { step_id: "rules", step_index: 7 },
+      answers: [{ question_id: "pregunta_ajena", type: "single_choice", question_text: "x", order: 1, answer_id: "x", answer_text: "", value: null, answered_at: null }] });
+    const rProgres = await rpc("registrar_diagnostico", { p_payload: progres });
+    expect(rProgres.status).toBe(200);
+    expect(rProgres.body.status).toBe("completed");
+    expect(rProgres.body.submission_id).toBe(alta.body.submission_id);
+
+    // retry de completed SIN consent (basura en el lead): idempotencia, no error
+    const retry = completedPayload({ sessionId: s, email: email(65), capital: "capital_lt_10k" }) as Record<string, unknown>;
+    delete retry.lead;
+    const rRetry = await rpc("registrar_diagnostico", { p_payload: retry });
+    expect(rRetry.status).toBe(200);
+    expect(rRetry.body.status).toBe("completed");
+
+    // y el envío quedó intacto: sigue siendo el original, sin degradar
+    const e = await envio(s);
+    expect(e.estado).toBe("completed");
+    expect(e.capital_min_usd).toBe(10000); // el retry no pisó el capital con otra banda
+  });
+
+  test("(§9.4b) descartar un lead YA vinculado/archivado → rechaza (no ok fingido)", async () => {
+    const s = session(67);
+    const mail = email(67);
+    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: mail, capital: "capital_10k_25k" }) });
+    const leadId = ((await envio(s)).persona_id) as string;
+
+    const correoCliente = mail.replace("quiz-rpc-", "descarto-");
+    EMAILS.push(correoCliente);
+    const cliente = await rest("POST", "personas", "select=id", { estado: "cliente", nombre: "Cliente descarto", email: correoCliente, telefono_e164: "+5491100007777", divisa_preferida: "USD" });
+    const clienteId = cliente.body[0].id;
+    PROGRAMA_IDS.push((await rest("POST", "programas", "select=id", { persona_id: clienteId, tier: "3000", motivo: "nueva_venta", fecha_inicio: "2026-09-01", monto: 3000, divisa: "EUR" })).body[0].id);
+
+    await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteId, p_confirmar: true });
+    const intento = await rpc("descartar_lead", { p_lead_id: leadId });
+    expect(intento.status).toBeGreaterThanOrEqual(400);
+    expect(intento.body.message).toContain("lead_invalido");
   });
 
   test("un envío completed no puede retroceder ni siquiera por escritura directa", async () => {

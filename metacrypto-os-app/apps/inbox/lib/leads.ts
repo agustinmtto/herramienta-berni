@@ -91,8 +91,13 @@ export function buildLeadsQuery(f: LeadFilters): string {
   if (f.paso) parts.push(`last_step_id=eq.${encodeURIComponent(f.paso)}`);
   if (f.utm_source) parts.push(`utm_source=eq.${encodeURIComponent(f.utm_source)}`);
   if (f.utm_campaign) parts.push(`utm_campaign=eq.${encodeURIComponent(f.utm_campaign)}`);
-  if (f.capitalMin) parts.push(`capital_max_usd=gte.${Number(f.capitalMin)}`);
-  if (f.capitalMax) parts.push(`capital_min_usd=lte.${Number(f.capitalMax)}`);
+  // Semántica por etiqueta (fix auditoría v2 #11): "capital mínimo ≥ X" =
+  // banda que EMPIEZA en o después de X (capital_min_usd >= X); "capital
+  // máximo ≤ X" = banda cuyo tope no excede X. La versión anterior filtraba
+  // por solapamiento (capital_max >= X / capital_min <= X) y aparte quedaba
+  // EXCLUIDA la banda "$250k+" que tiene capital_max NULL.
+  if (f.capitalMin) parts.push(`capital_min_usd=gte.${Number(f.capitalMin)}`);
+  if (f.capitalMax) parts.push(`capital_max_usd=lte.${Number(f.capitalMax)}`);
   if (f.q) {
     const like = encodeURIComponent(`*${patronLike(f.q)}*`);
     parts.push(`or=(nombre_capturado.ilike.${like},email_capturado.ilike.${like},telefono_e164_capturado.ilike.${like})`);

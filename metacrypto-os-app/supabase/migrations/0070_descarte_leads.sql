@@ -56,8 +56,10 @@ begin
     raise exception 'quiz_leads/lead_invalido';
   end if;
 
-  -- idempotencia: ya fuera del pueblo comercial (descartado o archivado)
-  if v_lead_estado in ('descartado', 'archivado') then
+  -- idempotencia: re-descartar el MISMO lead descartado responde OK. Un lead
+  -- ARCHIVADO ya se convirtió (o fue a cliente): el descarte no aplica — se
+  -- rechaza en vez de "confirmar" algo que nunca pasó (auditoría v2).
+  if v_lead_estado = 'descartado' then
     return jsonb_build_object('ok', true, 'lead_id', p_lead_id, 'estado', v_lead_estado);
   end if;
   if v_lead_estado is distinct from 'lead' then

@@ -28,7 +28,7 @@ import {
   COUNTRIES,
   buildQuizPayload,
   capturarSource,
-  composePhone,
+  composePhonePorPais,
   type QuizAnswerState,
   type SourceData,
 } from "@/lib/quiz/lead-payload";
@@ -65,6 +65,10 @@ export function QuizFlow() {
   const answersRef = useRef<Record<string, QuizAnswerState>>({});
   answersRef.current = answers; // en cada render, la versión actual
   const visitedStagesRef = useRef<string[]>([]);
+  // Último paso canónico {id, index}: el beacon de abandono lo reporta tal
+  // cual — los IDs de etapa viejos ("q1"…) NO matchean los filtros de /leads
+  // (que esperan "situation", "capital", … docs/11 §10).
+  const lastStepRef = useRef<{ id: string; index: number }>({ id: "start", index: 0 });
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedRef = useRef(false);
 
@@ -107,7 +111,8 @@ export function QuizFlow() {
     if (!sessionIdRef.current) sessionIdRef.current = getOrCreateSessionId();
     if (!sourceRef.current) sourceRef.current = capturarSource();
     recordStage("start");
-    recordStage(questions[0].trackingId);
+    recordStage(questions[0].id);
+    lastStepRef.current = { id: "start", index: 0 };
     setStarted(true);
     setScreen(SCREENS.WIZARD);
     sendEvent("started", { stepId: "start", stepIndex: 0 });
@@ -118,6 +123,7 @@ export function QuizFlow() {
   // (StrictMode) y duplicaría el envío.
   const goTo = useCallback((next: number) => {
     setQIndex(next);
+    lastStepRef.current = { id: questions[next]?.id ?? "contact", index: next };
     sendEvent("progress", { stepId: questions[next]?.id ?? "contact", stepIndex: next });
   }, [sendEvent]);
 
@@ -179,9 +185,15 @@ export function QuizFlow() {
     setContactError(null);
     const name = form.name.trim();
     const email = form.email.trim();
-    const phone = composePhone(form.country, form.phoneLocal);
+    // El selector manda el CÓDIGO de país ("AR"): el prefijo ("54") lo resuelve
+    // el helper — llamar composePhone directo componía "+AR…" (auditoría v2 #2).
+    const phone = composePhonePorPais(form.country, form.phoneLocal);
     if (!name || !email || !form.phoneLocal.trim() || !form.consent) {
       setContactError("Completá nombre, email, teléfono y aceptá recibir el diagnóstico.");
+      return;
+    }
+    if (!phone) {
+      setContactError("Elegí un país de la lista para el teléfono.");
       return;
     }
     if (!/.+@.+\..+/.test(email)) {
@@ -239,6 +251,19 @@ export function QuizFlow() {
     }
 
     completedRef.current = true;
+    // Rotación de sesión (auditoría v2 #4): un SEGUNDO recorrido en esta misma
+    // pestaña tiene que ser un envío nuevo. Si reusara el session_id, la
+    // idempotencia del RPC (§7) devolvería el envío ya completado y el nuevo
+    // diagnóstico jamás se guardaría. La cookie nueva se levanta en el próximo
+    // arranque del wizard; el beacon de abandono no emite porque completedRef
+    // es true (el recorrido actual ya cerró).
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      // sessionStorage puede fallar (modo privado): la próxima pasada genera
+      // un session_id fresco igual, porque el guard del inicio lo revalida.
+    }
+    sessionIdRef.current = crypto.randomUUID();
     setLeadName(name);
     setDiagnosis(diagnosisSnapshot);
     setAnalyzing(0);
@@ -255,7 +280,7 @@ export function QuizFlow() {
   };
 
   useEffect(() => {
-    if (screen === SCREENS.WIZARD && questions[qIndex]?.trackingId) recordStage(questions[qIndex].trackingId);
+    if (screen === SCREENS.WIZARD && questions[qIndex]?.id) recordStage(questions[qIndex].id);
   }, [screen, qIndex, recordStage]);
 
   useEffect(() => () => { if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current); }, []);
@@ -268,8 +293,11 @@ export function QuizFlow() {
         event: "dropped",
         sessionId: sessionIdRef.current,
         source: sourceRef.current ?? capturarSource(),
-        stepId: visitedStagesRef.current.at(-1) || "start",
-        stepIndex: visitedStagesRef.current.length,
+        // Paso EXACTO en el que estaba el lead: IDs canónicos + índice real
+        // (antes: trackingId "q1…q8" y largo de la lista de etapas — no
+        // matcheaban ni los filtros de /leads ni el índice del recorrido).
+        stepId: lastStepRef.current.id,
+        stepIndex: lastStepRef.current.index,
         visited: visitedStagesRef.current,
         answers: answersRef.current, // el beacon también informa lo respondido
       });

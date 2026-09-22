@@ -34,9 +34,17 @@ describe("buildLeadsQuery", () => {
     expect(con({ calificacion: "indeterminado" })).toContain("estado=eq.completed");
   });
 
-  test("banda de capital: min acota por capital_max y viceversa", () => {
-    expect(con({ capitalMin: "10000" })).toContain("capital_max_usd=gte.10000");
-    expect(con({ capitalMax: "50000" })).toContain("capital_min_usd=lte.50000");
+  // Semántica por ETIQUETA (fix auditoría v2 #11): los selects del filtro se
+  // llaman "Capital mínimo: ≥ X" y "Capital máximo: ≤ X", así que el mínimo
+  // acota por el MÍNIMO de la banda y el máximo por el TOPE. La semántica de
+  // solape anterior hacía que un lead "<10k" entrara en el filtro "≥ 10k" y
+  // que la banda abierta ">$250k" (capital_max NULL) desapareciera del suyo.
+  test("banda de capital: min acota por capital_min y capitalMax por capital_max", () => {
+    expect(con({ capitalMin: "10000" })).toContain("capital_min_usd=gte.10000");
+    expect(con({ capitalMax: "50000" })).toContain("capital_max_usd=lte.50000");
+    // la banda abierta ">$250k" (capital_max NULL) SÍ aparece en su propio
+    // filtro mínimo, porque el ≥ compara su capital_min (definido, 250000):
+    expect(con({ capitalMin: "250000" })).toContain("capital_min_usd=gte.250000");
   });
 
   test("fechas, paso de abandono, versión y UTMs se escapan", () => {

@@ -86,6 +86,7 @@ create table if not exists public.diagnostico_envios (
   constraint diagnostico_envios_completed_completo_check check (
     estado <> 'completed' or (
       persona_id              is not null
+      and nombre_capturado    is not null
       and email_capturado     is not null
       and telefono_e164_capturado is not null
       and consentimiento_aceptado is true
@@ -412,26 +413,10 @@ begin
       raise exception 'quiz_leads/telefono_invalido';
     end if;
   end if;
-  if v_event = 'completed' then
-    -- Consentimiento EXIGIBLE, no verificable-de-paso: nombre, version y fecha
-    -- de aceptacion son datos que la base guarda como hechos, y la fecha
-    -- faltante no se reemplaza en silencio por otra (§7/D2).
-    v_consent_at := null;
-    if v_lead is null or jsonb_typeof(v_lead) <> 'object'
-       or coalesce((v_lead->'consent'->>'accepted')::boolean, false) is not true
-       or v_email = '' or v_telefono = ''
-       or v_nombre = ''
-       or coalesce(v_lead->'consent'->>'version','') = ''
-       or v_lead->'consent'->>'accepted_at' is null
-       or jsonb_typeof(v_lead->'consent'->'accepted_at') not in ('string') then
-      raise exception 'quiz_leads/contacto_incompleto';
-    end if;
-    begin
-      v_consent_at := (v_lead->'consent'->>'accepted_at')::timestamptz;
-    exception when others then
-      raise exception 'quiz_leads/contacto_incompleto';  -- fecha de aceptacion no parseable
-    end;
-  end if;
+  -- La EXIGENCIA de contacto se aplica ADEMÁS de conocer el estado del envío:
+  -- se valida en 6.4 (después del lock y del early-return de idempotencia)
+  -- para que un retry tardío de completed no falle revalidando datos de un
+  -- envío que ya es un hecho.
 
   -- 6.3) upsert del envío por session_id + lock de fila. Va ANTES de la
   -- validación: para una sesión existente la definición contra la que se
@@ -468,27 +453,55 @@ begin
     raise exception 'quiz_leads/version_conflictada: la sesion % pertenece a otra version del quiz', v_session;
   end if;
 
-  -- 6.4) advisory lock por contacto (solo completed): serializa dos sesiones
+  -- 6.4) idempotencia + exigencia de contacto:
+  -- a) CUALQUIER evento sobre un envío ya completado devuelve el resultado
+  --    existente (el beacon tardío o el retry cae acá: solo se cotejó la
+  --    versión, no el consentimiento ni las respuestas de un envío que ya
+  --    es un hecho — antes, un retry incompleto fallaba).
+  if v_envio.estado = 'completed' then
+    return jsonb_build_object(
+      'ok', true, 'session_id', v_session,
+      'submission_id', v_envio.id, 'status', 'completed');
+  end if;
+
+  -- b) Consentimiento EXIGIBLE, no verificable-de-paso: nombre, version y
+  --    fecha de aceptacion son datos que la base guarda como hechos, y la
+  --    fecha faltante no se reemplaza en silencio por otra (§7/D2). Un
+  --    accepted_at en el FUTURO es basura de contrato, no un hecho.
+  v_consent_at := null;
+  if v_event = 'completed' then
+    if v_lead is null or jsonb_typeof(v_lead) <> 'object'
+       or coalesce((v_lead->'consent'->>'accepted')::boolean, false) is not true
+       or v_email = '' or v_telefono = ''
+       or v_nombre = ''
+       or coalesce(v_lead->'consent'->>'version','') = ''
+       or v_lead->'consent'->>'accepted_at' is null
+       or jsonb_typeof(v_lead->'consent'->'accepted_at') not in ('string') then
+      raise exception 'quiz_leads/contacto_incompleto';
+    end if;
+    begin
+      v_consent_at := (v_lead->'consent'->>'accepted_at')::timestamptz;
+    exception when others then
+      raise exception 'quiz_leads/contacto_incompleto';  -- fecha de aceptacion no parseable
+    end;
+    if v_consent_at > now() then
+      raise exception 'quiz_leads/contacto_incompleto';  -- la aceptacion no puede ser futura
+    end if;
+  end if;
+
+  -- 6.5) advisory lock por contacto (solo completed): serializa dos sesiones
   -- simultáneas del mismo email+teléfono para que no creen dos personas.
   if v_event = 'completed' then
     perform pg_advisory_xact_lock(hashtext('quiz_leads:' || v_email || ':' || v_telefono));
   end if;
 
-  -- 6.5) respuestas: validar SIEMPRE contra la definición; para completed
+  -- 6.6) respuestas: validar SIEMPRE contra la definición; para completed
   -- además deben estar todas las requeridas.
   perform validar_respuestas_quiz(
     v_version.definicion,
     coalesce(p_payload->'answers','[]'::jsonb),
     v_event = 'completed'
   );
-
-  -- 6.6) idempotencia de completed: ya completado → devolver tal cual, sin
-  -- tocar persona ni degradar (el beacon tardío cae aquí).
-  if v_envio.estado = 'completed' then
-    return jsonb_build_object(
-      'ok', true, 'session_id', v_session,
-      'submission_id', v_envio.id, 'status', 'completed');
-  end if;
 
   -- 6.7) transición de estado (matriz docs/11 §7)
   v_estado := case v_event
