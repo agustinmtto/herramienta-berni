@@ -8,7 +8,7 @@ Lead magnet para el negocio de Berni (Metacrypto Club, cripto): landing con wiza
 
 - ✅ **Integración implementada en el OS del negocio** (rama `feature/leads-a-migracion-rpc`): funnel portado a `metacrypto-os-app/apps/inbox` como ruta pública `/quiz`, persistencia real en Supabase local (migraciones `0068`/`0069` + RPC transaccional `registrar_diagnostico`), módulo privado `/leads` con permiso propio, vinculación post-venta con validación de teléfono + rollback auditado
 - ✅ Fases 0–C cerradas y Fase D cierre local (ver `docs/12` §6) — pendiente solo externo (Miled + negocio)
-- ✅ Suite del OS: 1.304 tests en verde · `tsc` limpio
+- ✅ Suite del OS: 1.313 tests en verde · `tsc` limpio
 - ✅ **MVP standalone en la raíz** (histórico, conservado como referencia): wizard con 8 preguntas config-driven, motor determinístico (`lib/engine.js`), JSON `pregunta/respuesta` → `POST /api/lead` (stub), tests 39/39 en `test/`
 - ⏳ Pendiente externo: hosting/rate limit definitivo, confirmación de migraciones con Miled, upgrade de Next (RCE crítica), videos reales, alerta de triaje, PDF por email (Resend)
 
