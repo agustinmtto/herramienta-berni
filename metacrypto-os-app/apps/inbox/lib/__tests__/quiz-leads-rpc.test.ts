@@ -45,6 +45,10 @@ if (URL_BASE && KEY) {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const QUIZ = "diagnostico-cripto-v1-a";
+// Versión de prueba (solo tests) con una pregunta multiple_choice: los huecos
+// de selección vacía/ids duplicados son de la función genérica de validación
+// y la versión vigente no declara ese tipo.
+const MC_VERSION = "quiz-leads-mc-test";
 const SESSIONS: string[] = [];
 const EMAILS: string[] = [];
 const PROGRAMA_IDS: string[] = [];
@@ -136,6 +140,8 @@ async function limpiar() {
   if (SESSIONS.length) {
     await rest("DELETE", "diagnostico_envios", `session_id=in.(${SESSIONS.join(",")})`);
   }
+  // la versión de prueba se elimina después de sus envíos (FK de quiz_version_id)
+  await rest("DELETE", "quiz_versiones", `codigo=eq.${MC_VERSION}`);
   if (PROGRAMA_IDS.length) {
     await rest("DELETE", "programas", `id=in.(${PROGRAMA_IDS.join(",")})`);
   }
@@ -144,12 +150,35 @@ async function limpiar() {
   }
 }
 
+// Clona la definición vigente, le agrega una pregunta multiple_choice y la
+// publica como versión de pruebas (estado active, mismo funnel).
+async function crearVersionMultiChoice() {
+  const src = await rest("GET", "quiz_versiones", `codigo=eq.${QUIZ}&select=funnel,definicion`);
+  const def = src.body[0].definicion;
+  def.questions.push({
+    id: "extras", type: "multiple_choice", required: false,
+    text: "¿Qué te interesaría recibir?",
+    options: [{ id: "mc_a", text: "Opción A" }, { id: "mc_b", text: "Opción B" }],
+  });
+  const r = await rest("POST", "quiz_versiones", "select=id", {
+    codigo: MC_VERSION,
+    funnel: src.body[0].funnel,
+    variante: "control",
+    version: 2,
+    estado: "active",
+    publicada_at: new Date().toISOString(),
+    definicion: def,
+  });
+  if (r.status !== 201) throw new Error(`no se pudo publicar la versión de pruebas: ${r.status} ${JSON.stringify(r.body)}`);
+}
+
 // ── suite ────────────────────────────────────────────────────────────────────
 const d = reachable ? describe : describe.skip;
 
 d("quiz leads RPC (integración local, docs/11)", () => {
   beforeAll(async () => {
     await limpiar();
+    await crearVersionMultiChoice();
   });
 
   afterAll(async () => {
@@ -396,6 +425,188 @@ d("quiz leads RPC (integración local, docs/11)", () => {
     const d2 = await rpc("desvincular_lead", { p_cliente_id: clienteId });
     expect(d2.status).toBeGreaterThanOrEqual(400);
     expect(d2.body.message).toContain("nada_que_desvincular");
+  });
+
+  // ═══ bloqueantes corregidos (docs/11 §5–§9) — validación de cada fix ═══
+
+  test("(B1) el capital se sella desde la DEFINICIÓN aunque el cliente mande importes falsos", async () => {
+    const s = session(50);
+    const p = completedPayload({ sessionId: s, email: email(50), capital: "capital_10k_25k", diagnosis: true }) as Record<string, any>;
+    // answer_id VÁLIDO + value falsificado: el hueco que guardaba datos truchos.
+    (p.answers as any[])[3].value = { currency: "USD", min: 999999, max: 5 };
+    const r = await rpc("registrar_diagnostico", { p_payload: p });
+    expect(r.status).toBe(200);
+
+    const e = await envio(s);
+    // importes persistidos = los de la opción elejida, no los del cliente
+    expect(e.capital_min_usd).toBe(10000);
+    expect(e.capital_max_usd).toBe(25000);
+    expect(e.es_lead_caliente).toBe(true); // el flag sigue siendo del answer_id validado
+
+    const resp = await rest("GET", "diagnostico_respuestas", `envio_id=eq.${e.id}&question_id=eq.capital&select=answer_text,answer_value`);
+    expect(resp.body[0].answer_text).toBe("Entre 10.000 y 25.000 USD"); // texto de la definición
+    expect(resp.body[0].answer_value).toMatchObject({ min: 10000, max: 25000 });
+  });
+
+  test("(B4) una sesión existente no se revalida contra otra versión del quiz", async () => {
+    const s = session(51);
+    await rpc("registrar_diagnostico", { p_payload: payload({ session_id: s, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "start", step_index: 0 } }) });
+    const r = await rpc("registrar_diagnostico", {
+      p_payload: payload({ quiz_version: MC_VERSION, session_id: s, event: "progress", occurred_at: "2026-09-21T09:01:00Z", progress: { step_id: "situation", step_index: 1 } }),
+    });
+    expect(r.status).toBeGreaterThanOrEqual(400);
+    expect(r.body.message).toContain("version_conflictada");
+    // el envío sigue en su versión original, sin tocar
+    const e = await envio(s);
+    expect(e.estado).toBe("started");
+    expect(e.quiz_version_id).not.toBeNull();
+  });
+
+  test("(B5) completed sin nombre, sin version de consentimiento o con fecha basura → contacto_incompleto", async () => {
+    const base = completedPayload({ sessionId: session(52), email: email(52), capital: "capital_10k_25k" });
+
+    const sinNombre = JSON.parse(JSON.stringify(base));
+    sinNombre.session_id = session(53);
+    sinNombre.lead.name = "   ";
+    const rNombre = await rpc("registrar_diagnostico", { p_payload: sinNombre });
+    expect(rNombre.body.message).toContain("contacto_incompleto");
+
+    const sinVersion = JSON.parse(JSON.stringify(base));
+    sinVersion.session_id = session(54);
+    sinVersion.lead.consent.version = null;
+    const rVersion = await rpc("registrar_diagnostico", { p_payload: sinVersion });
+    expect(rVersion.body.message).toContain("contacto_incompleto");
+
+    const conFechaBasura = JSON.parse(JSON.stringify(base));
+    conFechaBasura.session_id = session(55);
+    conFechaBasura.lead.consent.accepted_at = "ayer";
+    const rFecha = await rpc("registrar_diagnostico", { p_payload: conFechaBasura });
+    expect(rFecha.body.message).toContain("contacto_incompleto");
+  });
+
+  test("(B6) allocation con activos duplicados → rechazada", async () => {
+    const s = session(56);
+    const p = completedPayload({ sessionId: s, email: email(56), capital: "capital_10k_25k" }) as Record<string, any>;
+    // btc repetido, stables ausente: el largo "cuadra", la data no
+    (p.answers as any[])[2].value = [{ asset_id: "btc", level: "high" }, { asset_id: "btc", level: "zero" }, { asset_id: "eth", level: "low" }, { asset_id: "alts", level: "medium" }];
+    const r = await rpc("registrar_diagnostico", { p_payload: p });
+    expect(r.body.message).toContain("allocation_duplicada");
+  });
+
+  test("(B6) multiple_choice vacía o con ids repetidos → rechazada", async () => {
+    const s1 = session(57);
+    const vacia = payload({ quiz_version: MC_VERSION, session_id: s1, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "extras", step_index: 8 },
+      answers: [{ question_id: "extras", type: "multiple_choice", question_text: "extras", order: 1, answer_id: null, answer_text: "", value: { ids: [] }, answered_at: null }] });
+    const rVacia = await rpc("registrar_diagnostico", { p_payload: vacia });
+    expect(rVacia.body.message).toContain("seleccion_vacia");
+
+    const s2 = session(58);
+    const repetida = payload({ quiz_version: MC_VERSION, session_id: s2, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "extras", step_index: 8 },
+      answers: [{ question_id: "extras", type: "multiple_choice", question_text: "extras", order: 1, answer_id: null, answer_text: "", value: { ids: ["mc_a", "mc_a"] }, answered_at: null }] });
+    const rRepetida = await rpc("registrar_diagnostico", { p_payload: repetida });
+    expect(rRepetida.body.message).toContain("respuestas_duplicadas");
+  });
+
+  test("(B6) la misma pregunta repetida en el payload → rechazada", async () => {
+    const s = session(59);
+    const base = respuestasCompletas("capital_10k_25k");
+    base.push({ ...base[0], order: 9 }); // situation dos veces, ambas "válidas"
+    const r = await rpc("registrar_diagnostico", {
+      p_payload: payload({ session_id: s, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "result", step_index: 11 }, answers: base }),
+    });
+    expect(r.body.message).toContain("respuestas_duplicadas");
+  });
+
+  test("(B3) vincular sobre un lead ya vinculado NO devuelve ok con OtRO cliente", async () => {
+    const s = session(60);
+    const mail = email(60);
+    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: mail, capital: "capital_10k_25k" }) });
+    const e = await envio(s);
+    const leadId = e.persona_id as string;
+
+    const mkCliente = async (prefijo: string, tel: string) => {
+      const correo = mail.replace("quiz-rpc-", prefijo);
+      EMAILS.push(correo);
+      const c = await rest("POST", "personas", "select=id", { estado: "cliente", nombre: `Cliente ${prefijo}`, email: correo, telefono_e164: tel, divisa_preferida: "USD" });
+      const id = c.body[0].id as string;
+      PROGRAMA_IDS.push((await rest("POST", "programas", "select=id", { persona_id: id, tier: "3000", motivo: "nueva_venta", fecha_inicio: "2026-09-01", monto: 3000, divisa: "EUR" })).body[0].id);
+      return id;
+    };
+    const clienteA = await mkCliente("vinc-a-", "+5491199990001");
+    const clienteB = await mkCliente("vinc-b-", "+5491199990002");
+
+    await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteA, p_confirmar: true });
+
+    // el lead ya está archivado con A: pasar B no puede devolver ok
+    const vConOtro = await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteB, p_confirmar: true });
+    expect(vConOtro.status).toBeGreaterThanOrEqual(400);
+    expect(vConOtro.body.message).toContain("lead_vinculado_a_otro_cliente");
+
+    // y el eco legítimo del cliente correcto sigue siendo idempotente
+    const vMismo = await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteA, p_confirmar: true });
+    expect(vMismo.status).toBe(200);
+  });
+
+  test("(B2) dos leads vinculados a un cliente: cada rollback revierte LA SUYA", async () => {
+    const mkLead = async (n: number) => {
+      const s = session(n);
+      await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: email(n), capital: "capital_25k_50k" }) });
+      return (await envio(s)).persona_id as string;
+    };
+    const leadA = await mkLead(61);
+    const leadB = await mkLead(62);
+
+    const mailCliente = email(70);
+    const cliente = await rest("POST", "personas", "select=id", { estado: "cliente", nombre: "Cliente dos leads", email: mailCliente, telefono_e164: "+5491100008888", divisa_preferida: "USD" });
+    const clienteId = cliente.body[0].id;
+    PROGRAMA_IDS.push((await rest("POST", "programas", "select=id", { persona_id: clienteId, tier: "3000", motivo: "nueva_venta", fecha_inicio: "2026-09-01", monto: 3000, divisa: "EUR" })).body[0].id);
+
+    await rpc("vincular_lead_convertido", { p_lead_id: leadA, p_cliente_id: clienteId, p_confirmar: true });
+    await rpc("vincular_lead_convertido", { p_lead_id: leadB, p_cliente_id: clienteId, p_confirmar: true });
+    expect(await rest("GET", "diagnostico_envios", `persona_id=eq.${clienteId}&select=id`)).toBeTruthy();
+
+    // primera desvinculación (la UI manda solo el cliente): revierte la ÚLTIMA no revertida (lead B)
+    const d1 = await rpc("desvincular_lead", { p_cliente_id: clienteId });
+    expect(d1.status).toBe(200);
+    expect(d1.body.lead_id).toBe(leadB);
+
+    // si el operador desvincula por lead (botón del detalle del envío), revierte a A y no a B
+    const d2 = await rpc("desvincular_lead", { p_cliente_id: clienteId, p_lead_id: leadA });
+    expect(d2.status).toBe(200);
+    expect(d2.body.lead_id).toBe(leadA);
+
+    // ya no queda ninguna pendiente para este cliente
+    const d3 = await rpc("desvincular_lead", { p_cliente_id: clienteId });
+    expect(d3.status).toBeGreaterThanOrEqual(400);
+    expect(d3.body.message).toContain("nada_que_desvincular");
+
+    // y la auditoría de la vinculación de A quedó marcada como revertida
+    const auditA = await rest("GET", "auditoria", `accion=eq.vinculacion&entidad_id=eq.${leadA}&select=datos&order=created_at.desc&limit=1`);
+    expect(auditA.body[0].datos.revertido).toBe(true);
+  });
+
+  test("(§9.4) descartar_lead pasa el lead a 'descartado', no es vincular-able y audita", async () => {
+    const s = session(63);
+    const mail = email(63);
+    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: mail, capital: "capital_lt_10k" }) });
+    const leadId = ((await envio(s)).persona_id) as string;
+
+    const d1 = await rpc("descartar_lead", { p_lead_id: leadId });
+    expect(d1.status).toBe(200);
+    expect(d1.body.estado).toBe("descartado");
+    expect((await rest("GET", "personas", `id=eq.${leadId}&select=estado`)).body[0].estado).toBe("descartado");
+
+    // idempotente
+    const d2 = await rpc("descartar_lead", { p_lead_id: leadId });
+    expect(d2.status).toBe(200);
+
+    // fuera del ciclo comercial: no se vincula más
+    const intento = await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: session(64) });
+    expect(intento.status).toBeGreaterThanOrEqual(400);
+    expect(intento.body.message).toContain("lead_invalido");
+
+    const audit = await rest("GET", "auditoria", `accion=eq.descarte&entidad_id=eq.${leadId}&select=datos`);
+    expect(audit.body.length).toBeGreaterThanOrEqual(1);
   });
 
   test("un envío completed no puede retroceder ni siquiera por escritura directa", async () => {

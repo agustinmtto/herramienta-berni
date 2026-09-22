@@ -135,6 +135,7 @@ export default async function LeadDetallePage({ params }: { params: Promise<{ id
                 leadTelefono={lead.telefono_e164_capturado}
                 clientes={clientes}
                 personaEstado={lead.persona_estado}
+                leadVinculadoId={lead.leadVinculadoId}
               />
             </>
           ) : (

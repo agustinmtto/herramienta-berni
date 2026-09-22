@@ -1910,6 +1910,8 @@ body { font-family: var(--sans); }
 
 .vincular-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .vincular-form select { min-width: 240px; }
+.vincular-descarte { width: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .vincular-ok { color: var(--green); }
 .vincular-error { color: var(--red); }
 .vincular-nota { color: var(--text-3); font-size: var(--t1); width: 100%; }

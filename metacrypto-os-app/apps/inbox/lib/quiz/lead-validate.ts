@@ -178,7 +178,8 @@ export function mapRpcError(message: string | null | undefined): { status: numbe
   const code = match[1];
   const bad422 = new Set([
     "pregunta_ajena", "opcion_ajena", "tipo_incorrecto",
-    "allocation_incompleta", "allocation_invalida",
+    "allocation_incompleta", "allocation_invalida", "allocation_duplicada",
+    "seleccion_vacia", "respuestas_duplicadas",
     "preguntas_requeridas_faltantes",
   ]);
   return { status: bad422.has(code) ? 422 : 400, code };

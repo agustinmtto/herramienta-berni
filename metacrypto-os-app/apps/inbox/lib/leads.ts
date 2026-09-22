@@ -155,6 +155,9 @@ export interface LeadDetalle extends LeadRow {
   diagnosis_result: unknown;
   diagnosis_result_size: number;
   schema_version: number;
+  // El lead temporal que fue vinculado (si este envío ya pasó a un cliente):
+  // el rollback exacto (docs/11 §9.3) lo necesita para revertir ESA vinculación.
+  leadVinculadoId: string | null;
 }
 
 export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
@@ -182,6 +185,13 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
     `diagnostico_respuestas?envio_id=eq.${encodeURIComponent(id)}&select=question_id,question_type,question_text,question_order,answer_id,answer_text,answer_value,answered_at&order=question_order.asc`,
   );
 
+  // Si este envío ya fue vinculado a un cliente, la auditoría guarda QUÉ lead
+  // temporal se movió (evita que el rollback mueva la vinculación equivocada).
+  const vinculaciones = await rest<{ entidad_id: string }[]>(
+    "GET",
+    `auditoria?accion=eq.vinculacion${"&"}datos.cs=${encodeURIComponent(`{"envio_ids":["${id}"]}`)}&select=entidad_id&order=created_at.desc&limit=1`,
+  );
+
   const row = filaToRow(fila);
   const diagnosisResult = fila.diagnosis_result;
   return {
@@ -196,6 +206,7 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
     diagnosis_result: diagnosisResult,
     diagnosis_result_size: diagnosisResult ? JSON.stringify(diagnosisResult).length : 0,
     schema_version: fila.schema_version as number,
+    leadVinculadoId: vinculaciones.json?.[0]?.entidad_id ?? null,
   };
 }
 

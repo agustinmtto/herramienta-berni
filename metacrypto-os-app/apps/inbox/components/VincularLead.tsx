@@ -1,5 +1,5 @@
 "use client";
-// Picker de vinculación post-venta (docs/11 §9) + rollback (§9.3).
+// Picker de vinculación post-venta (docs/11 §9) + rollback (§9.3) + descarte (§9.4).
 //
 // ⚠ El OS corre React 18: useActionState NO existe allí (llegó en React 19)
 // y un componente que lo use se crashea en la hidratación — el HTML se ve
@@ -7,7 +7,7 @@
 // useTransition, que sí existe en 18.
 
 import { useState, useTransition } from "react";
-import { desvincularLeadAccion, vincularLeadAccion } from "@/app/leads-actions";
+import { descartarLeadAccion, desvincularLeadAccion, vincularLeadAccion } from "@/app/leads-actions";
 
 type Resultado = { ok: boolean; error?: string; mensaje?: string };
 
@@ -16,23 +16,34 @@ export default function VincularLead({
   leadTelefono,
   clientes,
   personaEstado,
+  leadVinculadoId = null,
 }: {
   leadPersonaId: string;
   leadTelefono: string | null; // teléfono capturado en el quiz (snapshot del envío)
   clientes: { id: string; nombre: string; email: string | null; telefono_e164: string | null }[];
   personaEstado: string | null;
+  leadVinculadoId?: string | null; // lead temporal que ya fue vinculado (auditoría)
 }) {
   if (!leadPersonaId) {
     return <p className="vincular-nota">Este envío no llegó a completarse: no hay lead temporal que vincular.</p>;
   }
   // El RPC revalida TODO; acá solo decidimos QUÉ pantalla mostrar.
   if (personaEstado === "cliente") {
-    return <Desvincular clienteId={leadPersonaId} />;
+    return <Desvincular clienteId={leadPersonaId} leadPersonaId={leadVinculadoId} />;
+  }
+  if (personaEstado === "descartado") {
+    return <p className="vincular-nota">El lead fue descartado por el triaje (no hubo venta). Queda auditado; la reactivación es manual.</p>;
   }
   if (personaEstado === "archivado") {
     return <p className="vincular-nota">El lead temporal de este envío ya fue vinculado y archivado.</p>;
   }
-  return <Picker leadPersonaId={leadPersonaId} leadTelefono={leadTelefono} clientes={clientes} />;
+  // Persona temporal viva: se puede vincular (hubo venta) o descartar (no la hubo).
+  return (
+    <div className="vincular-form">
+      <Picker leadPersonaId={leadPersonaId} leadTelefono={leadTelefono} clientes={clientes} />
+      <Descartar leadPersonaId={leadPersonaId} />
+    </div>
+  );
 }
 
 // ── vinculación (docs/11 §9.1): con aviso y confirmación si el teléfono difiere ──
@@ -103,14 +114,52 @@ function Picker({
       {resultado && !resultado.ok && resultado.error && <span className="vincular-error">{resultado.error}</span>}
       <small className="vincular-nota">
         Los diagnósticos pasan al cliente elegido y el lead temporal se archiva. No modifica ningún dato del cliente.
-        Si te equivocás, hay un botón para desvincular y revertir.
+        Si te equivocás, hay un botón para desvincular y revertir; si no hubo venta, el camino es descartar.
       </small>
     </form>
   );
 }
 
+// ── camino sin venta (docs/11 §9.4): el lead sale del ciclo, con auditoría ───
+function Descartar({ leadPersonaId }: { leadPersonaId: string }) {
+  const [resultado, setResultado] = useState<Resultado | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [confirmando, setConfirmando] = useState(false);
+
+  const descartar = () => {
+    const formData = new FormData();
+    formData.set("leadPersonaId", leadPersonaId);
+    startTransition(async () => {
+      setResultado(await descartarLeadAccion(formData));
+      setConfirmando(false);
+    });
+  };
+
+  return (
+    <div className="vincular-descarte">
+      {!confirmando ? (
+        <button type="button" className="vincular-rollback" disabled={pending} onClick={() => setConfirmando(true)}>
+          Descartar lead (sin venta)
+        </button>
+      ) : (
+        <>
+          <span>¿Seguro? Sin venta el lead queda fuera del ciclo comercial (no se borra nada).</span>
+          <button type="button" className="vincular-rollback" disabled={pending} onClick={descartar}>
+            {pending ? "Descartando…" : "Sí, descartar"}
+          </button>
+          <button type="button" disabled={pending} onClick={() => setConfirmando(false)}>
+            Cancelar
+          </button>
+        </>
+      )}
+      {resultado?.ok && resultado.mensaje && <span className="vincular-ok">{resultado.mensaje}</span>}
+      {resultado && !resultado.ok && resultado.error && <span className="vincular-error">{resultado.error}</span>}
+    </div>
+  );
+}
+
 // ── rollback (docs/11 §9.3): visible cuando el envío ya es del cliente ───────
-function Desvincular({ clienteId }: { clienteId: string }) {
+function Desvincular({ clienteId, leadPersonaId = null }: { clienteId: string; leadPersonaId?: string | null }) {
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [pending, startTransition] = useTransition();
   const [confirmando, setConfirmando] = useState(false);
@@ -118,6 +167,7 @@ function Desvincular({ clienteId }: { clienteId: string }) {
   const revertir = () => {
     const formData = new FormData();
     formData.set("clienteId", clienteId);
+    if (leadPersonaId) formData.set("leadPersonaId", leadPersonaId);
     startTransition(async () => {
       setResultado(await desvincularLeadAccion(formData));
       setConfirmando(false);
@@ -144,6 +194,10 @@ function Desvincular({ clienteId }: { clienteId: string }) {
       )}
       {resultado?.ok && resultado.mensaje && <span className="vincular-ok">{resultado.mensaje}</span>}
       {resultado && !resultado.ok && resultado.error && <span className="vincular-error">{resultado.error}</span>}
+      <small className="vincular-nota">
+        Revierte exactamente la vinculación de este envío. Si el cliente recibió vinculaciones de varios
+        leads, cada una se revierte por separado.
+      </small>
     </div>
   );
 }

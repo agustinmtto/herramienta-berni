@@ -81,12 +81,16 @@ create table if not exists public.diagnostico_envios (
   constraint diagnostico_envios_capital_rango_check
     check (capital_max_usd is null or capital_min_usd is null or capital_max_usd >= capital_min_usd),
   -- completed exige identidad resuelta, contacto y consentimiento reales
+  -- (nombre + version de consentimiento + fecha: lo que la spec afirma en §7,
+  -- ahora defendido por la base y no solo por el endpoint)
   constraint diagnostico_envios_completed_completo_check check (
     estado <> 'completed' or (
       persona_id              is not null
       and email_capturado     is not null
       and telefono_e164_capturado is not null
       and consentimiento_aceptado is true
+      and consentimiento_version is not null
+      and consentimiento_at   is not null
       and finished_at         is not null
     )
   ),
@@ -212,6 +216,14 @@ begin
     raise exception 'quiz_leads/demasiadas_respuestas';
   end if;
 
+  -- Cada pregunta del payload a lo sumo una vez: el upsert colapsaria
+  -- silenciosamente los repetidos por (envio_id, question_id), con lo que
+  -- "la ultima gana" ocultaria una manipulación en lugar de rechazarla.
+  if (select count(*) from jsonb_array_elements(p_answers) a)
+     <> (select count(distinct a->>'question_id') from jsonb_array_elements(p_answers) a) then
+    raise exception 'quiz_leads/respuestas_duplicadas';
+  end if;
+
   for v_a in select * from jsonb_array_elements(p_answers) loop
     if jsonb_typeof(v_a) <> 'object' then
       raise exception 'quiz_leads/respuesta_invalida';
@@ -246,6 +258,16 @@ begin
       if jsonb_typeof(v_ids) is distinct from 'array' then
         raise exception 'quiz_leads/opcion_ajena: %', v_a->>'question_id';
       end if;
+      -- La seleccion vacia y los ids repetidos no son validos: "no elegir nada"
+      -- no es una respuesta, y duplicar un id solo ganaria el upsert sin
+      -- representar algo que el lead haya marcado.
+      if jsonb_array_length(v_ids) = 0 then
+        raise exception 'quiz_leads/seleccion_vacia: %', v_a->>'question_id';
+      end if;
+      if (select count(*) from jsonb_array_elements_text(v_ids))
+         <> (select count(distinct id) from jsonb_array_elements_text(v_ids) id) then
+        raise exception 'quiz_leads/respuestas_duplicadas: %', v_a->>'question_id';
+      end if;
       for v_id in select jsonb_array_elements_text(v_ids) loop
         if not exists (
           select 1 from jsonb_array_elements(coalesce(v_q->'options','[]'::jsonb)) o
@@ -258,6 +280,13 @@ begin
       if jsonb_typeof(v_a->'value') is distinct from 'array'
          or jsonb_array_length(v_a->'value') <> jsonb_array_length(coalesce(v_q->'assets','[]'::jsonb)) then
         raise exception 'quiz_leads/allocation_incompleta: %', v_a->>'question_id';
+      end if;
+      -- Cada activo EXACTAMENTE una vez: el largo iguala al de los activos,
+      -- pero si un activo aparece dos veces otro queda sin rango — un hueco
+      -- imposible de distinguir despues en el snapshot.
+      if (select count(distinct e->>'asset_id') from jsonb_array_elements(v_a->'value') e)
+         <> jsonb_array_length(v_a->'value') then
+        raise exception 'quiz_leads/allocation_duplicada: %', v_a->>'question_id';
       end if;
       for v_nivel, v_asset_id in
         select e->>'level', e->>'asset_id'
@@ -333,6 +362,8 @@ declare
   v_hot        boolean;
   v_motivo     text;
   v_capital_a  jsonb;
+  v_capital_def jsonb;
+  v_consent_at timestamptz;
 begin
   -- 6.1) contrato básico
   if p_payload is null or jsonb_typeof(p_payload) <> 'object' then
@@ -382,28 +413,32 @@ begin
     end if;
   end if;
   if v_event = 'completed' then
+    -- Consentimiento EXIGIBLE, no verificable-de-paso: nombre, version y fecha
+    -- de aceptacion son datos que la base guarda como hechos, y la fecha
+    -- faltante no se reemplaza en silencio por otra (§7/D2).
+    v_consent_at := null;
     if v_lead is null or jsonb_typeof(v_lead) <> 'object'
        or coalesce((v_lead->'consent'->>'accepted')::boolean, false) is not true
-       or v_email = '' or v_telefono = '' then
+       or v_email = '' or v_telefono = ''
+       or v_nombre = ''
+       or coalesce(v_lead->'consent'->>'version','') = ''
+       or v_lead->'consent'->>'accepted_at' is null
+       or jsonb_typeof(v_lead->'consent'->'accepted_at') not in ('string') then
       raise exception 'quiz_leads/contacto_incompleto';
     end if;
+    begin
+      v_consent_at := (v_lead->'consent'->>'accepted_at')::timestamptz;
+    exception when others then
+      raise exception 'quiz_leads/contacto_incompleto';  -- fecha de aceptacion no parseable
+    end;
   end if;
 
-  -- 6.3) respuestas: validar SIEMPRE contra la definición; para completed
-  -- además deben estar todas las requeridas.
-  perform validar_respuestas_quiz(
-    v_version.definicion,
-    coalesce(p_payload->'answers','[]'::jsonb),
-    v_event = 'completed'
-  );
-
-  -- 6.4) advisory lock por contacto (solo completed): serializa dos sesiones
-  -- simultáneas del mismo email+teléfono para que no creen dos personas.
-  if v_event = 'completed' then
-    perform pg_advisory_xact_lock(hashtext('quiz_leads:' || v_email || ':' || v_telefono));
-  end if;
-
-  -- 6.5) upsert del envío por session_id + lock de fila
+  -- 6.3) upsert del envío por session_id + lock de fila. Va ANTES de la
+  -- validación: para una sesión existente la definición contra la que se
+  -- valida es la SUYA (la versión con la que se creó el recorrido) — nunca la
+  -- que venga en el payload. Un conflicto de versión se rechaza: una sesión
+  -- que arrancó con la versión A no puede seguir llenándose con respuestas
+  -- validadas contra la B, porque ese snapshot mezclado no es de nadie.
   insert into diagnostico_envios
     (session_id, quiz_version_id, schema_version, estado,
      started_at, last_activity_at, last_step_id, last_step_index,
@@ -429,6 +464,23 @@ begin
   if not found then
     raise exception 'quiz_leads/envio_no_encontrado';  -- imposible: acabamos de insertarlo
   end if;
+  if v_envio.quiz_version_id is distinct from v_version.id then
+    raise exception 'quiz_leads/version_conflictada: la sesion % pertenece a otra version del quiz', v_session;
+  end if;
+
+  -- 6.4) advisory lock por contacto (solo completed): serializa dos sesiones
+  -- simultáneas del mismo email+teléfono para que no creen dos personas.
+  if v_event = 'completed' then
+    perform pg_advisory_xact_lock(hashtext('quiz_leads:' || v_email || ':' || v_telefono));
+  end if;
+
+  -- 6.5) respuestas: validar SIEMPRE contra la definición; para completed
+  -- además deben estar todas las requeridas.
+  perform validar_respuestas_quiz(
+    v_version.definicion,
+    coalesce(p_payload->'answers','[]'::jsonb),
+    v_event = 'completed'
+  );
 
   -- 6.6) idempotencia de completed: ya completado → devolver tal cual, sin
   -- tocar persona ni degradar (el beacon tardío cae aquí).
@@ -457,8 +509,22 @@ begin
      where a->>'question_id' = v_version.definicion->'qualification'->>'question_id';
 
     if v_capital_a is not null then
-      v_capital_min := (v_capital_a->'value'->>'min')::numeric;
-      v_capital_max := (nullif(v_capital_a->'value'->>'max','null'))::numeric;
+      -- El RANGO de capital proviene de la DEFINICION publicada: el answer_id
+      -- ya validado contra las opciones es el que alcanza; los importes se
+      -- leen de la opcion elejida, NUNCA del value que manda el navegador
+      -- (§8: el flag se calcula desde la definicion, los importes quedan bajo
+      -- el mismo candado — un value falsificado no pisa ni una columna).
+      select o->'value' into v_capital_def
+        from jsonb_array_elements(v_version.definicion->'questions') q,
+             jsonb_array_elements(coalesce(q->'options','[]'::jsonb)) o
+       where q->>'id' = v_version.definicion->'qualification'->>'question_id'
+         and o->>'id' = v_capital_a->>'answer_id';
+      if v_capital_def is null then
+        raise exception 'quiz_leads/opcion_ajena: % / %', v_version.definicion->'qualification'->>'question_id', v_capital_a->>'answer_id';
+      end if;
+
+      v_capital_min := (v_capital_def->>'min')::numeric;
+      v_capital_max := (v_capital_def->>'max')::numeric;
       v_hot := v_capital_a->>'answer_id' in (
         select jsonb_array_elements_text(v_version.definicion->'qualification'->'hot_answer_ids')
       );
@@ -499,8 +565,10 @@ begin
     telefono_e164_capturado  = coalesce(nullif(v_telefono,''), telefono_e164_capturado),
     pais_capturado           = coalesce(nullif(v_pais,''), pais_capturado),
     consentimiento_aceptado  = case when v_event = 'completed' then true else consentimiento_aceptado end,
-    consentimiento_version   = case when v_event = 'completed' then coalesce(nullif(v_lead->'consent'->>'version',''), consentimiento_version) else consentimiento_version end,
-    consentimiento_at        = case when v_event = 'completed' then coalesce((v_lead->'consent'->>'accepted_at')::timestamptz, v_ocurrido) else consentimiento_at end,
+    -- (B5): los datos de consentimiento exigidos arriba se guardan tal cual
+    -- llegan; ningún default convierte una ausencia en un hecho que no ocurrió.
+    consentimiento_version   = case when v_event = 'completed' then nullif(v_lead->'consent'->>'version','') else consentimiento_version end,
+    consentimiento_at        = case when v_event = 'completed' then v_consent_at else consentimiento_at end,
     finished_at              = case when v_event = 'completed' then coalesce(finished_at, v_ocurrido) else finished_at end,
     persona_id               = coalesce(v_persona_id, persona_id),
     capital_min_usd          = coalesce(v_capital_min, capital_min_usd),
@@ -521,11 +589,28 @@ begin
     v_envio.id,
     a->>'question_id',
     a->>'type',
-    left(a->>'question_text', 500),
+    -- Snapshot sellado desde la DEFINICION cuando la respuesta referencia una
+    -- opción: el texto/valor persistido es el del contrato versionado, no el
+    -- que tramite el navegador. Sin id delegable (allocation, number, boolean)
+    -- cae al snapshot del cliente, con largos ya acotados por la validación.
+    left(coalesce(
+      (select q->>'text' from jsonb_array_elements(v_version.definicion->'questions') q
+        where q->>'id' = a->>'question_id'),
+      a->>'question_text'), 500),
     (a->>'order')::int,
     nullif(a->>'answer_id',''),
-    left(nullif(a->>'answer_text',''), 1000),
-    a->'value',
+    left(nullif(coalesce(
+      (select o->>'text'
+         from jsonb_array_elements(v_version.definicion->'questions') q,
+              jsonb_array_elements(coalesce(q->'options','[]'::jsonb)) o
+        where q->>'id' = a->>'question_id' and o->>'id' = a->>'answer_id'),
+      a->>'answer_text'), ''), 1000),
+    coalesce(
+      (select o->'value'
+         from jsonb_array_elements(v_version.definicion->'questions') q,
+              jsonb_array_elements(coalesce(q->'options','[]'::jsonb)) o
+        where q->>'id' = a->>'question_id' and o->>'id' = a->>'answer_id'),
+      a->'value'),
     (case when a ? 'answered_at' then (a->>'answered_at')::timestamptz end)
   from jsonb_array_elements(coalesce(p_payload->'answers','[]'::jsonb)) a
   on conflict (envio_id, question_id) do update set

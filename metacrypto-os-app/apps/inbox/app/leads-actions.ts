@@ -45,6 +45,7 @@ export async function vincularLeadAccion(
 
   const message = (r.json as { message?: string } | null)?.message ?? "";
   if (message.includes("telefono_no_coincide")) return { ok: false, error: "Los teléfonos no coinciden: marcá la confirmación para vincular de todos modos." };
+  if (message.includes("lead_vinculado_a_otro_cliente")) return { ok: false, error: "Este lead ya fue vinculado a otro cliente definitivo." };
   if (message.includes("lead_invalido")) return { ok: false, error: "El lead no es una persona temporal de este módulo." };
   if (message.includes("cliente_invalido")) return { ok: false, error: "El cliente no existe, no está en estado 'cliente' o no tiene ningún programa." };
   return { ok: false, error: "No se pudo vincular. Intentá de nuevo." };
@@ -56,14 +57,21 @@ export async function desvincularLeadAccion(
   const u = await requireModulo("leads");
 
   const clienteId = String(formData.get("clienteId") ?? "");
+  const leadPersonaId = String(formData.get("leadPersonaId") ?? "");
   if (!clienteId) {
     return { ok: false, error: "Falta el cliente a desvincular." };
   }
 
+  // Con lead explícito revierte ESA vinculación; sin lead, la más reciente
+  // sin revertir de ese cliente (docs/11 §9.3).
   const r = await rest<{ ok: boolean; envios_restaurados: number; lead_id: string }>(
     "POST",
     "rpc/desvincular_lead",
-    { p_cliente_id: clienteId, p_autor_id: u.id },
+    {
+      p_cliente_id: clienteId,
+      ...(leadPersonaId ? { p_lead_id: leadPersonaId } : {}),
+      p_autor_id: u.id,
+    },
   );
 
   if (r.status === 200 && r.json?.ok) {
@@ -76,4 +84,33 @@ export async function desvincularLeadAccion(
   const message = (r.json as { message?: string } | null)?.message ?? "";
   if (message.includes("nada_que_desvincular")) return { ok: false, error: "No hay ninguna vinculación registrada para revertir." };
   return { ok: false, error: "No se pudo desvincular. Intentá de nuevo." };
+}
+
+// Camino "no hubo venta" del flujo comercial (docs/11 §9.4): el lead deja el
+// ciclo sin borrarse — estado 'descartado', con auditoría.
+export async function descartarLeadAccion(
+  formData: FormData
+): Promise<{ ok: boolean; error?: string; mensaje?: string }> {
+  const u = await requireModulo("leads");
+
+  const leadPersonaId = String(formData.get("leadPersonaId") ?? "");
+  if (!leadPersonaId) {
+    return { ok: false, error: "Falta el lead a descartar." };
+  }
+
+  const r = await rest<{ ok: boolean; lead_id: string; estado: string }>(
+    "POST",
+    "rpc/descartar_lead",
+    { p_lead_id: leadPersonaId, p_autor_id: u.id },
+  );
+
+  if (r.status === 200 && r.json?.ok) {
+    revalidatePath("/leads");
+    revalidatePath(`/leads`);
+    return { ok: true, mensaje: "Lead descartado: queda fuera del ciclo comercial (quedó auditado y visible en /leads)." };
+  }
+
+  const message = (r.json as { message?: string } | null)?.message ?? "";
+  if (message.includes("lead_invalido")) return { ok: false, error: "El lead no se puede descartar: no es una persona temporal de este módulo." };
+  return { ok: false, error: "No se pudo descartar. Intentá de nuevo." };
 }

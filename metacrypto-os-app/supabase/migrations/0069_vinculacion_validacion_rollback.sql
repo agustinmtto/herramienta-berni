@@ -19,8 +19,10 @@
 --    cliente", porque un cliente puede recibir vinculaciones de varios leads.
 --
 -- Append-only: 0068 ya está aplicada localmente; se reemplaza la función con
--- `create or replace` manteniendo compatibilidad (los dos primeros parámetros
--- no cambian, el resto lleva default).
+-- `create or replace` (los IDs de lead/cliente no cambian). desvincular_lead
+-- AGREGA `p_lead_id` (default null): los llamados de PostgREST van por nombre,
+-- así que el cliente `desvincular_lead(p_cliente_id)` sigue siendo el mismo
+-- contrato — ahora el rollback también sabe apuntar a UN lead concreto.
 -- ============================================================
 begin;
 
@@ -65,10 +67,22 @@ begin
     raise exception 'quiz_leads/lead_invalido';
   end if;
 
-  -- idempotencia: ya archivado → nada por hacer (no exige envíos: tras la
-  -- primera vinculación ya no hay ninguno apuntando al temporal)
+  -- idempotencia: ya archivado → solo es "nada por hacer" si el cliente
+  -- recibido es de verdad aquel a quien fue vinculado (auditado), nunca un
+  -- eco ciego del parámetro: un ok con un cliente equivocado haría creer al
+  -- operador que este lead quedó en su cliente.
   if v_lead_estado = 'archivado' then
-    return jsonb_build_object('ok', true, 'cliente_id', p_cliente_id, 'envios_reasignados', 0);
+    if exists (
+      select 1 from auditoria a
+       where a.entidad = 'persona'
+         and a.accion = 'vinculacion'
+         and a.entidad_id = p_lead_id
+         and a.datos->>'cliente_id' = p_cliente_id::text
+         and coalesce((a.datos->>'revertido')::boolean, false) = false
+    ) then
+      return jsonb_build_object('ok', true, 'cliente_id', p_cliente_id, 'envios_reasignados', 0);
+    end if;
+    raise exception 'quiz_leads/lead_vinculado_a_otro_cliente';
   end if;
   if v_lead_estado is distinct from 'lead' then
     raise exception 'quiz_leads/lead_invalido';
@@ -137,13 +151,18 @@ $$;
 
 revoke all on function public.vincular_lead_convertido(uuid, uuid, boolean, uuid) from public, anon, authenticated;
 
--- ── 2) desvincular_lead: rollback exacto (docs/11 §9.3) ──────────────────────
--- Revierte la ÚLTIMA vinculación de ese cliente leyendo su auditoría: mueve
--- EXACTAMENTE los envíos registrados de vuelta al temporal y lo restaura a
--- 'lead'. Si un cliente recibió vinculaciones de varios leads, cada rollback
--- revierte solo la suya — por eso la auditoría guarda la lista exacta.
+-- ── 2) desvincular_lead: rollback exacto por vinculación (docs/11 §9.3) ─────
+-- Revierte UNA vinculación concreta leyendo su auditoría: mueve EXACTAMENTE
+-- los envíos registrados de vuelta al temporal y lo restaura a 'lead'. Un
+-- cliente puede recibir vinculaciones de varios leads y un lead puede arrastrar
+-- varios envíos (lead que completó el funnel más de una vez): cada rollback
+-- revierte solo SU vinculación, marcada en la auditoría para no reelegirla.
+drop function if exists public.desvincular_lead(uuid, uuid);
+drop function if exists public.desvincular_lead(uuid, uuid, uuid);
+
 create or replace function public.desvincular_lead(
   p_cliente_id uuid,
+  p_lead_id    uuid default null,
   p_autor_id   uuid default null
 )
 returns jsonb
@@ -152,8 +171,9 @@ security definer
 set search_path = public
 as $$
 declare
-  v_datos      jsonb;
-  v_lead_id    uuid;
+  v_datos       jsonb;
+  v_audit_id    uuid;
+  v_lead_id     uuid;
   v_lead_estado text;
   v_restaurados int := 0;
 begin
@@ -161,17 +181,45 @@ begin
     raise exception 'quiz_leads/parametros_faltantes';
   end if;
 
-  perform pg_advisory_xact_lock(hashtext('quiz_leads:vincular:' || p_cliente_id::text));
+  -- 1) resolver la vinculación a revertir SIN lock: la fila exacta se
+  --    re-confirma dentro del lock del lead, que es lo que ambos lados mutan.
+  if p_lead_id is not null then
+    select a.id, a.entidad_id, a.datos into v_audit_id, v_lead_id, v_datos
+      from auditoria a
+     where a.entidad = 'persona'
+       and a.accion = 'vinculacion'
+       and a.entidad_id = p_lead_id
+       and a.datos->>'cliente_id' = p_cliente_id::text
+       and coalesce((a.datos->>'revertido')::boolean, false) = false
+     order by a.created_at desc
+     limit 1;
+  else
+    select a.id, a.entidad_id, a.datos into v_audit_id, v_lead_id, v_datos
+      from auditoria a
+     where a.entidad = 'persona'
+       and a.accion = 'vinculacion'
+       and a.datos->>'cliente_id' = p_cliente_id::text
+       and coalesce((a.datos->>'revertido')::boolean, false) = false
+     order by a.created_at desc
+     limit 1;
+  end if;
+  if not found then
+    raise exception 'quiz_leads/nada_que_desvincular';
+  end if;
 
-  -- la última vinculación registrada para este cliente: de ahí salen el lead
-  -- de origen (entidad_id) y la lista exacta de envíos que se movieron
-  select a.entidad_id, a.datos into v_lead_id, v_datos
+  -- 2) lock del lead (la MISMA clave que usa vincular): serializa
+  --    vincular/desvincular sobre los mismos datos y excluye las dos
+  --    desvinculaciones concurrentes que apuntan al mismo lead.
+  perform pg_advisory_xact_lock(hashtext('quiz_leads:vincular:' || v_lead_id::text));
+
+  -- re-verificar DENTRO del lock: la fila elegida puede haber sido revertida
+  -- por otra transacción entre el paso 1 y acá.
+  select a.datos into v_datos
     from auditoria a
-   where a.entidad = 'persona'
+   where a.id = v_audit_id
      and a.accion = 'vinculacion'
-     and a.datos->>'cliente_id' = p_cliente_id::text
-   order by a.created_at desc
-   limit 1;
+     and coalesce((a.datos->>'revertido')::boolean, false) = false
+   for update;
   if not found then
     raise exception 'quiz_leads/nada_que_desvincular';
   end if;
@@ -181,7 +229,7 @@ begin
     raise exception 'quiz_leads/nada_que_desvincular';
   end if;
 
-  -- devolver EXACTAMENTE los envíos registrados que sigan en el cliente
+  -- 3) devolver EXACTAMENTE los envíos registrados que sigan en el cliente
   update diagnostico_envios e
      set persona_id = v_lead_id
     from (select jsonb_array_elements_text(v_datos->'envio_ids')::uuid as id) ids
@@ -191,6 +239,12 @@ begin
 
   update personas set estado = 'lead' where id = v_lead_id;
 
+  -- 4) marcar la vinculación COMO REVERTIDA: su envio_ids ya no vuelven a ser
+  --    elegidos; la próxima desvinculación de este cliente toma la anterior.
+  update auditoria set datos = datos || jsonb_build_object('revertido', true, 'revertido_en', now())
+   where id = v_audit_id;
+
+  -- 5) auditoría de la desvinculación
   insert into auditoria (entidad, entidad_id, accion, autor_id, datos)
   values ('persona', v_lead_id, 'desvinculacion', p_autor_id,
           jsonb_build_object(
@@ -204,6 +258,6 @@ begin
 end;
 $$;
 
-revoke all on function public.desvincular_lead(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.desvincular_lead(uuid, uuid, uuid) from public, anon, authenticated;
 
 commit;
