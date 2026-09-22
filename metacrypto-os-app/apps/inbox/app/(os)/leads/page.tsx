@@ -81,8 +81,8 @@ export default async function LeadsPage({
         <h1>Leads del diagnóstico</h1>
         <p>
           Cada fila es un recorrido del quiz — no una persona. {calientes > 0 ? (
-            <>En esta página hay <strong>{calientes}</strong> {calientes === 1 ? "lead caliente" : "leads calientes"} (capital &gt; 10.000 USD) para triaje.</>
-          ) : "Los calientes (capital > 10.000 USD) son el triaje comercial."} El contacto es el que dejó el lead, tal cual se capturó.
+            <>En esta página hay <strong>{calientes}</strong> {calientes === 1 ? "lead caliente" : "leads calientes"} (capital ≥ 10.000 USD) para triaje.</>
+          ) : "Los calientes (capital ≥ 10.000 USD) son el triaje comercial."} El contacto es el que dejó el lead, tal cual se capturó.
         </p>
       </div>
 

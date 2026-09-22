@@ -240,6 +240,41 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
     expect(res.status).toBe(403);
   });
 
+  // Gates del endurecimiento (paridad con el standalone): content-type 415 y
+  // headers de tamaño chequiados antes de leer el body.
+  test("content-type distinto de JSON → 415", async () => {
+    const res = await POST(
+      new Request("http://localhost:3000/api/lead", {
+        method: "POST",
+        headers: { "content-type": "text/plain", host: HOST },
+        body: "{}",
+      })
+    );
+    expect(res.status).toBe(415);
+  });
+
+  test("content-type ausente → 415", async () => {
+    const res = await POST(
+      new Request("http://localhost:3000/api/lead", {
+        method: "POST",
+        headers: { host: HOST },
+        body: "{}",
+      })
+    );
+    expect(res.status).toBe(415);
+  });
+
+  test("content-length mentiroso (header > 64 KB) → 413 antes de leer el body", async () => {
+    const res = await POST(
+      new Request("http://localhost:3000/api/lead", {
+        method: "POST",
+        headers: { "content-type": "application/json", host: HOST, "content-length": String(128 * 1024) },
+        body: "{}",
+      })
+    );
+    expect(res.status).toBe(413);
+  });
+
   test("los tipos del contrato del cliente coinciden con la definición publicada (regresión tipo_incorrecto)", async () => {
     // Regresión del bug real: el cliente mandaba capital como single_choice y
     // la definición publicada dice range → el RPC rechazaba TODO completed.

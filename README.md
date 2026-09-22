@@ -1,6 +1,6 @@
 # Herramienta de Diagnóstico — Metacrypto Club
 
-Lead magnet para el negocio de Berni (Metacrypto Club, cripto): landing con wizard de preguntas → **diagnóstico de portfolio determinístico** (por algoritmo, sin IA) → captura de lead → integración con el sistema del negocio (Supabase + Next.js, branch + PR) para llamadas en caliente a leads con capital > 10.000 USD.
+Lead magnet para el negocio de Berni (Metacrypto Club, cripto): landing con wizard de preguntas → **diagnóstico de portfolio determinístico** (por algoritmo, sin IA) → captura de lead → integración con el sistema del negocio (Supabase + Next.js, branch + PR) para llamadas en caliente a leads con capital ≥ 10.000 USD (desde 10.000 inclusive).
 
 > **Lectura rápida para agentes/devs:** empezar por `AGENTS.md` (decisiones firmes + reglas de trabajo) y `docs/00-OVERVIEW.md`. La documentación es **spec-first**: los cambios de requisitos se editan primero en `docs/`, luego se implementan.
 
@@ -92,6 +92,7 @@ scripts/transcribe.py   # utilidad: transcribe audios con Whisper
 | `docs/10-levantar-metacrypto-os-local.md` | Guía para levantar el OS + Supabase local |
 | `docs/11-migracion-modulo-leads.md` | **Spec funcional autoritativa** de la migración del módulo de leads |
 | `docs/12-spec-sdd-fases-migracion-leads.md` | Fases SDD con compuertas y estado |
+| `docs/13-entrega-y-preguntas-milo.md` | Entrega del módulo: qué quedó corregido, qué falta y las 8 preguntas para el negocio |
 | `docs/archive/` | Transcripciones crudas y análisis previo, archivados (obsoletos, solo referencia) |
 | `documentacion_prototipo.txt` | Síntesis funcional y decisiones del prototipo |
 

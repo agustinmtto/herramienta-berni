@@ -6,7 +6,7 @@
 
 ## Objetivo
 
-Herramienta de captación de leads (lead magnet / quiz funnel): una landing con un wizard de preguntas → el lead responde → recibe un **diagnóstico personalizado de su portfolio cripto generado con un algoritmo determinístico** (todas las respuestas son de opción múltiple) → según cómo termina el flujo (TBD, ver abajo) el lead deja sus datos o contacta → los datos entran al sistema del negocio → si es lead caliente (capital > 10.000 USD), un triaje lo llama **en caliente**.
+Herramienta de captación de leads (lead magnet / quiz funnel): una landing con un wizard de preguntas → el lead responde → recibe un **diagnóstico personalizado de su portfolio cripto generado con un algoritmo determinístico** (todas las respuestas son de opción múltiple) → según cómo termina el flujo (TBD, ver abajo) el lead deja sus datos o contacta → los datos entran al sistema del negocio → si es lead caliente (capital ≥ 10.000 USD, desde 10.000 inclusive), un triaje lo llama **en caliente**.
 
 ## El flujo de negocio (punta a punta)
 
@@ -15,7 +15,7 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 3. El wizard hace 8 preguntas definitivas (situación, dolor, composición, capital, horizonte, reacción a caídas, influencias y reglas). **Datos de contacto al final** (decisión clave).
 4. Al terminar → pantalla de análisis → **pantalla final única**: diagnóstico por pantalla + sección "tus recursos" con **3 videos placeholders** (la pregunta 2 determina cuál se destaca) + CTA a WhatsApp. El CTA abre una conversación con las respuestas precargadas. No hay descarga visible de PDF; la entrega personalizada por email queda para una iteración posterior.
 5. Las respuestas llegan a la base del negocio vía el endpoint `POST /api/lead` del OS → RPC transaccional `registrar_diagnostico` (contrato versionado, `docs/11` §5).
-6. Lead caliente (capital > 10.000 USD) → alerta al triaje → llamada rápida.
+6. Lead caliente (capital ≥ 10.000 USD) → alerta al triaje → llamada rápida.
 7. Tracking mínimo: **hasta qué pregunta llega el lead** (dropoff / finalización). UTMs opcional.
 
 ## Decisiones ya tomadas (reunión con el negocio)
@@ -27,7 +27,7 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 | Preguntas | **8 preguntas definitivas de Berni**, config-driven; la pregunta 3 captura composición por rangos |
 | Final del flujo | **Pantalla final única**: diagnóstico + 3 videos; la pregunta 2 determina cuál se destaca. Pendiente: grabar los videos reales |
 | Tracking | Mínimo: **hasta qué pregunta llega el lead** (si termina el cuestionario o no). Puede ampliarse luego |
-| Lead caliente | Capital **> 10.000 USD** → llamada de triaje rápida |
+| Lead caliente | Capital **≥ 10.000 USD** (desde 10.000 inclusive) → llamada de triaje rápida |
 | Contacto y CTA | Nombre + email + teléfono al final; CTA a WhatsApp `+54 9 3585 401429` con las respuestas precargadas |
 | PDF transitorio | Documento HTML y generador conservados como base técnica, sin descarga visible |
 | Lanzamiento | Primero orgánico (testeo), si funciona → publicidad |

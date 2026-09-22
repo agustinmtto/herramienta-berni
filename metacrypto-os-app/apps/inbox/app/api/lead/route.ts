@@ -44,10 +44,7 @@ function sameOrigin(request: Request): boolean {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  if (!sameOrigin(request)) {
-    return NextResponse.json({ ok: false, error: "bad_origin" }, { status: 403 });
-  }
-
+  // 1) Rate limit por IP: 429 y fuera (antes de gastar más recursos).
   const limited = isRateLimited(ip(request), {
     max: RATE_LIMIT_MAX_EFF,
     windowMs: RATE_LIMIT_WINDOW_MS_EFF,
@@ -56,6 +53,26 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
   }
 
+  // 2) Solo JSON — el beacon manda Blob con este Content-Type. El standalone
+  //    lo exigía (route.js §2, con tests 415); el port lo había perdido.
+  const contentType = (request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  if (contentType !== "application/json") {
+    return NextResponse.json({ ok: false, error: "unsupported_media_type" }, { status: 415 });
+  }
+
+  // 3) Same-origin cuando el navegador manda Origin (los beacons de sendBeacon
+  //    lo mandan; las herramientas no). Un POST cruzado legítimo no existe: el
+  //    funnel y el endpoint viven en el mismo deploy (docs/11 D1).
+  if (!sameOrigin(request)) {
+    return NextResponse.json({ ok: false, error: "bad_origin" }, { status: 403 });
+  }
+
+  // 4) Tamaño: valida el HEADER antes de leer (un body gigante no entra a
+  //    memoria gratuitamente) y además el string ya leído, por si miente.
+  const declaredLength = Number(request.headers.get("content-length") || 0);
+  if (declaredLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ ok: false, error: "body_too_large" }, { status: 413 });
+  }
   const raw = await request.text();
   if (raw.length > MAX_BODY_BYTES) {
     return NextResponse.json({ ok: false, error: "body_too_large" }, { status: 413 });
