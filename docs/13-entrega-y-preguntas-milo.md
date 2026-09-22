@@ -1,86 +1,134 @@
-# 13 — Entrega del módulo de leads: estado, pendientes y qué pedirle al negocio
+# 13 — Entrega del módulo de leads: pendientes e información necesaria
 
-> **Propósito:** documento único de cierre de entrega. Resume en un lugar: (1) qué se implementó y cómo quedó validado, (2) qué decidimos nosotros solos, y (3) el mínimo que necesita del negocio (Milo/Miled — no técnico), con las frases exactas para pedirselo.
+> **Propósito:** dejar concentrado en un único documento todo lo que todavía necesitamos definir, recibir o ejecutar del lado del negocio para poder avanzar con el lanzamiento del módulo de leads.
 >
-> Fuente de las decisiones funcionales: `docs/11`. Estado de fases: `docs/12` §6. Checklist de seguridad del módulo: `docs/09` §"Quiz Funnel en el OS".
+> La implementación y validación técnica del módulo ya fueron realizadas. El detalle técnico queda documentado en `docs/09`, `docs/11` y `docs/12`.
 
 ---
 
-## 1. Qué se entregó (rama `feature/leads-a-migracion-rpc`)
+## 1. Lo único que necesitamos del negocio
 
-Migraciones `0068` (esquema + RPC de ingesta), `0069` (validación de teléfono, auditoría y rollback) y `0070` (descarte de leads); el funnel portado a `/quiz` como ruta pública del OS y el módulo `/leads` con permiso propio, vinculación post-venta y descarte.
+### 1.1. Confirmar los números de migración
 
-**Corrección de los 6 bloqueantes del análisis externo** (editados in place: ninguna de esas migraciones había sido aplicada a producción):
+**Necesitamos verificar que los números `0068`, `0069` y `0070` estén disponibles en el repositorio del OS.**
 
-| # | Bloqueante | Corrección | Test que la ejercita |
-|---|---|---|---|
-| 1 | Capital falsificable desde el navegador | Los importes (`capital_min/max_usd`) se leen de la **definición publicada** vía el `answer_id` validado; el `value` del cliente nunca pisa columnas. Los textos/valores del snapshot también se sellan desde la definición | `(B1) el capital se sella desde la DEFINICIÓN...` |
-| 2 | Rollback se atascaba con varios leads por cliente | `desvincular_lead(p_cliente, p_lead_id?, autor)`: revierte UNA vinculación concreta (la del lead indicado o la más reciente **sin revertir**), marca su auditoría `revertido=true` y usa la misma advisory lock por lead que vincular | `(B2) dos leads vinculados a un cliente...` |
-| 3 | "Vinculado ok" al cliente incorrecto | El early-return de lead archivado verifica en `auditoria` a qué cliente fue vinculado de verdad; si difiere → `lead_vinculado_a_otro_cliente` | `(B3) vincular sobre un lead ya vinculado...` |
-| 4 | Sesión revalidada contra otra versión del quiz | El RPC lockea el envío antes de validar y rechaza con `version_conflictada` si el payload trae otra versión | `(B4) una sesión existente no se revalida...` |
-| 5 | Consentimiento incompleto / fecha falsificada por silencio | completed exige nombre, `consent.version` y `accepted_at` parseable (`contacto_incompleto`); el CHECK de tabla exige versión + fecha; sin defaults silenciosos | `(B5) completed sin nombre/versión/fecha...` |
-| 6 | Huecos de validación | Rechaza selección vacía, ids duplicados y activos duplicados (`seleccion_vacia` / `respuestas_duplicadas` / `allocation_duplicada`, mapeados a 422 en el endpoint) | 3 tests `(B6)` |
+Frase para enviar:
 
-**Flujo comercial completo** (`docs/11` §9.3–9.4):
-- Un lead puede completar el funnel **varias veces** (varios envíos bajo la misma persona temporal) y un cliente puede acumular **varias vinculaciones**: cada rollback revierte exactamente SU vinculación (la auditoría guarda la lista exacta de `envio_ids`).
-- Camino "sin venta": botón **"Descartar lead (sin venta)"** en el detalle del envío → estado `'descartado'` (idempotente, auditado, no borra nada). Reactivación = update manual apoyado en la auditoría; UI de reactivación queda para otra fase.
-- Endurecimiento del endpoint: `Content-Type` obligatorio → `415`, `Content-Length` validado antes de leer el body → `413` temprano (paridad con el standalone, que sí lo tenía y se había perdido en el port).
-- Docs: regla de lead caliente unificada a **≥ 10.000 USD (desde 10.000 inclusive)** en `AGENTS.md`, `README`, `docs/00` y el módulo `/leads` (antes decían `>` en los docs operativos, en contradicción con lo decidido en `docs/06` #8 / `docs/11` §8).
+> **"¿Podés entrar al repo del OS y fijarte si ya existen migraciones que empiecen con `0068`, `0069` o `0070`? Si no tenés acceso o no sabés dónde verlo, pasanos acceso de lectura al repo y lo revisamos nosotros."**
 
-**Validación ejecutada (22-sep-2026):**
-
-```
-supabase db reset   → 0001 → 0070 aplicando limpio (Supabase local + Docker)
-vitest run          → 56 archivos · 1316/1316 tests en verde · 0 omitidos
-tsc --noEmit        → limpio
-prototipo npm test  → 39/39
-npm run build (OS)  → OK
-```
-
-Antes de este trabajo la suite del OS reportaba 22 pruebas omitidas (justamente las de RPC/API contra Supabase): hoy corren todas contra la base real.
+**Por qué:** las migraciones forman parte de una secuencia global del OS. Si alguno de esos números ya fue utilizado, tenemos que ajustar la numeración antes de aplicar los cambios en producción.
 
 ---
 
-## 2. Decisiones que YA tomamos nosotros (no son preguntas)
+### 1.2. Confirmar quién puede acceder a los leads
 
-| Item | Resolución |
-|---|---|
-| **Upgrade de Next del OS** | Hecho en este PR: `next` 15.5.22 → **15.5.25**. Las **2 vulnerabilidades críticas (RCE) quedaron cerradas** y, con `overrides` sin cambiar versiones mayores, también `nanoid` y `sharp` (2 de las 3 altas). De 4 vulnerabilidades a 2: queda solo `postcss` alta, cuya solución exige **Next 16** (cambio mayor, ticket aparte, no bloquea el funnel: no se usa `next/image` en el camino del quiz) |
-| **AVIF / `next/image`** | Verificado en el código: no hay uso de `next/image` ni AVIF — el advisory de Image Optimization queda descartado |
-| **Headers de seguridad globales** | Agregados en `next.config.mjs`: `nosniff`, `Referrer-Policy`, `Permissions-Policy` y `Strict-Transport-Security` (aditivos, seguro en dev). CSP y frame-deny quedan para un ticket aparte: exigen iteración contra las pantallas del OS (portales `/e/` y `/c/`, embeds de video) |
-| **Regla de lead caliente** | Unificada: `≥ 10.000 USD (desde 10.000 inclusive)` en todos los docs y el UI |
-| **Rate limiting** | Mientras responde el hosting (ver #3 abajo): sigue el in-memory de `lib/quiz/rate-limit.ts`; el call site ya está aislado para cambiar a Upstash o WAF sin tocar más código |
+Esto es una **decisión de negocio**, no técnica.
+
+Frase para enviar:
+
+> **"¿Quiénes van a poder ver los leads y hacer el seguimiento de los leads calientes? Proponemos como configuración inicial que pueda acceder la persona que hace el triaje (actualmente Berni) y todos los usuarios con acceso total. Si les sirve así, confírmenos y lo dejamos de esa manera."**
 
 ---
 
-## 3. Lo único que necesitamos del negocio (frases listas para enviar)
+### 1.3. Configurar `KAPSO_WEBHOOK_SECRET`
 
-1. **Números de migración** — *"Entrá a tu repo del OS y fijate si en la carpeta de migraciones ya existen archivos que empiecen con `0068`, `0069` o `0070`. Si no tenés ni idea, pasanos acceso de lectura al repo y lo chequeamos nosotros."*
-   *(Por qué: los números son de una secuencia global del OS; si otra rama los usó, aplicar los nuestros en producción choca.)*
-2. **Permiso `leads` (decisión de negocio, no técnica)** — *"¿Quién va a ver los leads y llamar en caliente? Proponemos como default: la persona que hace el triaje (hoy Berni) + todos los de acceso total. Si te sirve así, decí 'sí' y listo."*
-3. **Acción puntual (no decisión): pegar `KAPSO_WEBHOOK_SECRET`** — *"En tu dashboard del hosting, en Environment Variables del OS, agregá una variable llamada `KAPSO_WEBHOOK_SECRET` con un texto largo aleatorio, y redesplegá. No es una integración nueva: es una clave del OS que existía sin setear; sin ella el webhook de WhatsApp acepa cualquier firma."*
-4. **Desplegar con el orden**: a quien aplique migraciones *"aplicá 0068 → 0069 → 0070 ANTES de deployar el código (sin una migración previa, la app responde 400 en silencio)"* y después el smoke test de la §4. El deploy conserva las variables existentes del OS — no se agregan claves nuevas (opcionales de tuning: `LEAD_RATE_LIMIT_*`).
-5. *(Opcional)* **Alerta de triaje** — *"¿La notificación al equipo cuando cae un lead caliente la hacemos ya o sigue después del lanzamiento (como se había acordado)?"*
+Esto requiere una acción puntual en el hosting.
 
----
+Frase para enviar:
 
-## 4. Riesgos preexistentes del OS (informados, fuera de este PR)
-
-Identificados por el análisis externo y **no tocados por el módulo de leads** (convertir en tickets propios, no mezclar con este PR):
-
-- APIs internas de Inbox verifican sesión pero no permiso de módulo (cualquier usuario logueado puede leer conversaciones y enviar mensajes).
-- Login sin rate limiting ni bloqueo; sesión de 30 días; usuarios desactivados conservan acceso (el middleware solo valida la firma de la cookie, no `team_members.activo`).
-- RLS permisivo para el rol `authenticated` de Supabase (incluye leer hashes de `team_members`, pagos y conversaciones de WhatsApp); la app usa `service_role`, así que el riesgo depende de existentes usuarios Auth en producción.
-- Redirect abierto tras el login (`next.startsWith("/")` acepta `//host-atacante`).
-
-El detalle con archivo/línea quedó en el análisis previo ("respuesta despues de analisis - herramienta berni.txt").
+> **"En las variables de entorno del OS hay que agregar `KAPSO_WEBHOOK_SECRET` con un texto largo y aleatorio, y después redesplegar. No es una integración nueva: es una clave que el OS ya espera utilizar y que actualmente no está configurada. Sin ella, el webhook de WhatsApp no puede validar correctamente la firma de las solicitudes."**
 
 ---
 
-## 5. Pendientes de contenido (no bloquean el deploy técnico)
+### 1.4. Aplicar las migraciones antes del deploy
 
-- **3 videos reales de Berni** + host del player trackeable (docs/06 #9/#11) — los slots config ya existen (`url: ""` hasta que el negocio los provea).
-- **PDF dinámico por email vía Resend** + pixel de apertura (docs/06 #12) — fase posterior.
-- **Alerta de triaje** — ver pregunta opcional 5.
+Cuando se haga el despliegue:
 
-*Generado el 22-sep-2026. Estado de fases actualizado en `docs/12` §6.*
+> **"Primero hay que aplicar las migraciones `0068 → 0069 → 0070` y después hacer el deploy del código. El orden es importante porque el código nuevo depende de esas migraciones."**
+
+Después del deploy corresponde realizar el smoke test definido para el módulo.
+
+---
+
+### 1.5. Confirmar si quieren alerta de leads calientes
+
+Esto puede esperar al lanzamiento si así se había acordado.
+
+Frase para enviar:
+
+> **"Cuando entra un lead caliente, ¿quieren que la notificación al equipo esté disponible desde el lanzamiento o preferimos dejarla para una fase posterior?"**
+
+---
+
+## 2. Contenido que todavía falta
+
+Estos puntos **no bloquean el deploy técnico**, pero son necesarios para completar la experiencia final del funnel.
+
+### 2.1. Videos de Berni
+
+Faltan:
+
+* **3 videos reales de Berni.**
+* La URL final de cada video.
+* El hosting/player que se utilizará, idealmente uno que permita realizar el tracking previsto.
+
+Los espacios dentro del funnel ya están preparados; actualmente las URLs están vacías.
+
+---
+
+### 2.2. PDF dinámico y email
+
+Queda pendiente para una fase posterior:
+
+* Generación del PDF dinámico.
+* Envío por email mediante Resend.
+* Pixel de apertura/tracking del email.
+
+---
+
+### 2.3. Alerta de triaje
+
+Queda por confirmar si:
+
+* se incluye desde el lanzamiento, o
+* se implementa después del lanzamiento.
+
+---
+
+## 3. Temas técnicos que quedan fuera de este módulo
+
+El análisis del OS detectó algunos riesgos preexistentes que **no corresponden al módulo de leads y no deberían bloquear esta entrega**.
+
+Quedan registrados como tareas independientes:
+
+* Permisos insuficientes en algunas APIs internas de Inbox.
+* Falta de rate limiting/bloqueo en el login.
+* Sesiones prolongadas y falta de revalidación del estado de usuarios desactivados.
+* Políticas RLS demasiado permisivas en determinadas tablas.
+* Posible redirect abierto después del login.
+
+Estos puntos deben tratarse como **tickets independientes del módulo de leads**.
+
+---
+
+## 4. Estado actual
+
+El módulo de leads ya fue implementado y validado técnicamente.
+
+La validación realizada el **22/09/2026** dejó:
+
+* **1316/1316 tests en verde.**
+* TypeScript sin errores.
+* Build del OS correcto.
+* Prototipo: **39/39 tests en verde**.
+* Migraciones probadas desde una base limpia.
+
+Por lo tanto, **lo que queda para avanzar no es desarrollo funcional del módulo**, sino principalmente:
+
+1. Confirmaciones del negocio.
+2. Configuración puntual del entorno de producción.
+3. Aplicación ordenada de las migraciones.
+4. Contenido pendiente del funnel.
+5. Definir qué funcionalidades quedan para una fase posterior.
+
+*Generado el 22-sep-2026. Estado de fases según `docs/12` §6.*
