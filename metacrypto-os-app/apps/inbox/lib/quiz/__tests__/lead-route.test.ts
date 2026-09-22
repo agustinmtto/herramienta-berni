@@ -37,7 +37,13 @@ const { POST } = await import("@/app/api/lead/route");
 const { resetRateLimiter } = await import("@/lib/quiz/rate-limit");
 
 let reachable = false;
-if (URL_BASE && KEY) {
+// GUARDA ANTI-PRODUCCIÓN (igual que quiz-leads-rpc.test.ts): suites gated,
+// escrituras reales — solo contra el Supabase LOCAL.
+const esLocal = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/.*)?$/i.test(URL_BASE ?? "");
+if (URL_BASE && KEY && !esLocal) {
+  console.warn(`[lead-route] SUPABASE_URL no es local (${URL_BASE}): los tests de integración NO corren.`);
+}
+if (URL_BASE && KEY && esLocal) {
   try {
     const r = await fetch(`${URL_BASE}/rest/v1/`, {
       headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },

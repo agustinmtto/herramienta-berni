@@ -60,6 +60,7 @@ function Picker({
   const [pending, startTransition] = useTransition();
   const [clienteId, setClienteId] = useState("");
   const [confirmado, setConfirmado] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
 
   // La comparación EXACTA la hace el RPC (server); acá es solo para mostrar
   // el aviso y exigir la confirmación visible (docs/11 §9.1).
@@ -67,6 +68,13 @@ function Picker({
   const telefonosDifieren = Boolean(
     cliente && (cliente.telefono_e164 ?? "") !== (leadTelefono ?? "")
   );
+  const clientesFiltrados = busqueda.trim()
+    ? clientes.filter((c) =>
+        [c.nombre, c.email ?? "", c.telefono_e164 ?? ""].some((campo) =>
+          campo.toLowerCase().includes(busqueda.trim().toLowerCase())
+        )
+      )
+    : clientes;
 
   const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -83,11 +91,18 @@ function Picker({
   return (
     <form onSubmit={onSubmit} className="vincular-form">
       <input type="hidden" name="leadPersonaId" value={leadPersonaId} />
+      <input
+        type="text"
+        className="vincular-busqueda"
+        value={busqueda}
+        onChange={(e) => setBusqueda(e.target.value)}
+        placeholder="Buscar cliente por nombre, email o teléfono…"
+      />
       <select name="clienteId" value={clienteId} onChange={(e) => { setClienteId(e.target.value); setResultado(null); setConfirmado(false); }} required>
         <option value="" disabled>
           Elegí el cliente definitivo…
         </option>
-        {clientes.map((c) => (
+        {clientesFiltrados.map((c) => (
           <option key={c.id} value={c.id}>
             {c.nombre}{c.telefono_e164 ? ` — ${c.telefono_e164}` : c.email ? ` — ${c.email}` : ""}
           </option>

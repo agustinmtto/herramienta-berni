@@ -14,7 +14,7 @@ Documento de **Spec-Driven Development** para ejecutar la migración del módulo
 | P2 | **Fases con compuertas** | Cada fase tiene criterios de inicio (precondiciones) y de salida (DoD verificable con comandos). Nada avanza con compuertas pendientes |
 | P3 | **Tests primero** | En el repo del OS: escribir el test, verlo fallar, implementar. Los tests nuevos de cada fase se agregan a su PR |
 | P4 | **Solo desarrollo** | Todo se valida contra Supabase local (Docker, `docs/10`). Producción no se toca hasta Fase D |
-| P5 | **Append-only + aislamiento** | Migraciones nuevas solamente; cero cambios a tablas/RPCs existentes (`docs/11` D3/D4) |
+| P5 | **Append-only + aislamiento** | Migraciones nuevas solamente; cero cambios a tablas/RPCs existentes del OS (docs/11 D3/D4). **Excepciones aprobadas y documentadas (docs/11 §9.4): `0070` amplía el CHECK de `personas.estado` con 'descartado', y `0071` re-aplica los constraints/grants propios del módulo de leads** |
 | P6 | **Trazabilidad** | Cada fase cierra con evidencia: comandos ejecutados y resultado (output clave pegado en el PR) |
 | P7 | **Un tema por PR** | Una fase = una rama = un PR. PRs chicos, review ágil (docs/07 §5) |
 
@@ -31,7 +31,7 @@ supabase db reset                 # migraciones + seed desde cero, sin errores
 docker exec supabase_db_metacrypto-os-app psql -U postgres -d postgres -c "..."  # verificaciones SQL puntuales
 
 cd apps/inbox
-npm test                          # suite del OS (baseline: 1.246) + tests nuevos de la fase
+npm test                          # suite del OS (baseline al inicio: 1.246; actual: 1.329) + tests nuevos de la fase
 npx tsc --noEmit                  # tipos limpios
 ```
 
@@ -229,7 +229,8 @@ Cada fase produce algo **usable por la siguiente** y nada rompe lo anterior.
 |---|---|---|
 | 0 — Preparación | ✅ Baseline verificado (tests, tsc, db reset limpios, rama de trabajo). Número de migración reservado como `0068/0069` — **pendiente única confirmación formal con Miled antes del PR a producción** | — |
 | A — Migración + RPCs | ✅ `0068_quiz_leads.sql` (3 tablas + RLS + definición `diagnostico-cripto-v1-a` + RPC `registrar_diagnostico`) y `0069_vinculacion_validacion_rollback.sql` (validación de teléfono + auditoría + `desvincular_lead`). 22 tests de integración | — |
-| A-2 — Corrección de bloqueantes | ✅ (22-sep-2026) Corregidos en el lugar los 6 bloqueantes del análisis externo, sin migrate nueva de patch: (B1) capital sellado desde la definición publicada; (B2) `desvincular_lead(p_lead_id)` rollback exacto por vinculación + auditoría marcada `revertido`; (B3) idempotencia de lead archivado valida el cliente real; (B4) `version_conflictada` — la sesión se valida contra su propia versión; (B5) completed exige nombre + `consent.version` + fecha parseable (sin defaults silenciosos, CHECK de tabla); (B6) selección vacía/ids duplicados/activos duplicados/preguntas repetidas rechazadas. Nueva `0070_descarte_leads.sql` (docs/11 §9.4): estado `descartado` + RPC `descartar_lead` + botón "Descartar lead (sin venta)". Validación: `supabase db reset` limpio (0001→0070), vitest **1313/1313 (0 omitidos)**, `tsc` limpio, prototipo 39/39 | 22-sep-2026 |
+| A-2 — Corrección de bloqueantes | ✅ (22-sep-2026) Corregidos los 6 bloqueantes del análisis externo + los hallazgos propios de la auditoría v2 (teléfono E.164 por país, tracking con IDs canónicos, rotación de sesión, filtros de capital, beacon tardío idempotente, fecha de consentimiento futura, descarte de lead ya vinculado) | 22-sep-2026 |
+| A-3 — Reconciliación 0071 | ✅ (22-sep-2026) `0071_reconciliacion_leads.sql` (auditoría v3 H-01): estado final garantizado sobre cualquier base. Incluye: trigger de inmutabilidad de versiones publicadas (H-04), consent solo versión canónica 'contacto-v1' + coherencia temporal (H-05), lock canónico de contacto en vincular/desvincular/descartar (H-06), rollback ESTRICTO sin éxito parcial + UUID real en auditoría (H-07), RLS sin policies genéricas + grants solo service_role (H-08), last_step protegido tras el abandono (H-09c), retry idempotente con versión pausada (M-04). Validación: `db reset` limpio 0001→0071, vitest **1329/1329 (0 omitidos)**, `tsc` limpio, `eslint` compuerta (0 errores), build OK, prototipo 39/39 | 22-sep-2026 |
 | B — Endpoint + funnel | ✅ Funnel portado a `/quiz` (layout con fuentes propias + `app/quiz.css` scopeado), middleware con excepciones públicas, selector de país + E.164, UTMs automáticas, eventos `started/progress/dropped/completed` con respuestas acumuladas en cada evento, endpoint endurecido, contacto persistido antes del resultado. **Validado punta a punta por el usuario** | — |
 | C — Módulo /leads | ✅ Permiso `leads` + grupo "Captación", listado con filtros y paginación, detalle con snapshots, vinculación post-venta con validación de teléfono (confirmación explícita si difieren), auditoría y rollback (`desvincular_lead`), seed en todos los estados. **Validado por el usuario** (link, confirmación, rollback auditados en `auditoria`) | — |
 | D — Pre-producción | 🟡 Cierre local completo: checklist `docs/09` verificado y documentado (RLS/service_role/IDOR/SQLi → ítems 27-30 cerrados; hallazgo: 1 RCE crítica de Next en el toolchain del OS → bloqueante #20), preguntas para Miled listadas en `docs/06`, rate limit definitivo diferido al hosting. Pendiente externo: respuestas de Miled (hosting, números de migración, permiso `leads`), PR/merge y despliegue | — |

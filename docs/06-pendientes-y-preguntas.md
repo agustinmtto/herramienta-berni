@@ -22,8 +22,8 @@
 | 16 | ~~**Ámbito de seguridad con integraciones**~~ | Implementado para el módulo de leads: RLS day 1, service_role solo server, IDOR cubierto, SQLi parametrizado — checklist verificado en `docs/09` §Quiz Funnel en el OS | Equipo dev | ✅ Cerrado (Fase D local) |
 | 17 | **Upgrade de Next** para cerrar las vulnerabilidades de prod deps: repo raíz 2 transitivas (postcss, alto) vía `next@15`; **el OS (`metacrypto-os-app`) tiene 1 RCE crítica en `next` + 3 high (postcss/sharp/nanoid)** — ver #20 | Cerrar `npm audit --omit=dev` en 0 en ambos repos | Equipo dev | 🟡 Fusionado con #20 (mismo plan de upgrade) |
 | 18 | ~~**Retención de datos de leads**~~ | Sin vencimiento por decisión de negocio; mantener capacidad futura de eliminación/anonimización | Berni / Equipo dev | ✅ Cerrado |
-| 19 | ~~**Número de migración**~~ | Asignados `0068_quiz_leads.sql` y `0069_vinculacion_validacion_rollback.sql` — **falta confirmación formal con Miled antes del release** | Miled | 🟡 Confirmación pendiente |
-| 20 | **Upgrade de Next del OS (bloqueante de prod)**: `npm audit --omit=dev` del OS muestra 1 vulnerabilidad **crítica** (RCE en next) + 3 high (postcss/sharp/nanoid) — preexisten al módulo de leads. Incluye el caso del repo raíz (#17) | No exponer `/quiz` en prod sin plan de upgrade | Miled / Equipo dev | Abierto — ver preguntas a Miled |
+| 19 | ~~**Número de migración**~~ | Asignados `0068_quiz_leads.sql`, `0069_vinculacion_validacion_rollback.sql`, `0070_descarte_leads.sql` y `0071_reconciliacion_leads.sql` - **falta confirmación formal con Miled antes del release** | Miled | 🟡 Confirmación pendiente |
+| 20 | **Upgrade de Next del OS (bloqueante de prod)**: ~~1 RCE crítica en `next`~~ **RESUELTO en el PR de leads: lockfile a `15.5.25` — las 2 RCE críticas y las altas de `nanoid`/`sharp` quedaron cerradas**. Queda la alta de `postcss` cuya solución exige Next 16 (cambio mayor, ticket aparte) y las correcciones de seguridad preexistentes del OS (`docs/13` §4) | Cerrar `npm audit --omit=dev` en 0 | Miled / Equipo dev | 🟡 Parcial: críticas cerradas; Next 16 pendiente |
 
 ## Preguntas para Miled (cierre Fase D — bloqueantes de producción)
 
@@ -33,7 +33,7 @@
 4. **Permiso `leads`**: ¿quién del equipo lo recibe (Berni, Miled, closers)? Se asigna por `team_members.modulos`.
 5. **Orden de despliegue**: aplicar `0068` + `0069` a producción ANTES de deployar el código (sin eso, PostgREST responde 400 en silencio).
 6. **Variables de entorno en prod**: no se agregan claves nuevas; verificar que el deploy tenga `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `AUTH_TOKEN` (ya usadas por el OS). Opcionales: `LEAD_RATE_LIMIT_*`.
-7. **Upgrade de Next** (bloqueante #20): hay una RCE crítica en la versión actual de `next` — ¿cuándo se aborda? ¿Lo hace Miled o lo hacemos nosotros en una rama aparte?
+7. **Upgrade de Next** (bloqueante #20): las 2 RCE críticas ya quedaron cerradas en este PR (lockfile `15.5.25`). Queda la alta de `postcss` — ¿se aprueba el salto a Next 16 como ticket aparte?
 8. **HTTPS/HSTS**: verificar que el host fuerce HTTPS y configure HSTS al exponer `/quiz`.
 
 ## Roadmap

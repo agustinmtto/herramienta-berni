@@ -20,7 +20,7 @@ apps/inbox/            La aplicación. Es autónoma: no depende de nada fuera de
                        `c/[token]/` y `e/[token]/` = PÚBLICAS, las abre un cliente.
   components/          Componentes de React.
   lib/                 La lógica. Aquí vive casi todo lo que importa.
-  lib/__tests__/       1.246 tests. Corren en menos de un segundo.
+  lib/__tests__/       1.329 tests (baseline del módulo de leads: 1.246). Corren en menos de un segundo.
 supabase/migrations/   El esquema, en orden. Numeradas 0001…
 ```
 

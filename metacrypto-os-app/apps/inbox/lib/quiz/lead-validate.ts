@@ -1,10 +1,11 @@
-// Validación y normalización del contrato de /api/lead (docs/11 §5, docs/09).
 // Funciones PURAS para que los tests no necesiten Next: la ruta solo hace
 // parsing, rate limit, honeypot y esta validación antes del RPC.
 //
 // El RPC revalida TODO contra la definición publicada; esta capa existe para
 // rechazar basura temprano, con códigos HTTP honestos y sin filtrar detalles
 // internos al cliente.
+
+import { COUNTRIES } from "./lead-payload";
 
 export const MAX_BODY_BYTES = 64 * 1024;
 export const MAX_ANSWERS = 32;
@@ -86,6 +87,13 @@ function validateLead(lead: unknown): string | null {
   if (!isStr(lead.email, 254) || !EMAIL_RE.test(lead.email)) return "bad_email";
   if (!isStr(lead.phone, 20)) return "bad_phone";
   if (lead.country !== null && lead.country !== undefined && !/^[A-Za-z]{2}$/.test(String(lead.country))) return "bad_country";
+  // Cross-check país↔prefijo (v3 M-01, barato): el funnel siempre manda ambos;
+  // el servidor rechaza combinaciones incoherentes ("AR" con un +34…) aunque
+  // la normalización E.164 completa queda para el endpoint + documentación.
+  if (typeof lead.country === "string" && typeof lead.phone === "string" && lead.phone.startsWith("+")) {
+    const pais = COUNTRIES.find((c) => c.code === String(lead.country).toUpperCase());
+    if (pais && !String(lead.phone).startsWith(`+${pais.prefix}`)) return "country_phone_mismatch";
+  }
   if (typeof lead.website === "string" && lead.website.trim() !== "") return "honeypot";
   const consent = lead.consent;
   if (!isObj(consent)) return "bad_consent";

@@ -39,17 +39,31 @@ describe("buildLeadsQuery", () => {
   // acota por el MÍNIMO de la banda y el máximo por el TOPE. La semántica de
   // solape anterior hacía que un lead "<10k" entrara en el filtro "≥ 10k" y
   // que la banda abierta ">$250k" (capital_max NULL) desapareciera del suyo.
-  test("banda de capital: min acota por capital_min y capitalMax por capital_max", () => {
-    expect(con({ capitalMin: "10000" })).toContain("capital_min_usd=gte.10000");
-    expect(con({ capitalMax: "50000" })).toContain("capital_max_usd=lte.50000");
-    // la banda abierta ">$250k" (capital_max NULL) SÍ aparece en su propio
-    // filtro mínimo, porque el ≥ compara su capital_min (definido, 250000):
-    expect(con({ capitalMin: "250000" })).toContain("capital_min_usd=gte.250000");
+  // Semántica por banda EXACTA (v3 M-02): el filtro de capital ya no usa
+  // umbrales de solape — filtra la banda exacta de la definición, incluyendo
+  // la banda abierta ">$250k" (capital_min definido, capital_max NULL).
+  test("banda de capital: filtra min y max de la banda elegida", () => {
+    expect(con({ banda: "10k_25k" })).toContain("capital_min_usd=eq.10000");
+    expect(con({ banda: "10k_25k" })).toContain("capital_max_usd=eq.25000");
+    expect(con({ banda: "gt_250k" })).toContain("capital_min_usd=eq.250000");
+    expect(con({ banda: "gt_250k" })).toContain("capital_max_usd=is.null");
+    expect(con({ banda: "no-existe" })).not.toContain("capital_min_usd=eq");
+  });
+
+  test("UTM medium/content/term se filtran igual que source/campaign", () => {
+    expect(con({ utm_medium: "organic" })).toContain("utm_medium=eq.organic");
+    expect(con({ utm_content: "reel-1" })).toContain("utm_content=eq.reel-1");
+    expect(con({ utm_term: "cripto" })).toContain("utm_term=eq.cripto");
+  });
+
+  test("filtro de fecha incluye el último segundo del día (L-01: lt medianoche siguiente)", () => {
+    expect(con({ hasta: "2026-09-30" })).toContain("created_at=lt.2026-10-01T00:00:00Z");
+    expect(con({ hasta: "2026-09-30" })).not.toContain("23:59:59");
   });
 
   test("fechas, paso de abandono, versión y UTMs se escapan", () => {
     expect(con({ desde: "2026-09-01" })).toContain("created_at=gte.2026-09-01T00:00:00Z");
-    expect(con({ hasta: "2026-09-30" })).toContain("created_at=lte.2026-09-30T23:59:59Z");
+    expect(con({ hasta: "2026-09-30" })).toContain("created_at=lt.2026-10-01T00:00:00Z");
     expect(con({ paso: "capital" })).toContain("last_step_id=eq.capital");
     expect(con({ version: "a-b-c" })).toContain("quiz_version_id=eq.a-b-c");
     expect(con({ utm_source: "instagram" })).toContain("utm_source=eq.instagram");

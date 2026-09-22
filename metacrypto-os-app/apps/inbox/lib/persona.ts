@@ -144,7 +144,7 @@ export function prepararEdicion(
   }
 
   const estadoPedido = t(entrada.estado);
-  let estado = distinto(estadoPedido, actual.estado);
+  const estado = distinto(estadoPedido, actual.estado);
   if (estado !== "") {
     if (!(ESTADOS_PERSONA as readonly string[]).includes(estado)) {
       return { ok: false, error: `Estado no válido: ${estado}` };

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { requireModulo } from "@/lib/guard";
-import { getLeads, LEADS_PAGE_SIZE, type LeadFilters } from "@/lib/leads";
-import { getBandasCapital } from "@/lib/leads";
+import { getLeads, getVersiones, BANDAS_CAPITAL, LEADS_PAGE_SIZE, type LeadFilters } from "@/lib/leads";
 import { dateEs } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -58,14 +57,16 @@ export default async function LeadsPage({
     hasta: val("hasta") || undefined,
     paso: val("paso") || undefined,
     utm_source: val("utm_source") || undefined,
+    utm_medium: val("utm_medium") || undefined,
     utm_campaign: val("utm_campaign") || undefined,
-    capitalMin: val("capitalMin") || undefined,
-    capitalMax: val("capitalMax") || undefined,
+    utm_content: val("utm_content") || undefined,
+    utm_term: val("utm_term") || undefined,
+    banda: val("banda") || undefined,
     q: val("q") || undefined,
     page: Math.max(1, Number(val("page")) || 1),
   };
 
-  const [{ rows, hayMas }, bandas] = await Promise.all([getLeads(filtros), getBandasCapital()]);
+  const [{ rows, hayMas }, versiones] = await Promise.all([getLeads(filtros), getVersiones()]);
 
   const paginacion = { ...sp } as Record<string, string>;
   const linkPagina = (delta: number): string => {
@@ -102,25 +103,25 @@ export default async function LeadsPage({
           <option value="frio">Frío</option>
           <option value="indeterminado">Indeterminado</option>
         </select>
-        <select name="capitalMin" defaultValue={filtros.capitalMin ?? ""}>
-          <option value="">Capital mínimo</option>
-          <option value="10000">≥ 10.000 USD</option>
-          <option value="50000">≥ 50.000 USD</option>
-          <option value="100000">≥ 100.000 USD</option>
-          <option value="250000">≥ 250.000 USD</option>
-        </select>
-        <select name="capitalMax" defaultValue={filtros.capitalMax ?? ""}>
-          <option value="">Capital máximo</option>
-          <option value="10000">≤ 10.000 USD</option>
-          <option value="25000">≤ 25.000 USD</option>
-          <option value="50000">≤ 50.000 USD</option>
-          <option value="100000">≤ 100.000 USD</option>
-          <option value="250000">≤ 250.000 USD</option>
+        <select name="banda" defaultValue={filtros.banda ?? ""}>
+          <option value="">Capital: todas las bandas</option>
+          {BANDAS_CAPITAL.map((b) => (
+            <option key={b.id} value={b.id}>{b.label}</option>
+          ))}
         </select>
         <input type="date" name="desde" defaultValue={filtros.desde} />
         <input type="date" name="hasta" defaultValue={filtros.hasta} />
         <input type="text" name="utm_source" defaultValue={filtros.utm_source} placeholder="UTM source" />
+        <input type="text" name="utm_medium" defaultValue={filtros.utm_medium} placeholder="UTM medium" />
         <input type="text" name="utm_campaign" defaultValue={filtros.utm_campaign} placeholder="UTM campaign" />
+        <input type="text" name="utm_content" defaultValue={filtros.utm_content} placeholder="UTM content" />
+        <input type="text" name="utm_term" defaultValue={filtros.utm_term} placeholder="UTM term" />
+        <select name="version" defaultValue={filtros.version ?? ""}>
+          <option value="">Versión del quiz: todas</option>
+          {versiones.map((v) => (
+            <option key={v.codigo} value={v.codigo}>{v.codigo} (v{v.version}, {v.variante})</option>
+          ))}
+        </select>
         <select name="paso" defaultValue={filtros.paso ?? ""}>
           <option value="">Abandono en: cualquier paso</option>
           {["start", "situation", "challenge", "allocation", "capital", "horizon", "drawdown", "influence", "rules", "contact"].map((p) => (
@@ -195,7 +196,6 @@ export default async function LeadsPage({
         (docs/11 D13). Los diagnósticos persisten tal como los vio el lead; el teléfono del lead temporal no se escribe en `personas` a propósito
         — vive en el snapshot del envío.
       </small>
-      {bandas.length > 0 && <small className="leads-nota">Bandas con datos: {bandas.join(" · ")}</small>}
     </div>
   );
 }

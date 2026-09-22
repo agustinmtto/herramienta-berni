@@ -110,7 +110,7 @@ Por funcionalidad/responsabilidad (no por carpetas):
 
 ### Fase 4 — Producción y lanzamiento orgánico
 - [ ] Revisión integrada final: todo merged a main, probado en local punta a punta
-- [ ] Aplicar migrations a producción (`supabase db push`) — con Miled (§4)
+- [ ] Aplicar migrations a producción — a mano por el operador, en orden (0001 → 0071); `supabase db push` está desautorizado en productivo (trampa #5 del CLAUDE.md del OS) — con Miled (§4)
 - [ ] Deploy de la app al hosting del negocio
 - [ ] Smoke test en producción con datos de prueba
 - [ ] Link con UTMs → Berni lanza en Instagram (orgánico primero)

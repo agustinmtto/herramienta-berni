@@ -49,12 +49,26 @@ export interface LeadFilters {
   hasta?: string;         // YYYY-MM-DD
   paso?: string;          // last_step_id (abandono)
   utm_source?: string;
+  utm_medium?: string;
   utm_campaign?: string;
-  capitalMin?: string;    // banda: envíos cuyo capital_max >= X
-  capitalMax?: string;    // banda: envíos cuyo capital_min <= X
+  utm_content?: string;
+  utm_term?: string;
+  banda?: string;         // banda EXACTA de capital (BANDAS_CAPITAL)
   q?: string;             // búsqueda: nombre, email o teléfono capturados
   page?: number;          // 1-based
 }
+
+// Las seis bandas EXACTAS de la definición publicada (0068, §8). El filtro
+// "Capital" del listado filtra por banda exacta — no por umbrales de solape
+// que mezclaban bandas (fix auditoría v2 #11 / v3 M-02).
+export const BANDAS_CAPITAL: { id: string; label: string; min: number | null; max: number | null }[] = [
+  { id: "lt_10k",    label: "Menos de 10.000 USD",      min: 0,      max: 10000 },
+  { id: "10k_25k",   label: "Entre 10.000 y 25.000 USD",  min: 10000,  max: 25000 },
+  { id: "25k_50k",   label: "Entre 25.000 y 50.000 USD",  min: 25000,  max: 50000 },
+  { id: "50k_100k",  label: "Entre 50.000 y 100.000 USD", min: 50000,  max: 100000 },
+  { id: "100k_250k", label: "Entre 100.000 y 250.000 USD",min: 100000, max: 250000 },
+  { id: "gt_250k",   label: "Más de 250.000 USD",       min: 250000, max: null },
+];
 
 export const LEADS_PAGE_SIZE = 50;
 
@@ -87,17 +101,28 @@ export function buildLeadsQuery(f: LeadFilters): string {
   // el builder puro no sabe nada de quiz_versiones.
   if (f.version) parts.push(`quiz_version_id=eq.${encodeURIComponent(f.version)}`);
   if (f.desde) parts.push(`created_at=gte.${f.desde}T00:00:00Z`);
-  if (f.hasta) parts.push(`created_at=lte.${f.hasta}T23:59:59Z`);
+  // L-01 (auditoría v3): el hasta con 23:59:59Z se comía el último segundo
+  // fraccionario — excluye con < medianoche del día siguiente.
+  if (f.hasta) {
+    const d = new Date(`${f.hasta}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
+    parts.push(`created_at=lt.${d.toISOString().slice(0, 10)}T00:00:00Z`);
+  }
   if (f.paso) parts.push(`last_step_id=eq.${encodeURIComponent(f.paso)}`);
   if (f.utm_source) parts.push(`utm_source=eq.${encodeURIComponent(f.utm_source)}`);
+  if (f.utm_medium) parts.push(`utm_medium=eq.${encodeURIComponent(f.utm_medium)}`);
   if (f.utm_campaign) parts.push(`utm_campaign=eq.${encodeURIComponent(f.utm_campaign)}`);
-  // Semántica por etiqueta (fix auditoría v2 #11): "capital mínimo ≥ X" =
-  // banda que EMPIEZA en o después de X (capital_min_usd >= X); "capital
-  // máximo ≤ X" = banda cuyo tope no excede X. La versión anterior filtraba
-  // por solapamiento (capital_max >= X / capital_min <= X) y aparte quedaba
-  // EXCLUIDA la banda "$250k+" que tiene capital_max NULL.
-  if (f.capitalMin) parts.push(`capital_min_usd=gte.${Number(f.capitalMin)}`);
-  if (f.capitalMax) parts.push(`capital_max_usd=lte.${Number(f.capitalMax)}`);
+  if (f.utm_content) parts.push(`utm_content=eq.${encodeURIComponent(f.utm_content)}`);
+  if (f.utm_term) parts.push(`utm_term=eq.${encodeURIComponent(f.utm_term)}`);
+  // Banda EXACTA de la definición: una banda [min,max] es min=eq.X con
+  // max=eq.Y (o is.null para la banda abierta ">$250k").
+  if (f.banda) {
+    const banda = BANDAS_CAPITAL.find((b) => b.id === f.banda);
+    if (banda) {
+      if (banda.min != null) parts.push(`capital_min_usd=eq.${banda.min}`);
+      parts.push(banda.max != null ? `capital_max_usd=eq.${banda.max}` : "capital_max_usd=is.null");
+    }
+  }
   if (f.q) {
     const like = encodeURIComponent(`*${patronLike(f.q)}*`);
     parts.push(`or=(nombre_capturado.ilike.${like},email_capturado.ilike.${like},telefono_e164_capturado.ilike.${like})`);
@@ -215,26 +240,29 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
   };
 }
 
-// Clientes definitivos (con programa) para el picker de vinculación post-venta
-// (docs/11 §9). Solo estado 'cliente' — el RPC revalida igual.
-export async function getClientesParaVincular(): Promise<{ id: string; nombre: string; email: string | null; telefono_e164: string | null }[]> {
-  const r = await rest<{ id: string; nombre: string; email: string | null; telefono_e164: string | null }[]>(
-    "GET",
-    "personas?estado=eq.cliente&select=id,nombre,email,telefono_e164&order=nombre.asc&limit=500",
-  );
+// Clientes definitivos para el picker de vinculación post-venta (docs/11 §9).
+// SOLO clientes con al menos un programa (v3 M-03: la versión anterior
+// listaba cualquier `estado=cliente` y el RPC rechazaría a los sin programa).
+// Búsqueda por texto opcional (nombre/email/teléfono).
+export async function getClientesParaVincular(q?: string): Promise<{ id: string; nombre: string; email: string | null; telefono_e164: string | null }[]> {
+  let query =
+    "personas?estado=eq.cliente" +
+    "&select=id,nombre,email,telefono_e164" +
+    "&programas!inner(id)" + // exige al menos un programa: lo que el RPC valida
+    "&order=nombre.asc&limit=500";
+  if (q && q.trim()) {
+    const like = encodeURIComponent(`*${patronLike(q.trim())}*`);
+    query += `&or=(nombre.ilike.${like},email.ilike.${like},telefono_e164.ilike.${like})`;
+  }
+  const r = await rest<{ id: string; nombre: string; email: string | null; telefono_e164: string | null }[]>( "GET", query);
   return r.json ?? [];
 }
 
-// Bandas de capital presentes (para el select de filtros) — de los envíos
-// completados, sin duplicados, ordenadas. Es un catálogo liviano.
-export async function getBandasCapital(): Promise<string[]> {
-  const r = await rest<{ capital_min_usd: number | null }[]>(
+// Versiones publicadas del quiz (para el filtro del listado)
+export async function getVersiones(): Promise<{ codigo: string; variante: string; version: number }[]> {
+  const r = await rest<{ codigo: string; variante: string; version: number }[]>(
     "GET",
-    "diagnostico_envios?estado=eq.completed&capital_min_usd=not.is.null&select=capital_min_usd&order=capital_min_usd.asc&limit=200",
+    "quiz_versiones?order=created_at.desc&limit=50",
   );
-  const set = new Set<string>();
-  for (const row of r.json ?? []) {
-    if (row.capital_min_usd != null) set.add(`≥ ${Number(row.capital_min_usd).toLocaleString("es-AR")} USD`);
-  }
-  return [...set];
+  return r.json ?? [];
 }

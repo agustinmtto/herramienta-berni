@@ -39,7 +39,7 @@ supabase start
 
 # 2) Configurar las credenciales de la app
 cd apps/inbox
-cp .env.example .env.local          # y editar: valores abajo (§4)
+cp ../../.env.example .env.local     # el .env.example vive en metacrypto-os-app/, no en apps/inbox (§4)
 
 # 3) Instalar y arrancar la app
 npm install

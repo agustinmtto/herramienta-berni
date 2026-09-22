@@ -245,6 +245,15 @@ export function QuizFlow() {
         setContactError("No pudimos guardar tu diagnóstico. Revisá los datos e intentá de nuevo.");
         return;
       }
+      // Contrato positivo completo (v3 M-06): un 200 genérico no prueba nada —
+      // el éxito exige que el servidor confirme el envío COMPLETED con su id.
+      const data = (await response.json().catch(() => null)) as
+        | { ok?: boolean; status?: string; submission_id?: string | null }
+        | null;
+      if (!data || data.ok !== true || data.status !== "completed" || !data.submission_id) {
+        setContactError("El diagnóstico no terminó de guardarse. Intentá de nuevo en unos segundos.");
+        return;
+      }
     } catch {
       setContactError("Problema de conexión. Intentá de nuevo en unos segundos.");
       return;
@@ -280,7 +289,13 @@ export function QuizFlow() {
   };
 
   useEffect(() => {
-    if (screen === SCREENS.WIZARD && questions[qIndex]?.id) recordStage(questions[qIndex].id);
+    // El paso se registra al MOSTRAR cada pantalla: primera pregunta incluida
+    // (no solo al avanzar) y también al navegar hacia atrás — así el beacon de
+    // abandono reporta el paso real en el que estaba el lead (v3 H-09).
+    if (screen === SCREENS.WIZARD && questions[qIndex]?.id) {
+      recordStage(questions[qIndex].id);
+      lastStepRef.current = { id: questions[qIndex].id, index: qIndex };
+    }
   }, [screen, qIndex, recordStage]);
 
   useEffect(() => () => { if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current); }, []);
