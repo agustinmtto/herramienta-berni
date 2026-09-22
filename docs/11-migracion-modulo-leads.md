@@ -436,18 +436,49 @@ con: autor (team_member), cliente destino, lista exacta de `envio_ids` reasignad
 del lead y del cliente, y si fue confirmada manualmente. Esta fila es lo que permite el
 rollback exacto y deja rastro de quien hizo que.
 
-### 9.3 Rollback: desvincular
+### 9.3 Rollback: desvincular (por seguimiento vinculado)
 
-`desvincular_lead(p_cliente_id)` revierte la ULTIMA vinculacion de ese cliente leyendo su
-fila de auditoria:
+Un lead puede completar el funnel varias veces, y un cliente definitivo puede acumular
+vinculaciones de VARIOS leads (cada una con sus propios envios). El rollback revierte UNA
+vinculacion concreta leyendo su fila de auditoria:
 
-1. Reasigna EXACTAMENTE los `envio_ids` registrados (solo los que sigan apuntando al cliente)
+`desvincular_lead(p_cliente_id, p_lead_id default null, p_autor_id)`:
+
+1. Resuelve la vinculacion a revertir: la del `p_lead_id` indicado (debe pertenecer a ese
+   cliente) o, si no llega lead, la mas reciente de ese cliente que NO este ya revertida.
+2. Reasigna EXACTAMENTE los `envio_ids` registrados (solo los que sigan apuntando al cliente)
    de vuelta a la persona temporal.
-2. Restaura la persona temporal a `estado='lead'`.
-3. Escribe auditoria `desvinculacion`.
-4. Si no hay vinculacion registrada para ese cliente, rechaza con `quiz_leads/nada_que_desvincular`.
+3. Restaura la persona temporal a `estado='lead'`.
+4. Marca la fila de auditoria como revertida (`datos.revertido=true` + fecha) para que esa
+   vinculacion nunca vuelva a ser elegida — la siguiente desvinculacion del mismo cliente
+   toma la anterior.
+5. Escribe auditoria `desvinculacion`.
+6. Rechaza con `quiz_leads/nada_que_desvincular` si no hay vinculacion pendiente de revertir
+   para ese cliente (o si la del `p_lead_id` indicado ya fue revertida o apunta a otro cliente).
+
+La serializacion es por LEAD (la misma advisory lock de `vincular`): los envios y el estado de
+la persona temporal son lo que ambas operaciones tocan; dos desvinculaciones concurrentes del
+mismo cliente resuelven leads distintos y no colisionan mas alla de eso.
 
 Idempotente y transaccional, igual que la vinculacion.
+
+### 9.4 Descarte del lead (cuando NO hay venta)
+
+Si el triaje determina que el lead no se convierte, se DESCARTA en lugar de dejarlo vivo para
+siempre: `descartar_lead(p_lead_id, p_autor_id)`.
+
+- Solo aplica a personas `lead` creadas y referenciadas por este modulo (telefono_e164 NULL
+  y con al menos un envio propio). Re-descartar un lead ya descartado responde OK (idempotente).
+- Cambia la persona a `estado='descartado'` (la migracion 0070 amplia el CHECK de
+  `personas.estado` — es el unico cambio sobre el esquema preexistente del OS y es
+  append-only: nunca se edita 0001/0039).
+- Escribe auditoria (entidad `persona`, accion `descarte`) con autor y envios del lead.
+- Los envios NO se mueven ni se borran: en /leads la persona sigue visible con estado
+  `descartado`. Reactivarlo (volver a 'lead') es un update manual apoyado en la auditoria; la UI
+  de reactivacion queda para una fase posterior.
+- La UI del detalle de envio muestra el boton "Descartar lead" cuando la persona sigue siendo
+  temporal: es el camino "no hubo venta" del flujo comercial (vincular si hubo venta, descartar
+  si no).
 
 ## 10. Modulo `/leads`
 
