@@ -17,6 +17,7 @@ Esta carpeta es la **fuente de verdad del proyecto**: la metodología es spec-dr
 | [`12-spec-sdd-fases-migracion-leads.md`](12-spec-sdd-fases-migracion-leads.md) | Spec SDD: fases con criterios verificables y estado actual de cada una | Al ejecutar cualquier fase |
 | [`13-entrega-y-preguntas-milo.md`](13-entrega-y-preguntas-milo.md) | Entrega del módulo: qué quedó corregido, qué falta y qué pedirle al negocio | Al preparar el PR/deploy |
 | [`14-estado-actual-produccion.md`](14-estado-actual-produccion.md) | Auditoría de readiness (GO/NO GO): checklist de producción contrastado contra el código real | Antes de mandar tráfico real o hacer el primer deploy |
+| [`15-transferencia-funnel-al-repo-del-os.md`](15-transferencia-funnel-al-repo-del-os.md) | Cómo llevar el funnel al repo del OS (Miled) con el patch listo en `release/` | Al migrar el funnel al repo del negocio |
 
 ## Qué NO está acá (y por qué)
 
