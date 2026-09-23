@@ -18,7 +18,7 @@ Este repositorio contiene ahora los dos lados de la integración:
 
 - La raíz conserva el Quiz Funnel del MVP standalone (histórico, referencia de comportamiento).
 - `metacrypto-os-app/` contiene una copia limpia del sistema interno y sus migraciones, tomada de su `main` en el commit `f2aee5c` — **acá vive la implementación vigente** (`/quiz` + `/leads`).
-- `docs/archive/ANALISIS_INTEGRACION_QUIZ_LEADS-v1.0-20260916.md` es el análisis técnico previo (obsoleto como spec; la vigente es `docs/11`).
+- Los análisis previos de integración y las transcripciones crudas están en `docs-obsoletos/fuentes-primarias/` (obsoletos como spec; la vigente es `docs/11`).
 - `documentacion_prototipo.txt` resume el alcance y estado funcional del funnel.
 - `metacrypto-os-app/esquema-metacrypto-os.sql` es el DDL standalone analizado.
 
@@ -60,8 +60,8 @@ prototipos/
   index.html            # prototipo original (referencia de tono/UX; desechable como código)
   referencia/landings/  # landings del negocio = fuente del design system
   frames/               # capturas del prototipo
-docs/                   # documentación viva (fuente de verdad del proyecto)
-  archive/              # transcripciones crudas + análisis previo (obsoletos, referencia)
+docs/                   # documentación viva (fuente de verdad; índice: docs/README.md)
+docs-obsoletos/         # documentación jubilada + fuentes primarias (trazabilidad histórica)
 metacrypto-os-app/      # sistema interno, Supabase, migraciones y DDL de referencia (implementación vigente)
 documentacion_prototipo.txt        # síntesis funcional del prototipo
 scripts/transcribe.py   # utilidad: transcribe audios con Whisper
@@ -78,22 +78,19 @@ scripts/transcribe.py   # utilidad: transcribe audios con Whisper
 
 | Doc | Contenido |
 |---|---|
-| `AGENTS.md` | Índice para agentes: decisiones firmes, convenciones, orden de lectura |
+| `AGENTS.md` | Índice para agentes: decisiones firmes, convenciones, estado, orden de lectura |
+| `docs/README.md` | **Índice de la documentación viva** (orden de lectura y qué se jubiló) |
 | `docs/00-OVERVIEW.md` | Objetivo, flujo de negocio, decisiones, stack, estado |
-| `docs/01-reunion-integracion.md` | Reunión con el negocio (transcripción fiel + nota de decisiones posteriores) |
-| `docs/02-audio-berni-requisitos.md` | Requisitos de Berni: qué preguntar y por qué, ganchos |
-| `docs/03-especificacion.md` | ⚠️ Histórica (MVP standalone): JSON, wizard, motor, tracking, final+PDF — la spec vigente es `docs/11` |
 | `docs/04-design-system.md` | Colores (oro/negro), tipografía, componentes |
-| `docs/05-prototipo.md` | Qué hace `prototipos/index.html` y qué conservar |
-| `docs/06-pendientes-y-preguntas.md` | Bloqueantes y **roadmap vivo** |
+| `docs/06-pendientes-y-preguntas.md` | Bloqueantes y **tracker vivo** |
 | `docs/07-scm-gestion-configuracion.md` | Nombrado, estructura, branches, commits |
-| `docs/08-roadmap.md` | Modelo de trabajo (fases) y fases de implementación |
+| `docs/08-roadmap.md` | Modelo de trabajo y fases de implementación (con estado real) |
 | `docs/09-security.md` | Seguridad del endpoint, rate limiting y checklist preproducción |
 | `docs/10-levantar-metacrypto-os-local.md` | Guía para levantar el OS + Supabase local |
-| `docs/11-migracion-modulo-leads.md` | **Spec funcional autoritativa** de la migración del módulo de leads |
+| `docs/11-migracion-modulo-leads.md` | **Spec funcional autoritativa** del módulo de leads (0068–0071) |
 | `docs/12-spec-sdd-fases-migracion-leads.md` | Fases SDD con compuertas y estado |
-| `docs/13-entrega-y-preguntas-milo.md` | Entrega del módulo: qué quedó corregido, qué falta y las 8 preguntas para el negocio |
-| `docs/archive/` | Transcripciones crudas y análisis previo, archivados (obsoletos, solo referencia) |
+| `docs/13-entrega-y-preguntas-milo.md` | Entrega del módulo: qué quedó corregido, qué falta y qué pedirle al negocio |
+| `docs-obsoletos/` | Documentación jubilada (reunión, audio, MVP standalone, prototipo) + fuentes primarias crudas — **no usar como spec** |
 | `documentacion_prototipo.txt` | Síntesis funcional y decisiones del prototipo |
 
 ## Cómo desarrollar (flujo de trabajo)

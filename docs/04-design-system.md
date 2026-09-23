@@ -1,6 +1,6 @@
 # Design System — Metacrypto Club
 
-Fuente de verdad visual: las landings del negocio en `prototipos/referencia/landings/` (`bitcoin_rompio_el_guion.html`, `el_error_despues_de_perderte_bitcoin.html`) + el prototipo `prototipos/index.html`. **No inventar colores nuevos.**
+Fuente de verdad visual: las landings del negocio en `prototipos/referencia/landings/` (`bitcoin_rompio_el_guion.html`, `el_error_despues_de_perderte_bitcoin.html`) + el funnel portado al OS (`metacrypto-os-app/apps/inbox/app/quiz.css`, scopeado a `/quiz`). **No inventar colores nuevos.**
 
 ## Paleta
 

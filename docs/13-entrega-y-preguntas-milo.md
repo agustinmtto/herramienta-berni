@@ -117,7 +117,7 @@ El módulo de leads ya fue implementado y validado técnicamente.
 
 La validación realizada el **22/09/2026** dejó:
 
-* **1316/1316 tests en verde.**
+* **1329/1329 tests en verde (0 omitidos).**
 * TypeScript sin errores.
 * Build del OS correcto.
 * Prototipo: **39/39 tests en verde**.

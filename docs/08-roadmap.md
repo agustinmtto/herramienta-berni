@@ -18,7 +18,7 @@ Resumen del flujo acordado:
 
 ### 1.1 Por qué local con Docker (y no branch de Supabase)
 
-- La reunión (`docs/01` §2) propuso una branch de Supabase como entorno dev, pero Supabase **cobra compute por branch** y no escala a un branch por persona.
+- La reunión de integración (transcripción en `docs-obsoletos/fuentes-primarias/`) propuso una branch de Supabase como entorno dev, pero Supabase **cobra compute por branch** y no escala a un branch por persona.
 - Con Supabase CLI + Docker: **N copias locales a costo cero**, idénticas a producción vía migrations, riesgo cero para producción.
 - Lo único compartido es el repo: las **migrations son el contrato** entre devs y con producción.
 - Esto reemplaza el pendiente #3 de `docs/06` (validar branch de Supabase como dev).
@@ -52,6 +52,10 @@ Reglas de migrations:
 
 - **Append-only:** una migration por cambio de DB, nombre descriptivo. Nunca editar una migration ya mergeada; se agrega una nueva encima.
 - `supabase db reset` antes de abrir el PR: garantiza que todas las migrations corren desde cero.
+> **Nota histórica:** las referencias a `docs/03` (especificación del MVP standalone) y `docs/01` (reunión) apuntan hoy a `docs-obsoletos/` — esos documentos se jubilaron; lo vigente está en `docs/11`.
+
+## 1. Cómo trabajamos
+
 - Si producción cambia mientras desarrollamos (Miled u otro proceso): re-sincronizar con un nuevo `db pull` → migration de diff, antes del push.
 
 ## 2. División de responsabilidades (propuesta a confirmar)
@@ -118,7 +122,7 @@ Por funcionalidad/responsabilidad (no por carpetas):
 **Salida:** herramienta viva; métricas de `docs/06` corriendo desde el día 1.
 
 ### Fase 5 — Experimentación (post-lanzamiento)
-A/B de formatos (largo vs. pop-up de continuación, orden de preguntas), análisis de data y automatizaciones de outreach (`docs/01` §4, `docs/06`).
+A/B de formatos (largo vs. pop-up de continuación, orden de preguntas), análisis de data y automatizaciones de outreach (propuesta de Miled en la reunión — `docs-obsoletos/01-reunion-integracion.md` §4; ver `docs/06`).
 
 ## 4. Política de despliegue a producción
 
@@ -129,7 +133,7 @@ A/B de formatos (largo vs. pop-up de continuación, orden de preguntas), anális
 
 ## 5. Definition of Done (por tarea)
 
-- [ ] Si toca requisitos: spec actualizada primero (`docs/03`)
+- [ ] Si toca requisitos: spec actualizada primero (`docs/11` para el módulo de leads; `docs/00` para decisiones generales)
 - [ ] Si toca DB: migration propia + `supabase db reset` en limpio
 - [ ] Probado contra Supabase local real (no mocks del medio)
 - [ ] PR con qué/por qué + screenshots si toca UI (`docs/07` §5)

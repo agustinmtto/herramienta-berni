@@ -33,7 +33,8 @@ Desde la **raíz del repo** (`herramienta-berni/`):
 cd metacrypto-os-app
 supabase start
 #    → la primera vez aplica todas las migraciones (69 a la fecha, incluyendo
-#      `0068_quiz_leads` y `0069_vinculacion_validacion_rollback`) automáticamente
+#      `0068_quiz_leads`, `0069_vinculacion_validacion_rollback`, `0070_descarte_leads` y
+#      `0071_reconciliacion_leads`) automáticamente
 #      y siembra `supabase/seed.sql` (datos de prueba).
 #    → anota las URLs que imprime (API :54321, Studio :54323, DB :54322).
 

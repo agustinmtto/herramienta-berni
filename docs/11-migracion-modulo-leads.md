@@ -2,9 +2,9 @@
 
 Documento autoritativo para implementar la persistencia del Quiz Funnel y el modulo `/leads` dentro de MetaCrypto OS. El alcance se limita al dominio nuevo de leads: no se modifica la estructura ni el comportamiento de las tablas existentes.
 
-> **Estado:** especificacion cerrada y con luz verde para desarrollar. Migraciones asignadas: `0068_quiz_leads.sql` (esquema + RPC de ingesta) y `0069_vinculacion_validacion_rollback.sql` (validación de teléfono, auditoría y rollback de la vinculación). **Pendiente única confirmación formal de ambos números con Miled antes del release** (docs/06 #19).
+> **Estado:** especificación cerrada, **implementada y validada** (fases 0–C + cierre local de D, `docs/12` §6). Migraciones asignadas: `0068_quiz_leads.sql` (esquema + RPC de ingesta), `0069_vinculacion_validacion_rollback.sql` (validación de teléfono, auditoría y rollback), `0070_descarte_leads.sql` (descarte del lead sin venta, §9.4) y `0071_reconciliacion_leads.sql` (reconciliación append-only: lleva cualquier base al estado final — inmutabilidad de versiones publicadas, consentimiento canónico, locks canónicos, rollback estricto, RLS/grants cerrados). **Pendiente única confirmación formal de los cuatro números con Miled antes del release** (docs/06 #19).
 >
-> Insumos: `docs/03-especificacion.md`, `docs/06-pendientes-y-preguntas.md`, `docs/08-roadmap.md`, `docs/09-security.md`, `docs/10-levantar-metacrypto-os-local.md`, `docs/archive/ANALISIS_INTEGRACION_QUIZ_LEADS-v1.0-20260916.md` (histórico) y `metacrypto-os-app/CLAUDE.md`.
+> Insumos históricos: `docs-obsoletos/03-especificacion-mvp-standalone.md`, `docs/06-pendientes-y-preguntas.md`, `docs/08-roadmap.md`, `docs/09-security.md`, `docs/10-levantar-metacrypto-os-local.md` y `metacrypto-os-app/CLAUDE.md`.
 
 ## 1. Alcance y decisiones cerradas
 

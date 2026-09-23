@@ -50,7 +50,7 @@ Convención: ✅ implementado y verificado (tests + curl) · ♻️ cubierto por
 | 29 | IDOR/BOLA: intento de manipular session ids por recursos entre leads | ✅ — el endpoint público solo escribe (no expone lecturas); la respuesta nunca devuelve `persona_id`; el módulo `/leads` exige sesión + permiso `leads` (`requireModulo`) en página, detalle y acciones; sesión identificable solo por UUID v4 validado |
 | 30 | SQL / DB injection (todos los campos que llegan a DB) | ✅ — todo va por PostgREST parametrizado y RPC plpgsql con validación cerrada contra la definición publicada; LIKE escapado con `patronLike`; UTMs solo en filtros `eq` con `encodeURIComponent`; cero SQL dinámico con input del cliente |
 
-## Quiz Funnel en el OS (migraciones 0068/0069, rama `feature/leads-a-migracion-rpc`)
+## Quiz Funnel en el OS (migraciones 0068–0071, rama `feature/leads-a-migracion-rpc`)
 
 Ítems nuevos de la integración, revisados al cerrar Fase D (docs/12):
 
@@ -66,9 +66,14 @@ Convención: ✅ implementado y verificado (tests + curl) · ♻️ cubierto por
 | Q8 | Confirmación explícita al vincular con teléfonos distintos | ✅ RPC `telefono_no_coincide` + checkbox obligatorio en UI; flag auditado |
 | Q9 | Rollback de vinculación | ✅ `desvincular_lead` revierte exactamente los `envio_ids` auditados y restaura el temporal a `lead` |
 | Q10 | Timestamps del cliente | ✅ se validan con fallback a `now()` del servidor; `created_at`/recepción son autoritativos |
-| Q11 | npm audit del OS | 🔴 4 vulnerabilidades prod del toolchain (next: 1 **crítica RCE**; postcss/sharp/nanoid: high) — preexisten al módulo; **preguntar a Miled plan de upgrade de Next antes de exponer el funnel en prod** |
+| Q11 | npm audit del OS | 🟡 ~~next: 1 crítica RCE + 3 high~~ **Las 2 RCE críticas quedaron cerradas** (lockfile a `15.5.25` en el PR) y las altas de `nanoid`/`sharp` fuera con `overrides`. Queda 1 alta (`postcss`) que exige Next 16 — ticket aparte, `docs/06` #20 |
 | Q12 | HTTPS-only | ⏳ responsabilidad del hosting al deployar (ítem 33) |
 | Q13 | Retención | ✅ decisión de negocio (docs/11 D14): sin vencimiento; capacidad de borrado puntual disponible vía SQL/RPC si se exige |
+| Q14 | RLS/ACL del funnel | ✅ (0071, auditoría v3 H-08): policies SELECT genéricas eliminadas — anon/authenticated NO leen nada del PII del funnel; `EXECUTE` de helpers y RPCs solo `service_role`. Probado dinámicamente (`quiz-leads-rpc.test.ts` `(H-08)`) |
+| Q15 | Inmutabilidad de versiones publicadas | ✅ (v3 H-04) trigger `quiz_versiones_congelada`: la definición publicada no se edita ni se borra con historial; solo transiciones de estado |
+| Q16 | Consentimiento canónico | ✅ (v3 H-05) solo `contacto-v1`, fecha no futura y coherente con el inicio del recorrido (tolerancia 24 h) |
+| Q17 | Locks canónicos + rollback estricto | ✅ (v3 H-06/H-07) vincular/desvincular/descartar comparten el lock de contacto con la ingesta; el rollback exige la lista completa de envíos o aborta sin mutar (`rollback_incompleto`) |
+| Q18 | Guarda anti-producción en tests | ✅ (clasif. #12) los suites gated solo corren contra `127.0.0.1`/`localhost` — `SUPABASE_URL` externo los salta con aviso |
 
 ## Consentimiento y privacidad
 
