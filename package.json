@@ -17,9 +17,5 @@
     "next": "^15.5.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
-  },
-  "devDependencies": {
-    "@netlify/plugin-nextjs": "^5.15.13",
-    "netlify-cli": "^23.10.0"
   }
 }
