@@ -16,6 +16,7 @@ Esta carpeta es la **fuente de verdad del proyecto**: la metodología es spec-dr
 | [`11-migracion-modulo-leads.md`](11-migracion-modulo-leads.md) | **Spec funcional autoritativa** del módulo de leads: contrato, identidad, vinculaciones, reglas fijas | Antes de tocar migraciones 0068-0071, RPCs o el endpoint de leads |
 | [`12-spec-sdd-fases-migracion-leads.md`](12-spec-sdd-fases-migracion-leads.md) | Spec SDD: fases con criterios verificables y estado actual de cada una | Al ejecutar cualquier fase |
 | [`13-entrega-y-preguntas-milo.md`](13-entrega-y-preguntas-milo.md) | Entrega del módulo: qué quedó corregido, qué falta y qué pedirle al negocio | Al preparar el PR/deploy |
+| [`14-estado-actual-produccion.md`](14-estado-actual-produccion.md) | Auditoría de readiness (GO/NO GO): checklist de producción contrastado contra el código real | Antes de mandar tráfico real o hacer el primer deploy |
 
 ## Qué NO está acá (y por qué)
 
