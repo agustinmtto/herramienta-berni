@@ -61,3 +61,35 @@ git push -u origin feature/leads-a-migracion-rpc
 
 - Upgrade de Next `15.5.25` (seguridad).
 - `seed.sql` y `config.toml` para desarrollo local.
+
+## Plantilla de descripción del PR (pegar en GitHub)
+
+Cuando abras el PR a `main` de Miled, pegá esto como descripción (los tickets preexistentes quedan así visibles para él):
+
+```text
+## Funnel de captación (`/quiz`) + módulo `/leads`
+
+Agrega el funnel público `/quiz` (diagnóstico de portfolio determinístico), el módulo privado `/leads` para el triaje, y las migraciones `0068–0071`.
+
+**⚠️ Orden de deploy:** aplicar las migraciones `0068 → 0069 → 0070 → 0071` ANTES de deployar el código. La `0071` es de reconciliación (lleva cualquier base al estado final).
+
+**Qué incluye:**
+- Funnel `/quiz` + endpoint `/api/lead` (rate limit, same-origin, honeypot, validación cerrada).
+- Módulo `/leads` (listado, filtros, detalle, vincular/descartar) con permiso propio `leads`.
+- Diagnóstico determinístico (sin IA); lead caliente = capital ≥ 10.000 USD, calculado server-side.
+- Migraciones `0068_quiz_leads`, `0069_vinculacion_validacion_rollback`, `0070_descarte_leads`, `0071_reconciliacion_leads`.
+- Tests (suite + integración contra Supabase local).
+
+**Pendientes del negocio (no bloquean esta entrega):**
+- Definir quiénes reciben el permiso `leads`.
+- Confirmar `KAPSO_WEBHOOK_SECRET` en producción.
+
+**Tickets preexistentes del OS (ajenos a este módulo, para resolver después):**
+- Webhook de WhatsApp fail-closed (hoy acepta sin firma si falta el secreto).
+- Rate limit del login.
+- Revocación de sesión de usuarios desactivados.
+- SSRF en media.
+- Permisos por módulo en las APIs del inbox.
+- CSP / frame-deny.
+- Upgrade a Next 16 (cierra la alta de `postcss`).
+```
