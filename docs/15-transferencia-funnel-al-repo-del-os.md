@@ -24,27 +24,25 @@
 ## Pasos
 
 ```bash
-# 1) Clonar el repo de Miled (OS central en la raíz)
+# 1) Clonar el repo de Miled (OS central en la raíz; ya quedás en main)
 git clone https://github.com/miledgassibe/metacrypto-os-app metacrypto-os
 cd metacrypto-os
 
-# 2) Crear la rama
-git checkout -b feature/leads-a-migracion-rpc
-
-# 3) Aplicar el funnel (desde nuestro repo)
+# 2) Aplicar el funnel (desde nuestro repo)
 git apply --check ../herramienta-berni/release/funnel-leads.patch   # verifica que aplique limpio
 git apply ../herramienta-berni/release/funnel-leads.patch
 
-# 4) Probar (contra el Supabase local, docs/10)
+# 3) Probar (contra el Supabase local, docs/10)
 cd apps/inbox && npm install && npm test
+cd ../..
 
-# 5) Commit y push
+# 4) Commit y push a main
 git add -A
 git commit -m "feat(leads): funnel /quiz + modulo /leads + migraciones 0068-0071"
-git push -u origin feature/leads-a-migracion-rpc
+git push origin main
 ```
 
-6. Abrir el **pull request** a `main` de Miled, con esta nota obligatoria:
+6. **Avisar a Miled el orden de deploy** (obligatorio, antes de que despliegue):
 
 > **Aplicar las migraciones `0068 → 0069 → 0070 → 0071` ANTES de deployar el código.** El código nuevo depende de ellas. La `0071` es de reconciliación: lleva cualquier base al mismo estado final.
 
@@ -62,9 +60,9 @@ git push -u origin feature/leads-a-migracion-rpc
 - Upgrade de Next `15.5.25` (seguridad).
 - `seed.sql` y `config.toml` para desarrollo local.
 
-## Plantilla de descripción del PR (pegar en GitHub)
+## (Opcional) Plantilla de descripción si preferís PR en vez de push directo
 
-Cuando abras el PR a `main` de Miled, pegá esto como descripción (los tickets preexistentes quedan así visibles para él):
+Si en vez de pushear directo a `main` preferís abrir un pull request (más prolijo para revisión), usá esta descripción — los tickets preexistentes quedan así visibles para Miled:
 
 ```text
 ## Funnel de captación (`/quiz`) + módulo `/leads`
