@@ -67,7 +67,7 @@ respuestas del completed → 8 de 8 esperadas
 - Aplicar migraciones `0068 → 0069 → 0070 → 0071` en producción **antes** del deploy (y confirmar los números).
 - Variables de entorno de producción (`KAPSO_WEBHOOK_SECRET`, `CRON_SECRET`, `SUPABASE_*`, `AUTH_TOKEN`).
 - **Backup de producción** (realizar antes de tocar nada, guardar fuera de Supabase, probar restore).
-- Hosting definitivo + rate limit distribuido + HTTPS/HSTS (el rate limit hoy es in-memory best-effort).
+- Hosting **Vercel Pro** (confirmado por Miled 23-sep) + rate limit distribuido/WAF + HTTPS/HSTS (el rate limit hoy es in-memory best-effort, a confirmar con Milo).
 - Smoke test en producción (usuario real, abandono, UTM, POST inválido).
 
 ### Notas de mejora (no bloqueantes)
@@ -89,7 +89,7 @@ Preguntas y diagnóstico implementados y aprobados · engine determinístico pro
 2. Migraciones sin aplicar en producción (y números sin confirmar).
 3. Variables de entorno de producción sin configurar.
 4. Backup de producción no realizado.
-5. Hosting / rate limit definitivo / HTTPS-HSTS sin confirmar.
+5. Rate limit definitivo / WAF / HTTPS-HSTS sin confirmar (hosting Vercel Pro ya confirmado).
 6. Sin smoke test en producción.
 
 ---
