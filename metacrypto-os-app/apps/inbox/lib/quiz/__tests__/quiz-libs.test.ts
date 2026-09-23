@@ -112,6 +112,62 @@ describe("engine", () => {
   });
 });
 
+// ── engine: perfiles representativos (regresión) ─────────────────────────────
+// Fija los 4 perfiles de la auditoría de readiness (docs/14) para que un cambio
+// en las reglas no pueda entregar un diagnóstico contradictorio o vacío. Cada
+// perfil mapea a los tags reales que producen sus respuestas de opción múltiple.
+describe("engine — perfiles A–D", () => {
+  const body = (d: ReturnType<typeof buildDiagnosis>, i: number) => d.sections[i].body as { kind: string; text: string };
+
+  // Todo perfil debe ser coherente: 4 secciones, textos presentes y plan no vacío.
+  const coherente = (d: ReturnType<typeof buildDiagnosis>) => {
+    expect(d.sections).toHaveLength(4);
+    expect(d.cta).toBe(true);
+    // Sección 0 ("Tu situación real") es un resumen en string; las secciones 1 y 2
+    // son {kind, text}; la 3 son pasos. Ningún texto puede quedar vacío/undefined.
+    expect(typeof d.sections[0].body).toBe("string");
+    expect((d.sections[0].body as string).length).toBeGreaterThan(0);
+    expect(body(d, 1).text.length).toBeGreaterThan(0);
+    expect(body(d, 2).text.length).toBeGreaterThan(0);
+    expect(d.sections[3].items!.length).toBeGreaterThanOrEqual(1);
+  };
+
+  test("Perfil A — capital alto + mala gestión de riesgo → caliente y plan con regla de riesgo", () => {
+    const d = buildDiagnosis([{ tags: ["hot-cap", "pain-risk", "rules-none"], title: "x", answer: "y" }]);
+    coherente(d);
+    expect(d.hot).toBe(true);
+    expect(d.sections[3].items!.join(" ")).toMatch(/caer/i); // regla de riesgo
+    expect(d.sections[3].items!.join(" ")).toMatch(/regla concreta/i); // falta de reglas
+  });
+
+  test("Perfil B — capital bajo + mucha exposición a altcoins → warning de concentración/altcoins", () => {
+    const d = buildDiagnosis([{ tags: ["cap-low", "alts-dominant"], title: "x", answer: "y" }]);
+    coherente(d);
+    expect(d.hot).toBe(false);
+    expect(body(d, 1).kind).toBe("warning");
+    expect(body(d, 1).text).toMatch(/concentración/i);
+    expect(body(d, 2).kind).toBe("warning");
+    expect(body(d, 2).text).toMatch(/altcoins/i);
+  });
+
+  test("Perfil C — sin sistema de decisión → warning de desajuste 'sin sistema'", () => {
+    const d = buildDiagnosis([{ tags: ["decision-none", "rules-none"], title: "x", answer: "y" }]);
+    coherente(d);
+    expect(d.hot).toBe(false);
+    expect(body(d, 1).kind).toBe("warning");
+    expect(body(d, 1).text).toMatch(/sin un sistema estable/i);
+  });
+
+  test("Perfil D — conservador + poca liquidez → señal de exposición y reserva de liquidez", () => {
+    const d = buildDiagnosis([{ tags: ["exposure-full", "drawdown-reduce"], title: "x", answer: "y" }]);
+    coherente(d);
+    expect(d.hot).toBe(false);
+    expect(body(d, 2).kind).toBe("info");
+    expect(body(d, 2).text).toMatch(/completamente expuesto/i);
+    expect(d.sections[3].items!.join(" ")).toMatch(/reserva de liquidez/i);
+  });
+});
+
 // ── whatsapp ─────────────────────────────────────────────────────────────────
 describe("whatsapp", () => {
   test("el mensaje incluye nombre, respuestas y video sin datos de contacto", () => {
