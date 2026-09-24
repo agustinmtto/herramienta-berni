@@ -115,13 +115,12 @@ Estos puntos deben tratarse como **tickets independientes del módulo de leads**
 
 El módulo de leads ya fue implementado y validado técnicamente.
 
-La validación realizada el **22/09/2026** dejó:
+La validación realizada el **23/09/2026** (con cierre de la auditoría v4) dejó:
 
-* **1329/1329 tests en verde (0 omitidos).**
+* **1343/1343 tests en verde (0 omitidos).**
 * TypeScript sin errores.
 * Build del OS correcto.
-* Prototipo: **39/39 tests en verde**.
-* Migraciones probadas desde una base limpia.
+* Migraciones probadas desde una base limpia (`0001 → 0072`) y desde bases históricas.
 
 Por lo tanto, **lo que queda para avanzar no es desarrollo funcional del módulo**, sino principalmente:
 

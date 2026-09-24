@@ -22,7 +22,7 @@
 | 16 | ~~**Ámbito de seguridad con integraciones**~~ | Implementado para el módulo de leads: RLS day 1, service_role solo server, IDOR cubierto, SQLi parametrizado — checklist verificado en `docs/09` §Quiz Funnel en el OS | Equipo dev | ✅ Cerrado (Fase D local) |
 | 17 | ~~**Upgrade de Next** para cerrar las vulnerabilidades de prod deps~~ → fusionado con #20 | Cerrar `npm audit --omit=dev` en 0 en ambos repos | Equipo dev | 🟡 Fusionado con #20 (críticas cerradas; queda postcss vía Next 16) |
 | 18 | ~~**Retención de datos de leads**~~ | Sin vencimiento por decisión de negocio; mantener capacidad futura de eliminación/anonimización | Berni / Equipo dev | ✅ Cerrado |
-| 19 | ~~**Número de migración**~~ | Asignados `0068_quiz_leads.sql`, `0069_vinculacion_validacion_rollback.sql`, `0070_descarte_leads.sql` y `0071_reconciliacion_leads.sql` - **falta confirmación formal con Miled antes del release** | Miled | 🟡 Confirmación pendiente |
+| 19 | ~~**Número de migración**~~ | Asignados y **confirmados por Miled**: `0068_quiz_leads.sql`, `0069_vinculacion_validacion_rollback.sql`, `0070_descarte_leads.sql`, `0071_reconciliacion_leads.sql` y `0072_reconciliacion_leads_v2.sql` | Miled | ✅ Confirmado |
 | 20 | **Upgrade de Next del OS (bloqueante de prod)**: ~~1 RCE crítica en `next`~~ **RESUELTO en el PR de leads: lockfile a `15.5.25` — las 2 RCE críticas y las altas de `nanoid`/`sharp` quedaron cerradas**. Queda la alta de `postcss` cuya solución exige Next 16 (cambio mayor, ticket aparte) y las correcciones de seguridad preexistentes del OS (`docs/13` §4) | Cerrar `npm audit --omit=dev` en 0 | Miled / Equipo dev | 🟡 Parcial: críticas cerradas; Next 16 pendiente |
 
 ## Preguntas para Miled (cierre Fase D — bloqueantes de producción)

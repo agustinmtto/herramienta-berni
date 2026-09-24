@@ -15,9 +15,15 @@
 **Incluye:** funnel (`/quiz`), módulo `/leads`, endpoint `/api/lead`, `lib/quiz`, migraciones `0068–0071`, tests y los 5 edits a archivos existentes (`modulos.ts`, `middleware.ts`, `next.config.mjs`, `OsNav.tsx`, `inbox.css`).
 
 **No incluye (a propósito):**
-- Upgrade de Next `15.0.0 → 15.5.25` (seguridad — 2 RCE; va como PR aparte).
 - `seed.sql` / `config.toml` / `scripts/dev.sh` (infra de desarrollo local).
 - Archivos desactualizados de nuestra copia (`VentaForm.tsx`, `cuotas.ts`, `persona.ts`) y basura local de Supabase.
+
+> ⚠️ **Requisito para reproducir el resultado (auditoría v4 M3).** El patch de código **no alcanza solo**: el resultado validado localmente (1.343 tests, tsc, lint, build) corre con **Next `15.5.25` + overrides (`nanoid`, `sharp`) + la config de ESLint** de `apps/inbox`. El repo de Miled tiene Next `15.0.0` y lockfiles viejos; aplicar únicamente el patch dejaría un entorno distinto al probado. Por eso la transferencia DEBE incluir, en el mismo PR o en uno concurrente obligatorio:
+> - `apps/inbox/package.json` (Next `^15.5.25` + `overrides`).
+> - El lockfile de `apps/inbox` (`package-lock.json` / `pnpm-lock.yaml`, según el gestor del OS).
+> - `apps/inbox/eslint.config.mjs` (la compuerta de lint es la que da 0 errores).
+>
+> Sin estos tres, el "mismo código que pasó 1.343 tests" no se reproduce en el repo central.
 
 > ⚠️ El patch está generado contra el HEAD actual del repo de Miled (commit `fbbd936`, 16-sep-2026). Si el repo de Miled avanza antes de la transferencia, hay que regenerar el patch.
 
@@ -57,8 +63,8 @@ git push origin main
 
 ## Pendientes separados (no van en el patch)
 
-- Upgrade de Next `15.5.25` (seguridad).
 - `seed.sql` y `config.toml` para desarrollo local.
+- **Next `15.5.25` + lockfiles + ESLint: obligatorios junto al patch** (ver el aviso arriba, v4 M3). El salto a Next 16 (que cierra la alta de `postcss`) sigue como ticket aparte.
 
 ## (Opcional) Plantilla de descripción si preferís PR en vez de push directo
 
