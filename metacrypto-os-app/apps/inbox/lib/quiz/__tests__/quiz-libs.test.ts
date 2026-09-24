@@ -6,8 +6,10 @@
 import { describe, expect, test } from "vitest";
 import {
   buildAllocationResponse,
+  CANONICAL_STEPS,
   progressFor,
   progressMessageFor,
+  quizQuestionStep,
   questions,
   wizardConfig,
 } from "../question-config";
@@ -15,7 +17,7 @@ import { buildDiagnosis } from "../engine";
 import { buildWhatsAppMessage, buildWhatsAppUrl } from "../whatsapp";
 import { isRateLimited, resetRateLimiter, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "../rate-limit";
 import { composePhone, buildContractAnswers, buildQuizPayload } from "../lead-payload";
-import { normalizePhoneE164, validateLeadContract, mapRpcError } from "../lead-validate";
+import { normalizePhoneE164, utf8ByteLength, validateLeadContract, mapRpcError } from "../lead-validate";
 
 // ── config ───────────────────────────────────────────────────────────────────
 describe("config", () => {
@@ -243,7 +245,7 @@ describe("rate limiter", () => {
 describe("lead-payload", () => {
   test("composePhone arma E.164 con prefijo y limpia el troncal argentino", () => {
     expect(composePhone("54", "9 3585 000000")).toBe("+5493585000000");
-    expect(composePhone("54", "011 5555 5555")).toBe("+541155555555");
+    expect(composePhone("54", "011 5555 5555")).toBe("+5491155555555");
     expect(composePhone("34", "600 000 000")).toBe("+34600000000");
   });
 
@@ -294,7 +296,7 @@ describe("lead-payload", () => {
     const completed = buildQuizPayload({
       event: "completed",
       ...base,
-      contact: { name: "Juan", email: "JUAN@x.com", phone: "+5493585000000", country: "AR", consent: true },
+      contact: { name: "Juan", email: "JUAN@x.com", phone: "+5493585000000", country: "AR", consent: true, consentAcceptedAt: "2026-09-21T15:39:40.000Z" },
       answers: {},
       diagnosisSnapshot: { version: "diagnostico-v1", result: { sections: [] } },
     });
@@ -311,7 +313,7 @@ describe("lead-validate", () => {
     session_id: "68cf2bd5-7c57-4cd3-9548-9197de2ebc44",
     event: "completed",
     occurred_at: "2026-09-21T15:40:00.000Z",
-    progress: { step_id: "result", step_index: 9 },
+    progress: { step_id: "result", step_index: 11 },
     lead: {
       name: "Juan",
       email: "juan@example.com",
@@ -355,6 +357,9 @@ describe("lead-validate", () => {
     expect(
       validateLeadContract({ ...validCompleted, lead: { ...(validCompleted.lead as object), consent: { accepted: false, version: "contacto-v1" } } })
     ).toMatchObject({ ok: false, reason: "bad_consent" });
+    expect(
+      validateLeadContract({ ...validCompleted, lead: { ...(validCompleted.lead as object), consent: { accepted: true, version: "contacto-v1" } } })
+    ).toMatchObject({ ok: false, reason: "bad_consent" });
   });
 
   test("started con lead se rechaza (lead_in_non_completed)", () => {
@@ -370,6 +375,51 @@ describe("lead-validate", () => {
     expect(normalizePhoneE164("5493585000000")).toBe("+5493585000000");
     expect(normalizePhoneE164("12345")).toBeNull();
     expect(normalizePhoneE164("")).toBeNull();
+  });
+
+  test("cada pregunta visible tiene un paso canónico sin esperar efectos de React", () => {
+    expect(CANONICAL_STEPS).toEqual([
+      "start", "situation", "challenge", "allocation", "capital", "horizon",
+      "drawdown", "influence", "rules", "contact", "analysis", "result",
+    ]);
+    expect(quizQuestionStep(0)).toEqual({ id: "situation", index: 1 });
+    expect(quizQuestionStep(8)).toEqual({ id: "contact", index: 9 });
+    expect(quizQuestionStep(-1)).toBeNull();
+    expect(quizQuestionStep(9)).toBeNull();
+  });
+
+  test("normaliza Argentina server-side y rechaza país o caracteres desconocidos", () => {
+    const lead = validCompleted.lead as Record<string, unknown>;
+    for (const phone of ["+54 9 3585 401429", "+54 3585 401429", "03585 15 401429", "3585 401429"]) {
+      const r = validateLeadContract({ ...validCompleted, lead: { ...lead, phone, country: "AR" } });
+      expect(r.ok).toBe(true);
+      if (r.ok) expect((r.payload.lead as { phone: string }).phone).toBe("+5493585401429");
+    }
+    expect(validateLeadContract({ ...validCompleted, lead: { ...lead, country: "ZZ" } })).toMatchObject({ ok: false, reason: "bad_country" });
+    expect(validateLeadContract({ ...validCompleted, lead: { ...lead, phone: "+54ABC3585401429" } })).toMatchObject({ ok: false, reason: "bad_phone" });
+    expect(validateLeadContract({ ...validCompleted, lead: { ...lead, phone: "+5493585401429", country: "ES" } })).toMatchObject({ ok: false, reason: "bad_phone" });
+  });
+
+  test("rechaza timestamps ISO sintácticos pero imposibles", () => {
+    expect(validateLeadContract({ ...validCompleted, occurred_at: "2026-02-31T15:40:00.000Z" })).toMatchObject({ ok: false, reason: "bad_occurred_at" });
+    expect(validateLeadContract({
+      ...validCompleted,
+      lead: {
+        ...validCompleted.lead,
+        consent: { accepted: true, version: "contacto-v1", accepted_at: "2026-99-99T15:39:40.000Z" },
+      },
+    })).toMatchObject({ ok: false, reason: "bad_consent" });
+  });
+
+  test("valida IDs e índices contra los pasos canónicos", () => {
+    expect(validateLeadContract({ ...validCompleted, progress: { step_id: "q1", step_index: 1 } })).toMatchObject({ ok: false, reason: "bad_progress" });
+    expect(validateLeadContract({ ...validCompleted, progress: { step_id: "situation", step_index: 2 } })).toMatchObject({ ok: false, reason: "bad_progress" });
+  });
+
+  test("mide el body por bytes UTF-8 y no por unidades UTF-16", () => {
+    expect(utf8ByteLength("a")).toBe(1);
+    expect(utf8ByteLength("á")).toBe(2);
+    expect(utf8ByteLength("😀")).toBe(4);
   });
 
   test("mapRpcError traduce los códigos del RPC a HTTP honestos", () => {

@@ -10,6 +10,7 @@
 export const QUIZ_VERSION = "diagnostico-cripto-v1-a";
 export const SCHEMA_VERSION = 1;
 export const CONSENT_VERSION = "contacto-v1";
+export const CONSENT_TEXT = "Acepto recibir mi diagnóstico y que Metacrypto Club me contacte por email, teléfono o WhatsApp según mis respuestas.";
 
 export interface QuizOption {
   optionId: string;
@@ -127,6 +128,14 @@ export const QUESTIONS_ORDER = [
   "influence",
   "rules",
 ];
+
+export const CANONICAL_STEPS = ["start", ...QUESTIONS_ORDER, "contact", "analysis", "result"];
+
+export function quizQuestionStep(index: number): { id: string; index: number } | null {
+  const stepIndex = index + 1;
+  if (!Number.isInteger(index) || stepIndex < 1 || stepIndex > QUESTIONS_ORDER.length + 1) return null;
+  return { id: CANONICAL_STEPS[stepIndex], index: stepIndex };
+}
 
 export const questions: QuizQuestion[] = [  {
     id: "situation",

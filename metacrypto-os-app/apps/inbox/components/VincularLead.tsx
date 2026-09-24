@@ -6,9 +6,10 @@
 // bien pero NINGÚN click hace nada. Por eso esto es un onSubmit manual con
 // useTransition, que sí existe en 18.
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { descartarLeadAccion, desvincularLeadAccion, vincularLeadAccion, buscarClientesParaVincular } from "@/app/leads-actions";
 import type { ClienteParaVincular } from "@/lib/leads";
+import { createLatestRequestSequence } from "@/lib/latest-request";
 
 type Resultado = { ok: boolean; error?: string; mensaje?: string };
 
@@ -16,21 +17,27 @@ export default function VincularLead({
   leadPersonaId,
   leadTelefono,
   clientes,
+  hayMasClientes,
+  envioId,
   personaEstado,
   leadVinculadoId = null,
 }: {
   leadPersonaId: string;
   leadTelefono: string | null; // teléfono capturado en el quiz (snapshot del envío)
   clientes: ClienteParaVincular[];
+  hayMasClientes: boolean;
+  envioId: string;
   personaEstado: string | null;
   leadVinculadoId?: string | null; // lead temporal que ya fue vinculado (auditoría)
 }) {
+  const [pending, setPending] = useState(false);
+
   if (!leadPersonaId) {
     return <p className="vincular-nota">Este envío no llegó a completarse: no hay lead temporal que vincular.</p>;
   }
   // El RPC revalida TODO; acá solo decidimos QUÉ pantalla mostrar.
   if (personaEstado === "cliente") {
-    return <Desvincular clienteId={leadPersonaId} leadPersonaId={leadVinculadoId} />;
+    return <Desvincular clienteId={leadPersonaId} leadPersonaId={leadVinculadoId} envioId={envioId} pending={pending} setPending={setPending} />;
   }
   if (personaEstado === "descartado") {
     return <p className="vincular-nota">El lead fue descartado por el triaje (no hubo venta). Queda auditado; la reactivación es manual.</p>;
@@ -41,8 +48,8 @@ export default function VincularLead({
   // Persona temporal viva: se puede vincular (hubo venta) o descartar (no la hubo).
   return (
     <div className="vincular-form">
-      <Picker leadPersonaId={leadPersonaId} leadTelefono={leadTelefono} clientes={clientes} />
-      <Descartar leadPersonaId={leadPersonaId} />
+      <Picker leadPersonaId={leadPersonaId} leadTelefono={leadTelefono} clientes={clientes} hayMasInicial={hayMasClientes} envioId={envioId} pending={pending} setPending={setPending} />
+      <Descartar leadPersonaId={leadPersonaId} envioId={envioId} pending={pending} setPending={setPending} />
     </div>
   );
 }
@@ -52,18 +59,28 @@ function Picker({
   leadPersonaId,
   leadTelefono,
   clientes,
+  hayMasInicial,
+  envioId,
+  pending,
+  setPending,
 }: {
   leadPersonaId: string;
   leadTelefono: string | null;
   clientes: ClienteParaVincular[];
+  hayMasInicial: boolean;
+  envioId: string;
+  pending: boolean;
+  setPending: (pending: boolean) => void;
 }) {
   const [resultado, setResultado] = useState<Resultado | null>(null);
-  const [pending, startTransition] = useTransition();
   const [clienteId, setClienteId] = useState("");
   const [confirmado, setConfirmado] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [lista, setLista] = useState<ClienteParaVincular[]>(clientes);
   const [buscando, setBuscando] = useState(false);
+  const [pagina, setPagina] = useState(1);
+  const [hayMas, setHayMas] = useState(hayMasInicial);
+  const requestSequenceRef = useRef(createLatestRequestSequence());
 
   // Búsqueda SERVER-SIDE con debounce (auditoría v4 I8): antes se filtraba
   // localmente sobre los primeros 500 cargados — clientes fuera de ese lote
@@ -71,20 +88,57 @@ function Picker({
   useEffect(() => {
     const q = busqueda.trim();
     if (!q) {
+      requestSequenceRef.current.invalidate();
       setLista(clientes);
+      setClienteId((current) => clientes.some((cliente) => cliente.id === current) ? current : "");
+      setPagina(1);
+      setHayMas(hayMasInicial);
       setBuscando(false);
       return;
     }
+    const requestId = requestSequenceRef.current.next();
     setBuscando(true);
     const t = setTimeout(() => {
-      startTransition(async () => {
-        const res = await buscarClientesParaVincular(q);
-        setLista(res.clientes);
-        setBuscando(false);
-      });
+      void (async () => {
+        try {
+          const res = await buscarClientesParaVincular(q, 1);
+          if (!requestSequenceRef.current.isCurrent(requestId)) return;
+          setLista(res.clientes);
+          setClienteId((current) => res.clientes.some((cliente) => cliente.id === current) ? current : "");
+          setPagina(1);
+          setHayMas(res.hayMas);
+        } catch {
+          if (requestSequenceRef.current.isCurrent(requestId)) {
+            setResultado({ ok: false, error: "No se pudo buscar clientes. Intentá de nuevo." });
+          }
+        } finally {
+          if (requestSequenceRef.current.isCurrent(requestId)) setBuscando(false);
+        }
+      })();
     }, 300);
     return () => clearTimeout(t);
-  }, [busqueda, clientes]);
+  }, [busqueda, clientes, hayMasInicial]);
+
+  const cargarMas = () => {
+    const requestId = requestSequenceRef.current.next();
+    const nextPage = pagina + 1;
+    setBuscando(true);
+    void (async () => {
+      try {
+        const res = await buscarClientesParaVincular(busqueda.trim(), nextPage);
+        if (!requestSequenceRef.current.isCurrent(requestId)) return;
+        setLista((actual) => [...actual, ...res.clientes.filter((cliente) => !actual.some((item) => item.id === cliente.id))]);
+        setPagina(nextPage);
+        setHayMas(res.hayMas);
+      } catch {
+        if (requestSequenceRef.current.isCurrent(requestId)) {
+          setResultado({ ok: false, error: "No se pudieron cargar más clientes. Intentá de nuevo." });
+        }
+      } finally {
+        if (requestSequenceRef.current.isCurrent(requestId)) setBuscando(false);
+      }
+    })();
+  };
 
   // La comparación EXACTA la hace el RPC (server); acá es solo para mostrar
   // el aviso y exigir la confirmación visible (docs/11 §9.1).
@@ -95,24 +149,40 @@ function Picker({
 
   const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (pending) return;
+    if (!cliente) {
+      setClienteId("");
+      setResultado({ ok: false, error: "Elegí un cliente de los resultados visibles." });
+      return;
+    }
     const formData = new FormData(event.currentTarget);
     if (telefonosDifieren && !confirmado) {
       setResultado({ ok: false, error: "Los teléfonos no coinciden: marcá la confirmación para vincular de todos modos." });
       return;
     }
-    startTransition(async () => {
-      setResultado(await vincularLeadAccion(formData));
-    });
+    setPending(true);
+    void vincularLeadAccion(formData)
+      .then(setResultado)
+      .catch(() => setResultado({ ok: false, error: "No se pudo vincular el lead. Intentá de nuevo." }))
+      .finally(() => setPending(false));
   };
 
   return (
     <form onSubmit={onSubmit} className="vincular-form">
       <input type="hidden" name="leadPersonaId" value={leadPersonaId} />
+      <input type="hidden" name="envioId" value={envioId} />
       <input
         type="text"
         className="vincular-busqueda"
         value={busqueda}
-        onChange={(e) => setBusqueda(e.target.value)}
+        onChange={(e) => {
+          requestSequenceRef.current.invalidate();
+          setBusqueda(e.target.value);
+          setClienteId("");
+          setConfirmado(false);
+          setResultado(null);
+          setBuscando(Boolean(e.target.value.trim()));
+        }}
         placeholder="Buscar cliente por nombre, email o teléfono…"
       />
       <select name="clienteId" value={clienteId} onChange={(e) => { setClienteId(e.target.value); setResultado(null); setConfirmado(false); }} required>
@@ -127,6 +197,11 @@ function Picker({
           </option>
         ))}
       </select>
+      {hayMas && (
+        <button type="button" disabled={buscando} onClick={cargarMas}>
+          {buscando ? "Buscando…" : "Cargar más clientes"}
+        </button>
+      )}
       <button type="submit" disabled={pending || !clienteId}>
         {pending ? "Vinculando…" : "Vincular con cliente"}
       </button>
@@ -155,18 +230,23 @@ function Picker({
 }
 
 // ── camino sin venta (docs/11 §9.4): el lead sale del ciclo, con auditoría ───
-function Descartar({ leadPersonaId }: { leadPersonaId: string }) {
+function Descartar({ leadPersonaId, envioId, pending, setPending }: { leadPersonaId: string; envioId: string; pending: boolean; setPending: (pending: boolean) => void }) {
   const [resultado, setResultado] = useState<Resultado | null>(null);
-  const [pending, startTransition] = useTransition();
   const [confirmando, setConfirmando] = useState(false);
 
   const descartar = () => {
+    if (pending) return;
     const formData = new FormData();
     formData.set("leadPersonaId", leadPersonaId);
-    startTransition(async () => {
-      setResultado(await descartarLeadAccion(formData));
-      setConfirmando(false);
-    });
+    formData.set("envioId", envioId);
+    setPending(true);
+    void descartarLeadAccion(formData)
+      .then((result) => {
+        setResultado(result);
+        setConfirmando(false);
+      })
+      .catch(() => setResultado({ ok: false, error: "No se pudo descartar el lead. Intentá de nuevo." }))
+      .finally(() => setPending(false));
   };
 
   return (
@@ -193,19 +273,24 @@ function Descartar({ leadPersonaId }: { leadPersonaId: string }) {
 }
 
 // ── rollback (docs/11 §9.3): visible cuando el envío ya es del cliente ───────
-function Desvincular({ clienteId, leadPersonaId = null }: { clienteId: string; leadPersonaId?: string | null }) {
+function Desvincular({ clienteId, leadPersonaId = null, envioId, pending, setPending }: { clienteId: string; leadPersonaId?: string | null; envioId: string; pending: boolean; setPending: (pending: boolean) => void }) {
   const [resultado, setResultado] = useState<Resultado | null>(null);
-  const [pending, startTransition] = useTransition();
   const [confirmando, setConfirmando] = useState(false);
 
   const revertir = () => {
+    if (pending) return;
     const formData = new FormData();
     formData.set("clienteId", clienteId);
+    formData.set("envioId", envioId);
     if (leadPersonaId) formData.set("leadPersonaId", leadPersonaId);
-    startTransition(async () => {
-      setResultado(await desvincularLeadAccion(formData));
-      setConfirmando(false);
-    });
+    setPending(true);
+    void desvincularLeadAccion(formData)
+      .then((result) => {
+        setResultado(result);
+        setConfirmando(false);
+      })
+      .catch(() => setResultado({ ok: false, error: "No se pudo desvincular el lead. Intentá de nuevo." }))
+      .finally(() => setPending(false));
   };
 
   return (

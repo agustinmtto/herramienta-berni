@@ -7,7 +7,8 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { beforeAll, afterAll, describe, expect, test } from "vitest";
+import { beforeAll, afterAll, describe, expect, test, vi } from "vitest";
+import { guardedLocalFetch, isLocalSupabaseUrl } from "../quiz/local-db-guard";
 
 // â”€â”€ entorno local â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function loadEnvLocal(): Record<string, string> {
@@ -35,21 +36,26 @@ const HDRS = {
 };
 
 let reachable = false;
+async function probe(baseUrl: string, key: string, fetchFn: typeof fetch = fetch): Promise<boolean> {
+  if (!baseUrl || !key || !isLocalSupabaseUrl(baseUrl)) return false;
+  try {
+    const response = await guardedLocalFetch(baseUrl, "/rest/v1/", {
+      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    }, fetchFn);
+    return response.status < 500;
+  } catch {
+    return false;
+  }
+}
+
 // GUARDA ANTI-PRODUCCIÃ“N: los suites gated son destructivos (DELETE de filas
 // de prueba). Solo corren contra el Supabase LOCAL â€” si alguien apunta
 // SUPABASE_URL a otro entorno, se saltan con un aviso claro, jamÃ¡s corren.
-const esLocal = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/.*)?$/i.test(URL_BASE ?? "");
+const esLocal = isLocalSupabaseUrl(URL_BASE);
 if (URL_BASE && KEY && !esLocal) {
   console.warn(`[quiz-leads-rpc] SUPABASE_URL no es local (${URL_BASE}): los tests de integraciÃ³n NO corren.`);
 }
-if (URL_BASE && KEY && esLocal) {
-  try {
-    const r = await fetch(`${URL_BASE}/rest/v1/`, { headers: HDRS });
-    reachable = r.status < 500;
-  } catch {
-    reachable = false;
-  }
-}
+reachable = await probe(URL_BASE, KEY);
 
 // â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const QUIZ = "diagnostico-cripto-v1-a";
@@ -78,7 +84,7 @@ function payload(partial: Record<string, unknown>) {
 }
 
 async function rpc(name: string, args: Record<string, unknown>) {
-  const r = await fetch(`${URL_BASE}/rest/v1/rpc/${name}`, {
+  const r = await guardedLocalFetch(URL_BASE, `/rest/v1/rpc/${name}`, {
     method: "POST",
     headers: HDRS,
     body: JSON.stringify(args),
@@ -88,7 +94,7 @@ async function rpc(name: string, args: Record<string, unknown>) {
 }
 
 async function rest(method: string, table: string, query: string, json?: unknown) {
-  const r = await fetch(`${URL_BASE}/rest/v1/${table}?${query}`, {
+  const r = await guardedLocalFetch(URL_BASE, `/rest/v1/${table}?${query}`, {
     method,
     headers: { ...HDRS, Prefer: "return=representation" },
     body: json === undefined ? undefined : JSON.stringify(json),
@@ -144,7 +150,8 @@ function completedPayload(opts: { sessionId: string; email: string; capital: str
   });
 }
 
-async function limpiar() {
+async function limpiar(baseUrl: string = URL_BASE) {
+  if (!isLocalSupabaseUrl(baseUrl)) throw new Error("cleanup requires local Supabase");
   if (SESSIONS.length) {
     await rest("DELETE", "diagnostico_envios", `session_id=in.(${SESSIONS.join(",")})`);
   }
@@ -157,6 +164,21 @@ async function limpiar() {
     await rest("DELETE", "personas", `email=in.(${EMAILS.map((e) => `"${e}"`).join(",")})`);
   }
 }
+
+describe("guarda del arnés RPC", () => {
+  test("una URL externa no ejecuta probes ni cleanup", async () => {
+    const fetchFn = vi.fn<typeof fetch>();
+    expect(await probe("https://example.supabase.co", "test-key", fetchFn)).toBe(false);
+    const globalFetch = vi.spyOn(globalThis, "fetch");
+    try {
+      await expect(limpiar("https://example.supabase.co")).rejects.toThrow(/local/i);
+      expect(globalFetch).not.toHaveBeenCalled();
+    } finally {
+      globalFetch.mockRestore();
+    }
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+});
 
 // Clona la definiciÃ³n vigente, le agrega una pregunta multiple_choice y la
 // publica como versiÃ³n de pruebas (estado active, mismo funnel).
@@ -195,7 +217,7 @@ d("quiz leads RPC (integraciÃ³n local, docs/11)", () => {
   });
 
   afterAll(async () => {
-    await limpiar();
+    if (reachable && esLocal) await limpiar();
   });
 
   test("la versiÃ³n vigente del quiz estÃ¡ publicada y activa", async () => {
@@ -676,14 +698,14 @@ d("quiz leads RPC (integraciÃ³n local, docs/11)", () => {
 
   test("(H-08) RLS: un JWT `authenticated` (anon) NO lee nada del funnel; helper sin EXECUTE", async () => {
     expect(ANON).toBeTruthy();
-    const rAnon = await fetch(`${URL_BASE}/rest/v1/diagnostico_envios?select=id,telefono_e164_capturado`, {
+    const rAnon = await guardedLocalFetch(URL_BASE, "/rest/v1/diagnostico_envios?select=id,telefono_e164_capturado", {
       headers: { apikey: ANON },
     });
     expect(rAnon.status).toBe(200);
     expect((await rAnon.json() as { id: string }[]).length).toBe(0); // policies eliminadas: denegado por defecto
 
     // el helper de validaciÃ³n ya no es ejecutable por anon (antes PUBLIC)
-    const rHelper = await fetch(`${URL_BASE}/rest/v1/rpc/validar_respuestas_quiz`, {
+    const rHelper = await guardedLocalFetch(URL_BASE, "/rest/v1/rpc/validar_respuestas_quiz", {
       method: "POST",
       headers: { apikey: ANON, "Content-Type": "application/json" },
       body: JSON.stringify({ p_definicion: {}, p_answers: [], p_exigir_todas: false }),

@@ -1,0 +1,82 @@
+name: Quiz leads integration
+
+on:
+  pull_request:
+    paths:
+      - "metacrypto-os-app/apps/inbox/app/api/lead/**"
+      - "metacrypto-os-app/apps/inbox/app/quiz/**"
+      - "metacrypto-os-app/apps/inbox/app/(os)/leads/**"
+      - "metacrypto-os-app/apps/inbox/app/leads-actions.ts"
+      - "metacrypto-os-app/apps/inbox/components/VincularLead.tsx"
+      - "metacrypto-os-app/apps/inbox/lib/leads.ts"
+      - "metacrypto-os-app/apps/inbox/lib/latest-request.ts"
+      - "metacrypto-os-app/apps/inbox/lib/__tests__/quiz-leads-rpc.test.ts"
+      - "metacrypto-os-app/apps/inbox/lib/quiz/**"
+      - "metacrypto-os-app/apps/inbox/package.json"
+      - "metacrypto-os-app/apps/inbox/package-lock.json"
+      - "metacrypto-os-app/supabase/migrations/**"
+      - ".github/workflows/quiz-leads-integration.yml"
+  workflow_dispatch:
+
+jobs:
+  quiz-leads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: metacrypto-os-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            metacrypto-os-app/apps/inbox/package-lock.json
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.117.0
+      - name: Install Inbox dependencies
+        working-directory: metacrypto-os-app/apps/inbox
+        run: npm ci
+      - name: Install root dependencies
+        working-directory: ${{ github.workspace }}
+        run: npm ci
+      - name: Start local Supabase and apply migrations
+        run: |
+          supabase start
+          supabase db reset
+          supabase status -o env > /tmp/supabase.env
+          source /tmp/supabase.env
+          echo "SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
+          echo "SUPABASE_ANON_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
+      - name: Run required database suites with zero skips
+        working-directory: metacrypto-os-app/apps/inbox
+        env:
+          LEAD_TESTS_REQUIRE_DB: "1"
+        run: |
+          npx --no-install vitest run lib/quiz/__tests__/lead-route.test.ts lib/__tests__/quiz-leads-rpc.test.ts --reporter=json --outputFile=/tmp/quiz-leads-integration.json
+          node -e "const r=require('/tmp/quiz-leads-integration.json'); if(r.numPendingTests || r.numTodoTests) process.exit(1)"
+      - name: Run complete Inbox suite with zero skips
+        working-directory: metacrypto-os-app/apps/inbox
+        env:
+          LEAD_TESTS_REQUIRE_DB: "1"
+        run: |
+          npx --no-install vitest run --reporter=json --outputFile=/tmp/inbox-tests.json
+          node -e "const r=require('/tmp/inbox-tests.json'); if(r.numPendingTests || r.numTodoTests) process.exit(1)"
+      - name: Run Inbox static and build gates
+        working-directory: metacrypto-os-app/apps/inbox
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run build
+      - name: Run root tests with zero skips
+        working-directory: ${{ github.workspace }}
+        run: |
+          npm test | tee /tmp/root-tests.tap
+          if grep -Eq '^ok .*# SKIP|^not ok' /tmp/root-tests.tap; then exit 1; fi
+      - name: Build root application
+        working-directory: ${{ github.workspace }}
+        run: npm run build

@@ -5,7 +5,8 @@
 // rechazar basura temprano, con códigos HTTP honestos y sin filtrar detalles
 // internos al cliente.
 
-import { COUNTRIES } from "./lead-payload";
+import { COUNTRIES, composePhonePorPais } from "./lead-payload";
+import { CANONICAL_STEPS } from "./question-config";
 
 export const MAX_BODY_BYTES = 64 * 1024;
 export const MAX_ANSWERS = 32;
@@ -31,9 +32,27 @@ const optStr = (v: unknown, max: number): boolean =>
 // Teléfono → E.164. El navegador manda "+<prefijo><número>" compuesto por el
 // selector de país; acá se re-normaliza sin confiar en su formato (docs/09).
 export function normalizePhoneE164(raw: string): string | null {
+  if (!/^[+\d\s().-]+$/.test(String(raw ?? "").trim())) return null;
   let digits = String(raw ?? "").replace(/[^\d+]/g, "");
   if (!digits.startsWith("+")) digits = `+${digits}`;
   return E164_RE.test(digits) ? digits : null;
+}
+
+export function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
+}
+
+function isValidIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || !ISO_TS_RE.test(value)) return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/.exec(value);
+  const date = new Date(value);
+  if (!match || Number.isNaN(date.getTime())) return false;
+  return date.getUTCFullYear() === Number(match[1])
+    && date.getUTCMonth() + 1 === Number(match[2])
+    && date.getUTCDate() === Number(match[3])
+    && date.getUTCHours() === Number(match[4])
+    && date.getUTCMinutes() === Number(match[5])
+    && date.getUTCSeconds() === Number(match[6]);
 }
 
 function validateSource(source: unknown): string | null {
@@ -55,7 +74,7 @@ function validateProgress(progress: unknown): string | null {
   }
   if (!isStr(progress.step_id, 64)) return "bad_progress";
   const idx = progress.step_index;
-  if (typeof idx !== "number" || !Number.isInteger(idx) || idx < 0 || idx > 99) return "bad_progress";
+  if (typeof idx !== "number" || !Number.isInteger(idx) || CANONICAL_STEPS[idx] !== progress.step_id) return "bad_progress";
   return null;
 }
 
@@ -73,7 +92,7 @@ function validateAnswers(answers: unknown): string | null {
     if (typeof a.order !== "number" || !Number.isInteger(a.order) || a.order < 0) return "bad_answer";
     if (!optStr(a.answer_id, 64)) return "bad_answer";
     if (!optStr(a.answer_text, 1000)) return "bad_answer";
-    if (a.answered_at !== null && a.answered_at !== undefined && !(typeof a.answered_at === "string" && ISO_TS_RE.test(a.answered_at))) return "bad_answer";
+    if (a.answered_at !== null && a.answered_at !== undefined && !isValidIsoTimestamp(a.answered_at)) return "bad_answer";
   }
   return null;
 }
@@ -85,15 +104,15 @@ function validateLead(lead: unknown): string | null {
   }
   if (!isStr(lead.name, 120) || lead.name.trim() === "") return "bad_name";
   if (!isStr(lead.email, 254) || !EMAIL_RE.test(lead.email)) return "bad_email";
-  if (!isStr(lead.phone, 20)) return "bad_phone";
-  if (lead.country !== null && lead.country !== undefined && !/^[A-Za-z]{2}$/.test(String(lead.country))) return "bad_country";
+  if (!isStr(lead.phone, 32)) return "bad_phone";
+  if (typeof lead.country !== "string") return "bad_country";
+  const countryCode = lead.country.toUpperCase();
+  if (!COUNTRIES.some((country) => country.code === countryCode)) return "bad_country";
   // Cross-check país↔prefijo (v3 M-01, barato): el funnel siempre manda ambos;
   // el servidor rechaza combinaciones incoherentes ("AR" con un +34…) aunque
   // la normalización E.164 completa queda para el endpoint + documentación.
-  if (typeof lead.country === "string" && typeof lead.phone === "string" && lead.phone.startsWith("+")) {
-    const pais = COUNTRIES.find((c) => c.code === String(lead.country).toUpperCase());
-    if (pais && !String(lead.phone).startsWith(`+${pais.prefix}`)) return "country_phone_mismatch";
-  }
+  const normalizedPhone = composePhonePorPais(countryCode, lead.phone);
+  if (!normalizedPhone) return "bad_phone";
   if (typeof lead.website === "string" && lead.website.trim() !== "") return "honeypot";
   const consent = lead.consent;
   if (!isObj(consent)) return "bad_consent";
@@ -102,7 +121,7 @@ function validateLead(lead: unknown): string | null {
   }
   if (consent.accepted !== true) return "bad_consent";
   if (!isStr(consent.version, 64)) return "bad_consent";
-  if (typeof consent.accepted_at === "string" && !ISO_TS_RE.test(consent.accepted_at)) return "bad_consent";
+  if (!isValidIsoTimestamp(consent.accepted_at)) return "bad_consent";
   return null;
 }
 
@@ -130,7 +149,7 @@ export function validateLeadContract(input: unknown): ValidationOk | ValidationE
   if (!isStr(input.quiz_version, 64)) return { ok: false, reason: "bad_quiz_version" };
   if (!isStr(input.session_id, 36) || !UUID_RE.test(input.session_id)) return { ok: false, reason: "bad_session_id" };
   if (!isStr(input.event, 20) || !EVENTS.has(input.event)) return { ok: false, reason: "bad_event" };
-  if (input.occurred_at !== undefined && !(typeof input.occurred_at === "string" && ISO_TS_RE.test(input.occurred_at))) return { ok: false, reason: "bad_occurred_at" };
+  if (input.occurred_at !== undefined && !isValidIsoTimestamp(input.occurred_at)) return { ok: false, reason: "bad_occurred_at" };
 
   const event = input.event as string;
   if (input.source !== undefined && input.source !== null) {
@@ -171,7 +190,8 @@ export function validateLeadContract(input: unknown): ValidationOk | ValidationE
       ...lead,
       name: String(lead.name).trim(),
       email: String(lead.email).trim().toLowerCase(),
-      phone: normalizePhoneE164(String(lead.phone)) ?? String(lead.phone),
+      country: String(lead.country).toUpperCase(),
+      phone: composePhonePorPais(String(lead.country).toUpperCase(), String(lead.phone)),
     };
   }
   if (input.source === undefined) payload.source = null;

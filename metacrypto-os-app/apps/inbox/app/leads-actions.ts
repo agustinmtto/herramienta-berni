@@ -23,11 +23,11 @@ import { getClientesParaVincular, type ClienteParaVincular } from "@/lib/leads";
 // local era el problema). Acá se consulta PostgREST con el texto y se devuelve
 // el lote acotado.
 export async function buscarClientesParaVincular(
-  q: string
-): Promise<{ clientes: ClienteParaVincular[] }> {
+  q: string,
+  page = 1,
+): Promise<{ clientes: ClienteParaVincular[]; hayMas: boolean }> {
   await requireModulo("leads");
-  const clientes = await getClientesParaVincular(typeof q === "string" ? q : "");
-  return { clientes };
+  return getClientesParaVincular(typeof q === "string" ? q : "", page);
 }
 
 export async function vincularLeadAccion(
@@ -37,6 +37,7 @@ export async function vincularLeadAccion(
 
   const leadPersonaId = String(formData.get("leadPersonaId") ?? "");
   const clienteId = String(formData.get("clienteId") ?? "");
+  const envioId = String(formData.get("envioId") ?? "");
   const confirmar = formData.get("confirmar") === "on" || formData.get("confirmar") === "true";
   if (!leadPersonaId || !clienteId) {
     return { ok: false, error: "Falta el cliente definitivo para vincular." };
@@ -50,7 +51,7 @@ export async function vincularLeadAccion(
 
   if (r.status === 200 && r.json?.ok) {
     revalidatePath("/leads");
-    revalidatePath(`/leads`);
+    if (envioId) revalidatePath(`/leads/${envioId}`);
     const n = r.json.envios_reasignados;
     const sufijo = confirmar ? " (teléfonos distintos — confirmado manualmente)" : "";
     return { ok: true, mensaje: n > 0 ? `Vinculado: ${n} ${n === 1 ? "envío reasignado" : "envíos reasignados"} al cliente.${sufijo}` : "Ya estaba vinculado." };
@@ -71,6 +72,7 @@ export async function desvincularLeadAccion(
 
   const clienteId = String(formData.get("clienteId") ?? "");
   const leadPersonaId = String(formData.get("leadPersonaId") ?? "");
+  const envioId = String(formData.get("envioId") ?? "");
   if (!clienteId) {
     return { ok: false, error: "Falta el cliente a desvincular." };
   }
@@ -89,7 +91,7 @@ export async function desvincularLeadAccion(
 
   if (r.status === 200 && r.json?.ok) {
     revalidatePath("/leads");
-    revalidatePath(`/leads`);
+    if (envioId) revalidatePath(`/leads/${envioId}`);
     const n = r.json.envios_restaurados;
     return { ok: true, mensaje: n > 0 ? `Desvinculado: ${n} ${n === 1 ? "envío devuelto" : "envíos devueltos"} al lead temporal.` : "No había envíos que devolver." };
   }
@@ -107,6 +109,7 @@ export async function descartarLeadAccion(
   const u = await requireModulo("leads");
 
   const leadPersonaId = String(formData.get("leadPersonaId") ?? "");
+  const envioId = String(formData.get("envioId") ?? "");
   if (!leadPersonaId) {
     return { ok: false, error: "Falta el lead a descartar." };
   }
@@ -119,7 +122,7 @@ export async function descartarLeadAccion(
 
   if (r.status === 200 && r.json?.ok) {
     revalidatePath("/leads");
-    revalidatePath(`/leads`);
+    if (envioId) revalidatePath(`/leads/${envioId}`);
     return { ok: true, mensaje: "Lead descartado: queda fuera del ciclo comercial (quedó auditado y visible en /leads)." };
   }
 

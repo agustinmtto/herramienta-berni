@@ -6,7 +6,8 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
+import { guardedLocalFetch, isLocalSupabaseUrl } from "@/lib/quiz/local-db-guard";
 
 function loadEnvLocal(): Record<string, string> {
   try {
@@ -37,22 +38,25 @@ const { POST } = await import("@/app/api/lead/route");
 const { resetRateLimiter } = await import("@/lib/quiz/rate-limit");
 
 let reachable = false;
+async function probe(baseUrl: string, key: string, fetchFn: typeof fetch = fetch): Promise<boolean> {
+  if (!baseUrl || !key || !isLocalSupabaseUrl(baseUrl)) return false;
+  try {
+    const response = await guardedLocalFetch(baseUrl, "/rest/v1/", {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    }, fetchFn);
+    return response.status < 500;
+  } catch {
+    return false;
+  }
+}
+
 // GUARDA ANTI-PRODUCCIÓN (igual que quiz-leads-rpc.test.ts): suites gated,
 // escrituras reales — solo contra el Supabase LOCAL.
-const esLocal = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/.*)?$/i.test(URL_BASE ?? "");
+const esLocal = isLocalSupabaseUrl(URL_BASE);
 if (URL_BASE && KEY && !esLocal) {
   console.warn(`[lead-route] SUPABASE_URL no es local (${URL_BASE}): los tests de integración NO corren.`);
 }
-if (URL_BASE && KEY && esLocal) {
-  try {
-    const r = await fetch(`${URL_BASE}/rest/v1/`, {
-      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
-    });
-    reachable = r.status < 500;
-  } catch {
-    reachable = false;
-  }
-}
+reachable = await probe(URL_BASE, KEY);
 
 const HOST = "localhost:3000";
 const SESSIONS: string[] = [];
@@ -80,20 +84,30 @@ function call(body: unknown, extraHeaders: Record<string, string> = {}): Promise
   );
 }
 
-async function cleanup(): Promise<void> {
+async function cleanup(baseUrl: string = URL_BASE, fetchFn: typeof fetch = fetch): Promise<void> {
+  if (!isLocalSupabaseUrl(baseUrl)) throw new Error("cleanup requires local Supabase");
   if (SESSIONS.length) {
-    await fetch(`${URL_BASE}/rest/v1/diagnostico_envios?session_id=in.(${SESSIONS.join(",")})`, {
+    await guardedLocalFetch(baseUrl, `/rest/v1/diagnostico_envios?session_id=in.(${SESSIONS.join(",")})`, {
       method: "DELETE",
       headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
-    });
+    }, fetchFn);
   }
   if (EMAILS.length) {
-    await fetch(`${URL_BASE}/rest/v1/personas?email=in.(${EMAILS.map((e) => `"${e}"`).join(",")})`, {
+    await guardedLocalFetch(baseUrl, `/rest/v1/personas?email=in.(${EMAILS.map((e) => `"${e}"`).join(",")})`, {
       method: "DELETE",
       headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
-    });
+    }, fetchFn);
   }
 }
+
+describe("guarda del arnés HTTP", () => {
+  test("una URL externa no ejecuta probes ni cleanup", async () => {
+    const fetchFn = vi.fn<typeof fetch>();
+    expect(await probe("https://example.supabase.co", "test-key", fetchFn)).toBe(false);
+    await expect(cleanup("https://example.supabase.co", fetchFn)).rejects.toThrow(/local/i);
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+});
 
 const d = reachable || process.env.LEAD_TESTS_REQUIRE_DB === "1" ? describe : describe.skip;
 
@@ -107,7 +121,7 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
     resetRateLimiter();
   });
   afterAll(async () => {
-    await cleanup();
+    if (reachable && esLocal) await cleanup();
   });
 
   test("completed válido persiste y responde ok con submission_id", async () => {
@@ -118,7 +132,7 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
       event: "completed",
       occurred_at: "2026-09-21T15:40:00.000Z",
       source: { utm_source: "instagram", utm_medium: "organic", utm_campaign: "fase-b", utm_content: null, utm_term: null, referrer: "https://instagram.com/" },
-      progress: { step_id: "result", step_index: 10 },
+      progress: { step_id: "result", step_index: 11 },
       lead: {
         name: "Lead de prueba ruta",
         email: email(1),
@@ -149,7 +163,7 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
     expect(body.persona_id).toBeUndefined(); // docs/11 §5: nunca exponer persona_id
 
     // Verificación de persistencia: caliente + contacto capturado
-    const check = await fetch(`${URL_BASE}/rest/v1/diagnostico_envios?session_id=eq.${payload.session_id}&select=estado,es_lead_caliente,email_capturado,utm_campaign`, {
+    const check = await guardedLocalFetch(URL_BASE, `/rest/v1/diagnostico_envios?session_id=eq.${payload.session_id}&select=estado,es_lead_caliente,email_capturado,utm_campaign`, {
       headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
     });
     const rows = (await check.json()) as { estado: string; es_lead_caliente: boolean; email_capturado: string; utm_campaign: string }[];
@@ -204,7 +218,7 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
     const body = (await res.json()) as { status: string };
     expect(body.status).toBe("ignored");
 
-    const check = await fetch(`${URL_BASE}/rest/v1/diagnostico_envios?session_id=eq.${session(4)}&select=id`, {
+    const check = await guardedLocalFetch(URL_BASE, `/rest/v1/diagnostico_envios?session_id=eq.${session(4)}&select=id`, {
       headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
     });
     expect(await check.json()).toHaveLength(0);
@@ -297,7 +311,7 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
     );
     const contract = buildContractAnswers(answers, questions.filter((q) => q.type !== "contact").map((q) => q.id));
 
-    const defRes = await fetch(`${URL_BASE}/rest/v1/quiz_versiones?codigo=eq.diagnostico-cripto-v1-a&select=definicion`, {
+    const defRes = await guardedLocalFetch(URL_BASE, "/rest/v1/quiz_versiones?codigo=eq.diagnostico-cripto-v1-a&select=definicion", {
       headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
     });
     const [version] = (await defRes.json()) as { definicion: { questions: { id: string; type: string }[] } }[];

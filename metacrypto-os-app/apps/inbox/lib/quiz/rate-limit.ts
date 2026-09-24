@@ -13,6 +13,8 @@ const WINDOW_MS = 60 * 1000; // ventana de la mayoría: 1 minuto
 // (30 eventos/min por IP); el rate limit DEFINITIVO (distribuido, Upstash/WAF
 // del host) queda en docs/06 #14/#15.
 const MAX_REQUESTS = 30;     // máximo de requests por IP dentro de la ventana
+const MAX_COMPLETED_REQUESTS = 5;
+const MAX_RAW_REQUESTS = 120;
 
 const hits = new Map<string, number[]>();
 
@@ -48,4 +50,6 @@ export function resetRateLimiter(): void {
 }
 
 export const RATE_LIMIT_MAX = MAX_REQUESTS;
+export const RATE_LIMIT_COMPLETED_MAX = MAX_COMPLETED_REQUESTS;
+export const RATE_LIMIT_RAW_MAX = MAX_RAW_REQUESTS;
 export const RATE_LIMIT_WINDOW_MS = WINDOW_MS;

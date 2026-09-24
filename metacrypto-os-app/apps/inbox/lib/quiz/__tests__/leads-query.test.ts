@@ -3,7 +3,7 @@
 // listado genere exactamente el filtro de PostgREST esperado.
 
 import { describe, expect, test } from "vitest";
-import { buildLeadsQuery, buildClientesQuery, LEADS_PAGE_SIZE, type LeadFilters } from "../../leads";
+import { buildLeadsQuery, buildClientesQuery, LEADS_PAGE_SIZE, parseLeadPage, type LeadFilters } from "../../leads";
 import { patronLike } from "../../supabase";
 
 const base: LeadFilters = {};
@@ -91,6 +91,15 @@ describe("buildLeadsQuery", () => {
     expect(con({ page: 3 })).toContain(`offset=${LEADS_PAGE_SIZE * 2}`);
   });
 
+  test("page solo acepta enteros finitos positivos y acotados", () => {
+    expect(parseLeadPage("2")).toBe(2);
+    for (const value of ["1.5", "Infinity", "0", "-4", "1000000000", "abc", ""]) {
+      expect(parseLeadPage(value)).toBe(1);
+    }
+    expect(con({ page: Number.POSITIVE_INFINITY })).not.toContain("offset=");
+    expect(con({ page: 2.5 })).not.toContain("offset=");
+  });
+
   test("fechas inválidas se descartan, no producen filtro roto (I9)", () => {
     expect(con({ desde: "abc" })).not.toContain("created_at=gte");
     expect(con({ hasta: "99-99-9999" })).not.toContain("created_at=lt");
@@ -104,7 +113,7 @@ describe("buildClientesQuery (v4 I7/I8)", () => {
     const q = buildClientesQuery();
     expect(q).toContain("personas?estado=eq.cliente");
     expect(q).toContain("select=id,nombre,email,telefono_e164,programas!inner(tier,tiers(nombre))");
-    expect(q).toContain("limit=50");
+    expect(q).toContain("limit=51");
   });
 
   test("búsqueda por texto filtra server-side (nombre/email/teléfono)", () => {
@@ -112,5 +121,14 @@ describe("buildClientesQuery (v4 I7/I8)", () => {
     expect(q).toContain("or=(nombre.ilike.");
     expect(q).toContain("email.ilike.");
     expect(q).toContain("telefono_e164.ilike.");
+  });
+
+  test("pagina resultados sin límite silencioso y conserva orden estable", () => {
+    const first = buildClientesQuery("juan", 1);
+    const second = buildClientesQuery("juan", 2);
+    expect(first).toContain("limit=51");
+    expect(first).not.toContain("offset=");
+    expect(second).toContain("offset=50");
+    expect(second).toContain("order=nombre.asc,id.asc");
   });
 });

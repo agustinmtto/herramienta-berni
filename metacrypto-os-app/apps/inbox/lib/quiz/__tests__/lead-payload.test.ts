@@ -21,9 +21,17 @@ describe("composePhonePorPais (teléfono del selector país+local → E.164)", (
     }
   });
 
-  test("Argentina deja el prefijo 54 y quita el 0 troncal", () => {
-    expect(composePhonePorPais("AR", "01155554444")).toBe("+541155554444");
-    expect(composePhonePorPais("AR", "3585123456")).toBe("+543585123456");
+  test("Argentina asume móvil y converge formatos equivalentes", () => {
+    for (const input of [
+      "+54 9 3585 401429",
+      "0 3585 401429",
+      "15 3585 401429",
+      "9 3585 401429",
+      "3585 401429",
+      "03585 15 401429",
+    ]) {
+      expect(composePhonePorPais("AR", input)).toBe("+5493585401429");
+    }
   });
 
   test("país desconocido → null (la UI pide reelegir país, el servidor igual revalida)", () => {
@@ -31,14 +39,15 @@ describe("composePhonePorPais (teléfono del selector país+local → E.164)", (
   });
 
   test("composePhone directo sigue aceptando prefijo (contrato legacy del helper)", () => {
-    expect(composePhone("54", "3585123456")).toBe("+543585123456");
+    expect(composePhone("54", "3585123456")).toBe("+5493585123456");
     expect(composePhone("1", "5551234567")).toBe("+15551234567");
   });
 
-  test("Argentina normaliza el prefijo 15 de celular a 9 y quita el 0 (I11)", () => {
-    expect(composePhonePorPais("AR", "153585401429")).toBe("+5493585401429");
-    expect(composePhonePorPais("AR", "03585401429")).toBe("+543585401429");
-    expect(composePhonePorPais("AR", "93585401429")).toBe("+5493585401429");
+  test("Argentina rechaza caracteres, longitudes y marcadores ambiguos", () => {
+    expect(composePhonePorPais("AR", "3585ABC1429")).toBeNull();
+    expect(composePhonePorPais("AR", "1234567")).toBeNull();
+    expect(composePhonePorPais("AR", "12345678901")).toBeNull();
+    expect(composePhonePorPais("AR", "351 15 15 123456")).toBeNull();
   });
 });
 
@@ -61,6 +70,7 @@ describe("buildQuizPayload (honeypot v4 M1)", () => {
         phone: "+5493585000000",
         country: "AR",
         consent: true,
+        consentAcceptedAt: "2026-09-21T15:39:40.000Z",
         website: "http://bot.com",
       },
       answers: {},

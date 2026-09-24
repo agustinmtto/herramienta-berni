@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireModulo } from "@/lib/guard";
 import { puedeVer } from "@/lib/modulos";
-import { getLeadDetalle, getClientesParaVincular } from "@/lib/leads";
+import { esConsentimientoLegacySinRegistro, getLeadDetalle, getClientesParaVincular } from "@/lib/leads";
 import { dateEs, fullTime } from "@/lib/format";
 import VincularLead from "@/components/VincularLead";
 
@@ -46,7 +46,7 @@ export default async function LeadDetallePage({ params }: { params: Promise<{ id
   const lead = await getLeadDetalle(id);
   if (!lead) notFound();
 
-  const clientes = await getClientesParaVincular();
+  const { clientes, hayMas: hayMasClientes } = await getClientesParaVincular();
   const diagJson = lead.diagnosis_result ? JSON.stringify(lead.diagnosis_result, null, 2) : null;
 
   return (
@@ -91,7 +91,9 @@ export default async function LeadDetallePage({ params }: { params: Promise<{ id
             <dt>País</dt><dd>{lead.pais_capturado || "—"}</dd>
             <dt>Consentimiento</dt>
             <dd>
-              {lead.consentimiento_aceptado === true ? (
+              {esConsentimientoLegacySinRegistro(lead.consentimiento_version) ? (
+                <>Sin registro verificable · revisar</>
+              ) : lead.consentimiento_aceptado === true ? (
                 <>Sí · <code>{lead.consentimiento_version}</code> · {lead.consentimiento_at ? dateEs(lead.consentimiento_at) : "—"}</>
               ) : lead.estado === "completed" ? "FALTA (envío completado sin consentimiento)" : "No llegó (sin completar)"}
             </dd>
@@ -143,6 +145,8 @@ export default async function LeadDetallePage({ params }: { params: Promise<{ id
                 leadPersonaId={lead.persona_id}
                 leadTelefono={lead.telefono_e164_capturado}
                 clientes={clientes}
+                hayMasClientes={hayMasClientes}
+                envioId={lead.id}
                 personaEstado={lead.persona_estado}
                 leadVinculadoId={lead.leadVinculadoId}
               />

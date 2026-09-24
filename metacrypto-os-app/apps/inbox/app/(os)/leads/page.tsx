@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireModulo } from "@/lib/guard";
-import { getLeads, getVersiones, BANDAS_CAPITAL, LEADS_PAGE_SIZE, type LeadFilters } from "@/lib/leads";
+import { getLeads, getVersiones, BANDAS_CAPITAL, LEADS_PAGE_SIZE, parseLeadPage, type LeadFilters } from "@/lib/leads";
 import { dateEs } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -63,7 +63,7 @@ export default async function LeadsPage({
     utm_term: val("utm_term") || undefined,
     banda: val("banda") || undefined,
     q: val("q") || undefined,
-    page: Math.max(1, Number(val("page")) || 1),
+    page: parseLeadPage(val("page")),
   };
 
   const [{ rows, hayMas }, versiones] = await Promise.all([getLeads(filtros), getVersiones()]);

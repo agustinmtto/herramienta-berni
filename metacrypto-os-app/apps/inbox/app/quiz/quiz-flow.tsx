@@ -13,9 +13,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buildAllocationResponse,
+  CANONICAL_STEPS,
+  CONSENT_TEXT,
   progressFor,
   progressMessageFor,
   questions,
+  quizQuestionStep,
   wizardConfig,
   type AllocationSelection,
   type QuizAssetRange,
@@ -40,8 +43,6 @@ const SESSION_KEY = "quiz.session_id";
 // Índice canónico del recorrido, alineado con la definición publicada (0068 §8
 // "steps"): start=0, situation=1 … contact=9, analysis=10, result=11. El índice
 // se usa para el `last_step_index` y debe matchear el del contrato.
-const STEPS = ["start", ...questions.map((q) => q.id), "analysis", "result"];
-
 export function QuizFlow() {
   const [screen, setScreen] = useState<Screen>(SCREENS.HERO);
   const [qIndex, setQIndex] = useState(0);
@@ -64,6 +65,7 @@ export function QuizFlow() {
   const lastStepRef = useRef<{ id: string; index: number }>({ id: "start", index: 0 });
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedRef = useRef(false);
+  const eventQueueRef = useRef(Promise.resolve());
 
   // Los hooks de envío viven en callbacks estables para no re-registrar
   // listeners en cada render (el efecto de pagehide del original corría sin
@@ -100,6 +102,17 @@ export function QuizFlow() {
     return visitedStagesRef.current;
   }, []);
 
+  const enqueueEvent = useCallback((event: string, extra: Record<string, unknown>) => {
+    eventQueueRef.current = eventQueueRef.current.then(() => sendEvent(event, extra));
+  }, [sendEvent]);
+
+  const recordQuestionStage = useCallback((index: number) => {
+    const step = quizQuestionStep(index);
+    if (!step) return;
+    recordStage(step.id);
+    lastStepRef.current = step;
+  }, [recordStage]);
+
   const startWizard = () => {
     // I6d: rotar SIEMPRE a una sesión nueva al arrancar desde HERO. Recargar la
     // página resetea la UI (React) pero sessionStorage conservaba el session_id
@@ -109,25 +122,25 @@ export function QuizFlow() {
     try { sessionStorage.setItem(SESSION_KEY, sessionIdRef.current); } catch { /* modo privado */ }
     if (!sourceRef.current) sourceRef.current = capturarSource();
     recordStage("start");
-    recordStage(questions[0].id);
-    lastStepRef.current = { id: "start", index: STEPS.indexOf("start") };
+    recordQuestionStage(0);
     setStarted(true);
     setScreen(SCREENS.WIZARD);
-    sendEvent("started", { stepId: "start", stepIndex: STEPS.indexOf("start") });
+    enqueueEvent("started", { stepId: "start", stepIndex: CANONICAL_STEPS.indexOf("start") });
   };
 
-  // Avanza a un índice concreto. El paso canónico y el evento `progress` los
-  // emite el efecto de abajo (una sola fuente de verdad para el tracking): acá
-  // solo se cambia la pregunta visible. El efecto NUNCA va dentro del updater
-  // de setQIndex: React puede invocarlo dos veces (StrictMode) y duplicaría.
+  // La referencia del paso cambia antes que el estado visible para que un
+  // `pagehide` en esa ventana no reporte la pregunta anterior. El efecto emite
+  // `progress` después del render; nunca se hace dentro del updater porque
+  // React puede invocarlo dos veces en StrictMode.
   const goTo = useCallback((next: number) => {
+    recordQuestionStage(next);
     setQIndex(next);
-  }, []);
+  }, [recordQuestionStage]);
 
   const move = (delta: number) => {
     if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
     setTransitioning(false);
-    setQIndex((current) => Math.max(0, Math.min(current + delta, questions.length - 1)));
+    goTo(Math.max(0, Math.min(qIndex + delta, questions.length - 1)));
   };
 
   const pick = (question: QuizQuestion, option: QuizOption) => {
@@ -177,6 +190,7 @@ export function QuizFlow() {
     phoneLocal: string;
     country: string;
     consent: boolean;
+    consentAcceptedAt: string;
     website: string;
   }) => {
     setContactError(null);
@@ -203,7 +217,7 @@ export function QuizFlow() {
       return;
     }
 
-    const contact = { name, email, phone, country: form.country, consent: form.consent, website: form.website };
+    const contact = { name, email, phone, country: form.country, consent: form.consent, consentAcceptedAt: form.consentAcceptedAt, website: form.website };
     const contactState: QuizAnswerState = { answer: null, tags: [] };
     const finalAnswers: Record<string, QuizAnswerState> = { ...answers, contact: contactState };
     const diagnosisSnapshot = buildDiagnosis(
@@ -217,10 +231,12 @@ export function QuizFlow() {
         }))
     );
     const stages = recordStage("analysis");
+    lastStepRef.current = { id: "analysis", index: CANONICAL_STEPS.indexOf("analysis") };
 
     // El contacto se persiste ANTES de mostrar el resultado (docs/11 Fase B.6).
     // Si falla, el lead ve el error y reintenta: no se pierde ni se finge éxito.
     try {
+      await eventQueueRef.current;
       const response = await fetch("/api/lead", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -230,7 +246,7 @@ export function QuizFlow() {
             sessionId: sessionIdRef.current!,
             source: sourceRef.current ?? capturarSource(),
             stepId: "result",
-            stepIndex: STEPS.indexOf("result"),
+            stepIndex: CANONICAL_STEPS.indexOf("result"),
             visited: stages,
             contact,
             answers: finalAnswers,
@@ -290,6 +306,7 @@ export function QuizFlow() {
       return;
     }
     recordStage("result");
+    lastStepRef.current = { id: "result", index: CANONICAL_STEPS.indexOf("result") };
     setScreen(SCREENS.FINAL);
   };
 
@@ -303,11 +320,11 @@ export function QuizFlow() {
     if (screen === SCREENS.WIZARD && started && questions[qIndex]?.id) {
       const id = questions[qIndex].id;
       recordStage(id);
-      const index = STEPS.indexOf(id);
+      const index = CANONICAL_STEPS.indexOf(id);
       lastStepRef.current = { id, index };
-      sendEvent("progress", { stepId: id, stepIndex: index });
+      enqueueEvent("progress", { stepId: id, stepIndex: index });
     }
-  }, [screen, qIndex, started, recordStage, sendEvent]);
+  }, [screen, qIndex, started, recordStage, enqueueEvent]);
 
   useEffect(() => () => { if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current); }, []);
 
@@ -601,10 +618,10 @@ function ContactForm({
   onSubmit,
   error,
 }: {
-  onSubmit: (form: { name: string; email: string; phoneLocal: string; country: string; consent: boolean; website: string }) => void;
+  onSubmit: (form: { name: string; email: string; phoneLocal: string; country: string; consent: boolean; consentAcceptedAt: string; website: string }) => void;
   error: string | null;
 }) {
-  const [form, setForm] = useState({ name: "", email: "", phoneLocal: "", country: "AR", consent: false, website: "" });
+  const [form, setForm] = useState({ name: "", email: "", phoneLocal: "", country: "AR", consent: false, consentAcceptedAt: "", website: "" });
   const update = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((current) => ({ ...current, [key]: event.target.value }));
   const country = useMemo(() => COUNTRIES.find((c) => c.code === form.country) ?? COUNTRIES[0], [form.country]);
@@ -647,8 +664,8 @@ function ContactForm({
         <input id="w-website" tabIndex={-1} autoComplete="off" value={form.website} onChange={update("website")} />
       </div>
       <label className="consent-option">
-        <input type="checkbox" checked={form.consent} onChange={(event) => setForm((current) => ({ ...current, consent: event.target.checked }))} />
-        <span>Acepto recibir mi diagnóstico y que Metacrypto Club me contacte por email, teléfono o WhatsApp según mis respuestas.</span>
+        <input type="checkbox" checked={form.consent} onChange={(event) => setForm((current) => ({ ...current, consent: event.target.checked, consentAcceptedAt: event.target.checked ? new Date().toISOString() : "" }))} />
+        <span>{CONSENT_TEXT}</span>
       </label>
       {error && <div className="contact-error" role="alert">{error}</div>}
       <button className="btn-gold opt-next" type="button" onClick={() => onSubmit(form)}>

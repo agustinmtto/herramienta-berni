@@ -9,10 +9,11 @@
 
 import { NextResponse } from "next/server";
 import { rest } from "@/lib/supabase";
-import { isRateLimited, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "@/lib/quiz/rate-limit";
+import { isRateLimited, RATE_LIMIT_COMPLETED_MAX, RATE_LIMIT_MAX, RATE_LIMIT_RAW_MAX, RATE_LIMIT_WINDOW_MS } from "@/lib/quiz/rate-limit";
 import {
   MAX_BODY_BYTES,
   mapRpcError,
+  utf8ByteLength,
   validateLeadContract,
 } from "@/lib/quiz/lead-validate";
 
@@ -23,6 +24,8 @@ const envInt = (name: string, fallback: number): number => {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
 const RATE_LIMIT_MAX_EFF = envInt("LEAD_RATE_LIMIT_MAX", RATE_LIMIT_MAX);
+const RATE_LIMIT_COMPLETED_MAX_EFF = envInt("LEAD_COMPLETED_RATE_LIMIT_MAX", RATE_LIMIT_COMPLETED_MAX);
+const RATE_LIMIT_RAW_MAX_EFF = envInt("LEAD_RAW_RATE_LIMIT_MAX", RATE_LIMIT_RAW_MAX);
 const RATE_LIMIT_WINDOW_MS_EFF = envInt("LEAD_RATE_LIMIT_WINDOW_MS", RATE_LIMIT_WINDOW_MS);
 
 const ip = (request: Request): string =>
@@ -44,16 +47,16 @@ function sameOrigin(request: Request): boolean {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  // 1) Rate limit por IP: 429 y fuera (antes de gastar más recursos).
-  const limited = isRateLimited(ip(request), {
-    max: RATE_LIMIT_MAX_EFF,
+  const requestIp = ip(request);
+  const rawLimited = isRateLimited(`${requestIp}:raw`, {
+    max: RATE_LIMIT_RAW_MAX_EFF,
     windowMs: RATE_LIMIT_WINDOW_MS_EFF,
   });
-  if (limited.limited) {
+  if (rawLimited.limited) {
     return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
   }
 
-  // 2) Solo JSON — el beacon manda Blob con este Content-Type. El standalone
+  // 1) Solo JSON — el beacon manda Blob con este Content-Type. El standalone
   //    lo exigía (route.js §2, con tests 415); el port lo había perdido.
   const contentType = (request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
   if (contentType !== "application/json") {
@@ -74,7 +77,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "body_too_large" }, { status: 413 });
   }
   const raw = await request.text();
-  if (raw.length > MAX_BODY_BYTES) {
+  if (utf8ByteLength(raw) > MAX_BODY_BYTES) {
     return NextResponse.json({ ok: false, error: "body_too_large" }, { status: 413 });
   }
 
@@ -93,6 +96,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
     console.warn(`[lead] rechazado: ${validation.reason} ip=${ip(request)}`);
     return NextResponse.json({ ok: false, error: validation.reason }, { status: 400 });
+  }
+
+  // Tracking y finalización no comparten presupuesto: una navegación con
+  // avances, retrocesos y recargas nunca puede consumir la cuota de completed.
+  const bucket = validation.payload.event === "completed" ? "completed" : "tracking";
+  const limited = isRateLimited(`${requestIp}:${bucket}`, {
+    max: bucket === "completed" ? RATE_LIMIT_COMPLETED_MAX_EFF : RATE_LIMIT_MAX_EFF,
+    windowMs: RATE_LIMIT_WINDOW_MS_EFF,
+  });
+  if (limited.limited) {
+    return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
   }
 
   const r = await rest<{ ok: boolean; session_id: string; submission_id: string; status: string }>(

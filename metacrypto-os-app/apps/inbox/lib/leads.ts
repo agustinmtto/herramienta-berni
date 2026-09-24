@@ -71,6 +71,12 @@ export const BANDAS_CAPITAL: { id: string; label: string; min: number | null; ma
 ];
 
 export const LEADS_PAGE_SIZE = 50;
+export const MAX_LEADS_PAGE = 10000;
+
+export function parseLeadPage(value: string | number | undefined): number {
+  const page = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(page) && page >= 1 && page <= MAX_LEADS_PAGE ? page : 1;
+}
 
 // Fecha de filtro válida (YYYY-MM-DD) o null: los inputs de /leads llegan por
 // URL y un valor inválido ("abc", "99-99-9999") rompería el `new Date(...)`
@@ -144,7 +150,7 @@ export function buildLeadsQuery(f: LeadFilters): string {
     parts.push(`or=(nombre_capturado.ilike.${like},email_capturado.ilike.${like},telefono_e164_capturado.ilike.${like})`);
   }
 
-  const offset = Math.max(0, ((f.page ?? 1) - 1) * LEADS_PAGE_SIZE);
+  const offset = (parseLeadPage(f.page) - 1) * LEADS_PAGE_SIZE;
   if (offset > 0) parts.push(`offset=${offset}`);
 
   return parts.join("&");
@@ -167,6 +173,7 @@ export async function getLeads(f: LeadFilters): Promise<{ rows: LeadRow[]; hayMa
   let filtros: LeadFilters = f;
   if (f.version) {
     const v = await rest<{ id: string }[]>("GET", `quiz_versiones?codigo=eq.${encodeURIComponent(f.version)}&select=id`);
+    if (v.status >= 400) throw new Error(`quiz_versiones_http_${v.status}`);
     const id = v.json?.[0]?.id;
     if (!id) return { rows: [], hayMas: false };
     filtros = { ...f, version: id };
@@ -175,6 +182,7 @@ export async function getLeads(f: LeadFilters): Promise<{ rows: LeadRow[]; hayMa
   const query = buildLeadsQuery(filtros);
 
   const r = await rest<Record<string, unknown>[]>("GET", `diagnostico_envios?${query}`);
+  if (r.status >= 400) throw new Error(`diagnostico_envios_http_${r.status}`);
   const filas = r.json ?? [];
   const hayMas = filas.length > LEADS_PAGE_SIZE;
   return { rows: filas.slice(0, LEADS_PAGE_SIZE).map(filaToRow), hayMas };
@@ -224,6 +232,7 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
         "persona:persona_id(estado,nombre)",
       ].join(","),
   );
+  if (r.status >= 400) throw new Error(`diagnostico_envio_detalle_http_${r.status}`);
   const fila = r.json?.[0];
   if (!fila) return null;
 
@@ -231,6 +240,7 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
     "GET",
     `diagnostico_respuestas?envio_id=eq.${encodeURIComponent(id)}&select=question_id,question_type,question_text,question_order,answer_id,answer_text,answer_value,answered_at&order=question_order.asc`,
   );
+  if (respuestas.status >= 400) throw new Error(`diagnostico_respuestas_http_${respuestas.status}`);
 
   // Si este envío ya fue vinculado a un cliente, la auditoría guarda QUÉ lead
   // temporal se movió (evita que el rollback mueva la vinculación equivocada).
@@ -238,6 +248,7 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
     "GET",
     `auditoria?accion=eq.vinculacion${"&"}datos.cs=${encodeURIComponent(`{"envio_ids":["${id}"]}`)}&select=entidad_id&order=created_at.desc&limit=1`,
   );
+  if (vinculaciones.status >= 400) throw new Error(`auditoria_vinculacion_http_${vinculaciones.status}`);
 
   const row = filaToRow(fila);
   const diagnosisResult = fila.diagnosis_result;
@@ -269,7 +280,7 @@ export interface ClienteParaVincular {
   programa: string | null;
 }
 
-const CLIENTES_PAGE_SIZE = 50;
+export const CLIENTES_PAGE_SIZE = 50;
 
 // Query PURA del picker (testeable sin base): inner join con programas y
 // búsqueda server-side por nombre/email/teléfono.
@@ -278,21 +289,27 @@ const CLIENTES_PAGE_SIZE = 50;
 // parámetro suelto PostgREST lo ignoraba y listaba clientes sin programa
 // (HTTP 200, error silencioso). Dentro del select exige al menos un programa.
 // I8: búsqueda server-side (no local sobre los primeros 500) y sin cap duro.
-export function buildClientesQuery(q?: string, limit = CLIENTES_PAGE_SIZE): string {
+export function buildClientesQuery(q?: string, page = 1): string {
+  const safePage = parseLeadPage(page);
   const parts = [
     "personas?estado=eq.cliente",
     "select=id,nombre,email,telefono_e164,programas!inner(tier,tiers(nombre))",
-    "order=nombre.asc",
-    `limit=${limit}`,
+    "order=nombre.asc,id.asc",
+    `limit=${CLIENTES_PAGE_SIZE + 1}`,
   ];
   if (q && q.trim()) {
     const like = encodeURIComponent(`*${patronLike(q.trim())}*`);
     parts.push(`or=(nombre.ilike.${like},email.ilike.${like},telefono_e164.ilike.${like})`);
   }
+  if (safePage > 1) parts.push(`offset=${(safePage - 1) * CLIENTES_PAGE_SIZE}`);
   return parts.join("&");
 }
 
-export async function getClientesParaVincular(q?: string): Promise<ClienteParaVincular[]> {
+export function esConsentimientoLegacySinRegistro(version: string | null): boolean {
+  return version === "legacy-sin-registro";
+}
+
+export async function getClientesParaVincular(q?: string, page = 1): Promise<{ clientes: ClienteParaVincular[]; hayMas: boolean }> {
   const r = await rest<
     {
       id: string;
@@ -301,14 +318,16 @@ export async function getClientesParaVincular(q?: string): Promise<ClienteParaVi
       telefono_e164: string | null;
       programas: { tier: string; tiers: { nombre: string } | null }[];
     }[]
-  >("GET", buildClientesQuery(q));
-  return (r.json ?? []).map((c) => ({
+  >("GET", buildClientesQuery(q, page));
+  if (r.status >= 400) throw new Error(`clientes_para_vincular_http_${r.status}`);
+  const rows = r.json ?? [];
+  return { clientes: rows.slice(0, CLIENTES_PAGE_SIZE).map((c) => ({
     id: c.id,
     nombre: c.nombre,
     email: c.email,
     telefono_e164: c.telefono_e164,
     programa: c.programas?.[0]?.tiers?.nombre ?? c.programas?.[0]?.tier ?? null,
-  }));
+  })), hayMas: rows.length > CLIENTES_PAGE_SIZE };
 }
 
 // Versiones publicadas del quiz (para el filtro del listado)
@@ -317,5 +336,6 @@ export async function getVersiones(): Promise<{ codigo: string; variante: string
     "GET",
     "quiz_versiones?order=created_at.desc&limit=50",
   );
+  if (r.status >= 400) throw new Error(`quiz_versiones_http_${r.status}`);
   return r.json ?? [];
 }

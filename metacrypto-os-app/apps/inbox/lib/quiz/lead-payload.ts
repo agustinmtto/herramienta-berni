@@ -20,6 +20,7 @@ export interface LeadContact {
   phone: string; // ya compuesto con prefijo, ej. "+5493585000000"
   country: string; // ISO 3166-1 alpha-2
   consent: boolean;
+  consentAcceptedAt: string;
   website?: string; // honeypot: el humano no lo rellena
 }
 
@@ -92,15 +93,31 @@ export const COUNTRIES: { code: string; prefix: string; label: string }[] = [
 // salida de línea. El endpoint revalida el formato completo (docs/09).
 // I11: normalización argentina — quita el 0 troncal y convierte el prefijo
 // viejo de celular "15" en el indicador móvil E.164 "9".
-export function composePhone(countryPrefix: string, localNumber: string): string {
-  let digits = localNumber.replace(/\D/g, "");
+export function composePhone(countryPrefix: string, localNumber: string): string | null {
+  const raw = localNumber.trim();
+  if (!/^[+\d\s().-]+$/.test(raw)) return null;
+  let digits = raw.replace(/\D/g, "");
+  if (raw.startsWith("+") && !digits.startsWith(countryPrefix)) return null;
+
   if (countryPrefix === "54") {
-    digits = digits.replace(/^0+/, ""); // troncal ARG (011/0351… → 11/351…)
-    // "15 <área> <número>" → "9 <área> <número>": el 15 es el prefijo histórico
-    // de celular; el 9 es el indicador de móvil en E.164 (+54 9 …).
-    if (digits.startsWith("15")) digits = "9" + digits.slice(2);
+    if (raw.startsWith("+") && digits.startsWith("54")) digits = digits.slice(2);
+    digits = digits.replace(/^0/, "");
+    if (digits.length === 11 && digits.startsWith("9")) digits = digits.slice(1);
+    if (digits.length === 12 && digits.startsWith("15")) {
+      digits = digits.slice(2);
+    } else if (digits.length === 12) {
+      const candidates = [2, 3, 4]
+        .filter((index) => digits.slice(index, index + 2) === "15")
+        .map((index) => digits.slice(0, index) + digits.slice(index + 2));
+      if (candidates.length !== 1) return null;
+      [digits] = candidates;
+    }
+    return /^\d{10}$/.test(digits) ? `+549${digits}` : null;
   }
-  return `+${countryPrefix}${digits}`;
+
+  if (raw.startsWith("+") && digits.startsWith(countryPrefix)) digits = digits.slice(countryPrefix.length);
+  const phone = `+${countryPrefix}${digits}`;
+  return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : null;
 }
 
 // Resuelve el PREFIJO desde el CÓDIGO de país del selector ("AR" → "54").
@@ -195,7 +212,7 @@ export function buildQuizPayload(args: BuildPayloadArgs): Record<string, unknown
       consent: {
         accepted: contact.consent === true,
         version: CONSENT_VERSION,
-        accepted_at: new Date().toISOString(),
+        accepted_at: contact.consentAcceptedAt,
       },
     };
     if (args.diagnosisSnapshot) payload.diagnosis = args.diagnosisSnapshot;
