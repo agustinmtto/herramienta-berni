@@ -234,7 +234,7 @@ describe("rate limiter", () => {
   });
 
   test("exporta los valores por defecto", () => {
-    expect(RATE_LIMIT_MAX).toBe(10);
+    expect(RATE_LIMIT_MAX).toBe(30); // v4 I13: subido de 10 para no bloquear el completed
     expect(RATE_LIMIT_WINDOW_MS).toBe(60000);
   });
 });

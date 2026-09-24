@@ -95,10 +95,15 @@ async function cleanup(): Promise<void> {
   }
 }
 
-const d = reachable ? describe : describe.skip;
+const d = reachable || process.env.LEAD_TESTS_REQUIRE_DB === "1" ? describe : describe.skip;
 
 d("POST /api/lead (integración local, docs/11 Fase B)", () => {
   beforeAll(() => {
+    // I12: en CI (LEAD_TESTS_REQUIRE_DB=1) la suite gated es OBLIGATORIA — si la
+    // base local no está, falla en vez de omitirse (verde falso sin base).
+    if (!reachable) {
+      throw new Error("Supabase local no está disponible y LEAD_TESTS_REQUIRE_DB=1: la suite de integración no puede omitirse.");
+    }
     resetRateLimiter();
   });
   afterAll(async () => {

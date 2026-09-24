@@ -3,7 +3,7 @@
 // listado genere exactamente el filtro de PostgREST esperado.
 
 import { describe, expect, test } from "vitest";
-import { buildLeadsQuery, LEADS_PAGE_SIZE, type LeadFilters } from "../../leads";
+import { buildLeadsQuery, buildClientesQuery, LEADS_PAGE_SIZE, type LeadFilters } from "../../leads";
 import { patronLike } from "../../supabase";
 
 const base: LeadFilters = {};
@@ -89,5 +89,28 @@ describe("buildLeadsQuery", () => {
     expect(con({ page: 1 })).not.toContain("offset=");
     expect(con({ page: 2 })).toContain(`offset=${LEADS_PAGE_SIZE}`);
     expect(con({ page: 3 })).toContain(`offset=${LEADS_PAGE_SIZE * 2}`);
+  });
+
+  test("fechas inválidas se descartan, no producen filtro roto (I9)", () => {
+    expect(con({ desde: "abc" })).not.toContain("created_at=gte");
+    expect(con({ hasta: "99-99-9999" })).not.toContain("created_at=lt");
+    expect(con({ hasta: "2026-02-31" })).not.toContain("created_at=lt"); // fecha imposible
+    expect(con({ desde: "2026-09-01" })).toContain("created_at=gte.2026-09-01T00:00:00Z");
+  });
+});
+
+describe("buildClientesQuery (v4 I7/I8)", () => {
+  test("el inner join de programas va DENTRO del select (exige programa)", () => {
+    const q = buildClientesQuery();
+    expect(q).toContain("personas?estado=eq.cliente");
+    expect(q).toContain("select=id,nombre,email,telefono_e164,programas!inner(tier,tiers(nombre))");
+    expect(q).toContain("limit=50");
+  });
+
+  test("búsqueda por texto filtra server-side (nombre/email/teléfono)", () => {
+    const q = buildClientesQuery("juan perez");
+    expect(q).toContain("or=(nombre.ilike.");
+    expect(q).toContain("email.ilike.");
+    expect(q).toContain("telefono_e164.ilike.");
   });
 });

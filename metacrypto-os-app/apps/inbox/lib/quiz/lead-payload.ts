@@ -90,9 +90,16 @@ export const COUNTRIES: { code: string; prefix: string; label: string }[] = [
 
 // Teléfono E.164 desde selector + número local: solo dígitos, sin ceros de
 // salida de línea. El endpoint revalida el formato completo (docs/09).
+// I11: normalización argentina — quita el 0 troncal y convierte el prefijo
+// viejo de celular "15" en el indicador móvil E.164 "9".
 export function composePhone(countryPrefix: string, localNumber: string): string {
   let digits = localNumber.replace(/\D/g, "");
-  if (countryPrefix === "54") digits = digits.replace(/^0+/, ""); // troncal ARG
+  if (countryPrefix === "54") {
+    digits = digits.replace(/^0+/, ""); // troncal ARG (011/0351… → 11/351…)
+    // "15 <área> <número>" → "9 <área> <número>": el 15 es el prefijo histórico
+    // de celular; el 9 es el indicador de móvil en E.164 (+54 9 …).
+    if (digits.startsWith("15")) digits = "9" + digits.slice(2);
+  }
   return `+${countryPrefix}${digits}`;
 }
 
@@ -181,6 +188,10 @@ export function buildQuizPayload(args: BuildPayloadArgs): Record<string, unknown
       email: contact.email.trim().toLowerCase(),
       phone: contact.phone,
       country: contact.country || null,
+      // M1: el honeypot viaja dentro de lead para que el servidor reciba la
+      // señal. Antes el constructor no lo incluía: el campo trampa de la UI
+      // nunca llegaba al endpoint (validateLead lo valida como lead.website).
+      website: contact.website,
       consent: {
         accepted: contact.consent === true,
         version: CONSENT_VERSION,

@@ -1,4 +1,4 @@
-﻿// Tests de integraciÃ³n del mÃ³dulo de leads (docs/11 Â§2â€“Â§9) contra el Supabase
+// Tests de integraciÃ³n del mÃ³dulo de leads (docs/11 Â§2â€“Â§9) contra el Supabase
 // LOCAL por PostgREST, igual que la app (service_role, solo servidor).
 //
 // Corren cuando la base local estÃ¡ arriba (docs/10) y se saltan solos si no
@@ -181,10 +181,15 @@ async function crearVersionMultiChoice() {
 }
 
 // â”€â”€ suite â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const d = reachable ? describe : describe.skip;
+const d = reachable || process.env.LEAD_TESTS_REQUIRE_DB === "1" ? describe : describe.skip;
 
 d("quiz leads RPC (integraciÃ³n local, docs/11)", () => {
   beforeAll(async () => {
+    // I12: en CI (LEAD_TESTS_REQUIRE_DB=1) la suite gated es OBLIGATORIA — si la
+    // base local no está, falla en vez de omitirse (verde falso sin base).
+    if (!reachable) {
+      throw new Error("Supabase local no está disponible y LEAD_TESTS_REQUIRE_DB=1: la suite de integración no puede omitirse.");
+    }
     await limpiar();
     await crearVersionMultiChoice();
   });
@@ -786,9 +791,70 @@ d("quiz leads RPC (integraciÃ³n local, docs/11)", () => {
     const e = await envio(s);
     expect(e.estado).toBe("completed");
   });
+
+  test("I6: dropped sin progress previo guarda el paso exacto del abandono", async () => {
+    const s = session(90);
+    await rpc("registrar_diagnostico", { p_payload: payload({ session_id: s, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "start", step_index: 0 } }) });
+    const r = await rpc("registrar_diagnostico", { p_payload: payload({ session_id: s, event: "dropped", occurred_at: "2026-09-21T09:01:00Z", progress: { step_id: "challenge", step_index: 2 } }) });
+    expect(r.status).toBe(200);
+    const e = await envio(s);
+    expect(e.estado).toBe("dropped");
+    expect(e.last_step_id).toBe("challenge");
+    expect(e.last_step_index).toBe(2);
+  });
+
+  test("I1: consentimiento anterior al inicio del recorrido se rechaza", async () => {
+    const s = session(91);
+    await rpc("registrar_diagnostico", { p_payload: payload({ session_id: s, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "start", step_index: 0 } }) });
+    const p = completedPayload({ sessionId: s, email: email(91), capital: "capital_10k_25k" }) as Record<string, any>;
+    p.lead.consent.accepted_at = "2026-09-20T09:00:00Z"; // un dia antes del inicio
+    const r = await rpc("registrar_diagnostico", { p_payload: p });
+    expect(r.body.message).toContain("contacto_incompleto");
+  });
+
+  test("I1: consentimiento posterior a la finalizacion se rechaza", async () => {
+    const s = session(92);
+    const p = completedPayload({ sessionId: s, email: email(92), capital: "capital_10k_25k" }) as Record<string, any>;
+    p.lead.consent.accepted_at = "2026-09-21T10:20:00Z"; // 12 min despues del occurred_at (10:08)
+    const r = await rpc("registrar_diagnostico", { p_payload: p });
+    expect(r.body.message).toContain("contacto_incompleto");
+  });
+
+  test("I5: la auditoria de desvinculacion guarda revertido_de como UUID", async () => {
+    const s = session(93);
+    const mail = email(93);
+    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: mail, capital: "capital_10k_25k" }) });
+    const leadId = ((await envio(s)).persona_id) as string;
+    const sufijo = String(Date.now()).slice(-6);
+    const tel = `+54913${sufijo.padStart(8, "0")}`;
+    const correoCliente = mail.replace("quiz-rpc-", "revd-");
+    EMAILS.push(correoCliente);
+    const cliente = await rest("POST", "personas", "select=id", { estado: "cliente", nombre: "Cliente revertido_de", email: correoCliente, telefono_e164: tel, divisa_preferida: "USD" });
+    const clienteId = cliente.body[0].id;
+    PROGRAMA_IDS.push((await rest("POST", "programas", "select=id", { persona_id: clienteId, tier: "3000", motivo: "nueva_venta", fecha_inicio: "2026-09-01", monto: 3000, divisa: "EUR" })).body[0].id);
+    await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteId, p_confirmar: true });
+    await rpc("desvincular_lead", { p_cliente_id: clienteId });
+    const audit = await rest("GET", "auditoria", `accion=eq.desvinculacion&entidad_id=eq.${leadId}&select=datos&order=created_at.desc&limit=1`);
+    const datos = audit.body[0].datos;
+    expect(typeof datos.revertido_de).toBe("string");
+    expect(datos.revertido_de).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  test("I4a: peticiones concurrentes con el mismo session_id y distinta version → una gana y la otra pierde limpio", async () => {
+    const s = session(94);
+    const [a, b] = await Promise.all([
+      rpc("registrar_diagnostico", { p_payload: payload({ session_id: s, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "start", step_index: 0 } }) }),
+      rpc("registrar_diagnostico", { p_payload: payload({ quiz_version: MC_VERSION, session_id: s, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "start", step_index: 0 } }) }),
+    ]);
+    const statuses = [a.status, b.status].sort((x, y) => x - y);
+    expect(statuses[0]).toBe(200);       // una creó la sesión
+    expect(statuses[1]).toBeGreaterThanOrEqual(400); // la otra perdió limpio
+    const e = await envio(s);
+    expect(e).not.toBeNull();
+    expect(e.quiz_version_id).not.toBeNull();
+  });
 });
 
 // mapa auxiliar para el test de concurrencia
 const sessionIds: Record<number, string> = {};
 for (let n = 1; n <= 99; n++) sessionIds[n] = `0000c0de-0000-4000-8000-${String(n).padStart(12, "0")}`;
-

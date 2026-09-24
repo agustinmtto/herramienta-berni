@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireModulo } from "@/lib/guard";
+import { puedeVer } from "@/lib/modulos";
 import { getLeadDetalle, getClientesParaVincular } from "@/lib/leads";
 import { dateEs, fullTime } from "@/lib/format";
 import VincularLead from "@/components/VincularLead";
@@ -36,7 +37,11 @@ function valorLegible(type: string, value: unknown): string | null {
 }
 
 export default async function LeadDetallePage({ params }: { params: Promise<{ id: string }> }) {
-  await requireModulo("leads");
+  const u = await requireModulo("leads");
+  // I10: el enlace a /clientes solo se muestra si el usuario tiene el módulo
+  // `clientes` — un usuario con solo `leads` no debe recibir un enlace roto
+  // (que además lo lleva a una ficha que no le corresponde ver).
+  const puedeVerClientes = puedeVer(u, "clientes");
   const { id } = await params;
   const lead = await getLeadDetalle(id);
   if (!lead) notFound();
@@ -122,9 +127,13 @@ export default async function LeadDetallePage({ params }: { params: Promise<{ id
           {lead.persona_id ? (
             <>
               <p>
-                <Link href={`/clientes/${lead.persona_id}`} className="lead-link">
-                  {lead.persona_nombre || "Ver persona"}
-                </Link>
+                {puedeVerClientes ? (
+                  <Link href={`/clientes/${lead.persona_id}`} className="lead-link">
+                    {lead.persona_nombre || "Ver persona"}
+                  </Link>
+                ) : (
+                  <span>{lead.persona_nombre || "Persona"}</span>
+                )}
               </p>
               <p>
                 <small>Estado: <span className="pill">{lead.persona_estado === "lead" ? "Lead temporal" : lead.persona_estado}</span></small>

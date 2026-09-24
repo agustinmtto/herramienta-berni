@@ -5,7 +5,14 @@
 // Fase D). El call site no cambia cuando se reemplace por Upstash/WAF.
 
 const WINDOW_MS = 60 * 1000; // ventana de la mayoría: 1 minuto
-const MAX_REQUESTS = 10;     // máximo de requests por IP dentro de la ventana
+// Presupuesto por IP dentro de la ventana. Subido de 10 a 30 (auditoría v4 I13):
+// un recorrido real manda `started` + `progress` por pregunta (incluyendo
+// retrocesos, que ahora también emiten) + `dropped` por recarga + `completed`,
+// y con reintentos pasaba holgado de 10 — el límite bloqueaba la FINALIZACIÓN
+// de un recorrido legítimo. Sigue siendo un límite anti-abuso significativo
+// (30 eventos/min por IP); el rate limit DEFINITIVO (distribuido, Upstash/WAF
+// del host) queda en docs/06 #14/#15.
+const MAX_REQUESTS = 30;     // máximo de requests por IP dentro de la ventana
 
 const hits = new Map<string, number[]>();
 

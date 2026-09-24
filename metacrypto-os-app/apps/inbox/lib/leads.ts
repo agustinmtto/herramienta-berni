@@ -72,6 +72,20 @@ export const BANDAS_CAPITAL: { id: string; label: string; min: number | null; ma
 
 export const LEADS_PAGE_SIZE = 50;
 
+// Fecha de filtro válida (YYYY-MM-DD) o null: los inputs de /leads llegan por
+// URL y un valor inválido ("abc", "99-99-9999") rompería el `new Date(...)`
+// con un 500. Acá se descarta el filtro inválido en vez de romper (I9).
+const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
+function fechaValida(s: string | undefined): string | null {
+  if (!s || !FECHA_RE.test(s)) return null;
+  const d = new Date(`${s}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  // Fecha rodada: `new Date("2026-02-31")` no lanza, RODA a 03-03. El round-trip
+  // detecta ese desborde para no filtrar por una fecha distinta a la pedida.
+  if (d.toISOString().slice(0, 10) !== s) return null;
+  return s;
+}
+
 // ── builder puro ─────────────────────────────────────────────────────────────
 // Devuelve el query string de PostgREST para el listado. Sin filtros, solo
 // orden + paginación: exactamente lo que pinta la pantalla sin tocar.
@@ -100,11 +114,13 @@ export function buildLeadsQuery(f: LeadFilters): string {
   // `version` llega como UUID ya resuelto (getLeads lo busca por código antes):
   // el builder puro no sabe nada de quiz_versiones.
   if (f.version) parts.push(`quiz_version_id=eq.${encodeURIComponent(f.version)}`);
-  if (f.desde) parts.push(`created_at=gte.${f.desde}T00:00:00Z`);
+  const desde = fechaValida(f.desde);
+  const hasta = fechaValida(f.hasta);
+  if (desde) parts.push(`created_at=gte.${desde}T00:00:00Z`);
   // L-01 (auditoría v3): el hasta con 23:59:59Z se comía el último segundo
   // fraccionario — excluye con < medianoche del día siguiente.
-  if (f.hasta) {
-    const d = new Date(`${f.hasta}T00:00:00Z`);
+  if (hasta) {
+    const d = new Date(`${hasta}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() + 1);
     parts.push(`created_at=lt.${d.toISOString().slice(0, 10)}T00:00:00Z`);
   }
@@ -146,16 +162,17 @@ export async function getLeads(f: LeadFilters): Promise<{ rows: LeadRow[]; hayMa
   // El filtro por versión se resuelve por subconsulta real de PostgREST:
   // PostgREST soporta `quiz_version_id=eq.(select id from quiz_versiones
   // where codigo=...)` — pero no en un query string escapado limpio, así que
-  // resolvemos el id antes y filtramos por UUID.
+  // resolvemos el id antes y filtramos por UUID. Un código inexistente da
+  // lista vacía, no un filtro de UUID inválido que rompa PostgREST (I9).
   let filtros: LeadFilters = f;
   if (f.version) {
     const v = await rest<{ id: string }[]>("GET", `quiz_versiones?codigo=eq.${encodeURIComponent(f.version)}&select=id`);
     const id = v.json?.[0]?.id;
-    filtros = { ...f, version: id ?? "no-existe" };
+    if (!id) return { rows: [], hayMas: false };
+    filtros = { ...f, version: id };
   }
 
-  let query = buildLeadsQuery(filtros);
-  if (filtros.version) query += `&quiz_version_id=eq.${encodeURIComponent(filtros.version)}`;
+  const query = buildLeadsQuery(filtros);
 
   const r = await rest<Record<string, unknown>[]>("GET", `diagnostico_envios?${query}`);
   const filas = r.json ?? [];
@@ -243,19 +260,55 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
 // Clientes definitivos para el picker de vinculación post-venta (docs/11 §9).
 // SOLO clientes con al menos un programa (v3 M-03: la versión anterior
 // listaba cualquier `estado=cliente` y el RPC rechazaría a los sin programa).
-// Búsqueda por texto opcional (nombre/email/teléfono).
-export async function getClientesParaVincular(q?: string): Promise<{ id: string; nombre: string; email: string | null; telefono_e164: string | null }[]> {
-  let query =
-    "personas?estado=eq.cliente" +
-    "&select=id,nombre,email,telefono_e164" +
-    "&programas!inner(id)" + // exige al menos un programa: lo que el RPC valida
-    "&order=nombre.asc&limit=500";
+export interface ClienteParaVincular {
+  id: string;
+  nombre: string;
+  email: string | null;
+  telefono_e164: string | null;
+  /** Nombre del tier del programa (ej. "€3.000 / 8 meses"), para mostrarlo en el picker (I8). */
+  programa: string | null;
+}
+
+const CLIENTES_PAGE_SIZE = 50;
+
+// Query PURA del picker (testeable sin base): inner join con programas y
+// búsqueda server-side por nombre/email/teléfono.
+//
+// I7: el `!inner` va DENTRO del `select`, no como parámetro suelto — como
+// parámetro suelto PostgREST lo ignoraba y listaba clientes sin programa
+// (HTTP 200, error silencioso). Dentro del select exige al menos un programa.
+// I8: búsqueda server-side (no local sobre los primeros 500) y sin cap duro.
+export function buildClientesQuery(q?: string, limit = CLIENTES_PAGE_SIZE): string {
+  const parts = [
+    "personas?estado=eq.cliente",
+    "select=id,nombre,email,telefono_e164,programas!inner(tier,tiers(nombre))",
+    "order=nombre.asc",
+    `limit=${limit}`,
+  ];
   if (q && q.trim()) {
     const like = encodeURIComponent(`*${patronLike(q.trim())}*`);
-    query += `&or=(nombre.ilike.${like},email.ilike.${like},telefono_e164.ilike.${like})`;
+    parts.push(`or=(nombre.ilike.${like},email.ilike.${like},telefono_e164.ilike.${like})`);
   }
-  const r = await rest<{ id: string; nombre: string; email: string | null; telefono_e164: string | null }[]>( "GET", query);
-  return r.json ?? [];
+  return parts.join("&");
+}
+
+export async function getClientesParaVincular(q?: string): Promise<ClienteParaVincular[]> {
+  const r = await rest<
+    {
+      id: string;
+      nombre: string;
+      email: string | null;
+      telefono_e164: string | null;
+      programas: { tier: string; tiers: { nombre: string } | null }[];
+    }[]
+  >("GET", buildClientesQuery(q));
+  return (r.json ?? []).map((c) => ({
+    id: c.id,
+    nombre: c.nombre,
+    email: c.email,
+    telefono_e164: c.telefono_e164,
+    programa: c.programas?.[0]?.tiers?.nombre ?? c.programas?.[0]?.tier ?? null,
+  }));
 }
 
 // Versiones publicadas del quiz (para el filtro del listado)

@@ -6,8 +6,9 @@
 // bien pero NINGÚN click hace nada. Por eso esto es un onSubmit manual con
 // useTransition, que sí existe en 18.
 
-import { useState, useTransition } from "react";
-import { descartarLeadAccion, desvincularLeadAccion, vincularLeadAccion } from "@/app/leads-actions";
+import { useEffect, useState, useTransition } from "react";
+import { descartarLeadAccion, desvincularLeadAccion, vincularLeadAccion, buscarClientesParaVincular } from "@/app/leads-actions";
+import type { ClienteParaVincular } from "@/lib/leads";
 
 type Resultado = { ok: boolean; error?: string; mensaje?: string };
 
@@ -20,7 +21,7 @@ export default function VincularLead({
 }: {
   leadPersonaId: string;
   leadTelefono: string | null; // teléfono capturado en el quiz (snapshot del envío)
-  clientes: { id: string; nombre: string; email: string | null; telefono_e164: string | null }[];
+  clientes: ClienteParaVincular[];
   personaEstado: string | null;
   leadVinculadoId?: string | null; // lead temporal que ya fue vinculado (auditoría)
 }) {
@@ -54,27 +55,43 @@ function Picker({
 }: {
   leadPersonaId: string;
   leadTelefono: string | null;
-  clientes: { id: string; nombre: string; email: string | null; telefono_e164: string | null }[];
+  clientes: ClienteParaVincular[];
 }) {
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [pending, startTransition] = useTransition();
   const [clienteId, setClienteId] = useState("");
   const [confirmado, setConfirmado] = useState(false);
   const [busqueda, setBusqueda] = useState("");
+  const [lista, setLista] = useState<ClienteParaVincular[]>(clientes);
+  const [buscando, setBuscando] = useState(false);
+
+  // Búsqueda SERVER-SIDE con debounce (auditoría v4 I8): antes se filtraba
+  // localmente sobre los primeros 500 cargados — clientes fuera de ese lote
+  // eran inalcanzables. Ahora cada búsqueda consulta PostgREST.
+  useEffect(() => {
+    const q = busqueda.trim();
+    if (!q) {
+      setLista(clientes);
+      setBuscando(false);
+      return;
+    }
+    setBuscando(true);
+    const t = setTimeout(() => {
+      startTransition(async () => {
+        const res = await buscarClientesParaVincular(q);
+        setLista(res.clientes);
+        setBuscando(false);
+      });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [busqueda, clientes]);
 
   // La comparación EXACTA la hace el RPC (server); acá es solo para mostrar
   // el aviso y exigir la confirmación visible (docs/11 §9.1).
-  const cliente = clientes.find((c) => c.id === clienteId) ?? null;
+  const cliente = lista.find((c) => c.id === clienteId) ?? null;
   const telefonosDifieren = Boolean(
     cliente && (cliente.telefono_e164 ?? "") !== (leadTelefono ?? "")
   );
-  const clientesFiltrados = busqueda.trim()
-    ? clientes.filter((c) =>
-        [c.nombre, c.email ?? "", c.telefono_e164 ?? ""].some((campo) =>
-          campo.toLowerCase().includes(busqueda.trim().toLowerCase())
-        )
-      )
-    : clientes;
 
   const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -100,11 +117,13 @@ function Picker({
       />
       <select name="clienteId" value={clienteId} onChange={(e) => { setClienteId(e.target.value); setResultado(null); setConfirmado(false); }} required>
         <option value="" disabled>
-          Elegí el cliente definitivo…
+          {buscando ? "Buscando…" : "Elegí el cliente definitivo…"}
         </option>
-        {clientesFiltrados.map((c) => (
+        {lista.map((c) => (
           <option key={c.id} value={c.id}>
-            {c.nombre}{c.telefono_e164 ? ` — ${c.telefono_e164}` : c.email ? ` — ${c.email}` : ""}
+            {c.nombre}
+            {c.programa ? ` · ${c.programa}` : ""}
+            {c.telefono_e164 ? ` — ${c.telefono_e164}` : c.email ? ` — ${c.email}` : ""}
           </option>
         ))}
       </select>

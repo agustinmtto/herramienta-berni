@@ -16,6 +16,19 @@
 import { revalidatePath } from "next/cache";
 import { rest } from "@/lib/supabase";
 import { requireModulo } from "@/lib/guard";
+import { getClientesParaVincular, type ClienteParaVincular } from "@/lib/leads";
+
+// Búsqueda server-side del picker de vinculación (I8): el componente cliente
+// no puede cargar "todos los clientes" (el cap silencioso de 500 + búsqueda
+// local era el problema). Acá se consulta PostgREST con el texto y se devuelve
+// el lote acotado.
+export async function buscarClientesParaVincular(
+  q: string
+): Promise<{ clientes: ClienteParaVincular[] }> {
+  await requireModulo("leads");
+  const clientes = await getClientesParaVincular(typeof q === "string" ? q : "");
+  return { clientes };
+}
 
 export async function vincularLeadAccion(
   formData: FormData

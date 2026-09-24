@@ -37,17 +37,10 @@ const SCREENS = { HERO: "hero", WIZARD: "wizard", ANALYZING: "analysis", FINAL: 
 type Screen = (typeof SCREENS)[keyof typeof SCREENS];
 
 const SESSION_KEY = "quiz.session_id";
-const STEPS = ["start", ...questions.map((q) => q.id)];
-
-function getOrCreateSessionId(): string {
-  if (typeof window === "undefined") return crypto.randomUUID();
-  let id = sessionStorage.getItem(SESSION_KEY);
-  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) {
-    id = crypto.randomUUID();
-    sessionStorage.setItem(SESSION_KEY, id);
-  }
-  return id;
-}
+// Índice canónico del recorrido, alineado con la definición publicada (0068 §8
+// "steps"): start=0, situation=1 … contact=9, analysis=10, result=11. El índice
+// se usa para el `last_step_index` y debe matchear el del contrato.
+const STEPS = ["start", ...questions.map((q) => q.id), "analysis", "result"];
 
 export function QuizFlow() {
   const [screen, setScreen] = useState<Screen>(SCREENS.HERO);
@@ -108,24 +101,28 @@ export function QuizFlow() {
   }, []);
 
   const startWizard = () => {
-    if (!sessionIdRef.current) sessionIdRef.current = getOrCreateSessionId();
+    // I6d: rotar SIEMPRE a una sesión nueva al arrancar desde HERO. Recargar la
+    // página resetea la UI (React) pero sessionStorage conservaba el session_id
+    // viejo, y reusarlo mezclaba dos recorridos (el viejo ya cerrado por el
+    // beacon dropped + el nuevo). Arrancar desde cero abre un recorrido limpio.
+    sessionIdRef.current = crypto.randomUUID();
+    try { sessionStorage.setItem(SESSION_KEY, sessionIdRef.current); } catch { /* modo privado */ }
     if (!sourceRef.current) sourceRef.current = capturarSource();
     recordStage("start");
     recordStage(questions[0].id);
-    lastStepRef.current = { id: "start", index: 0 };
+    lastStepRef.current = { id: "start", index: STEPS.indexOf("start") };
     setStarted(true);
     setScreen(SCREENS.WIZARD);
-    sendEvent("started", { stepId: "start", stepIndex: 0 });
+    sendEvent("started", { stepId: "start", stepIndex: STEPS.indexOf("start") });
   };
 
-  // Avanza a un índice concreto y avisa al endpoint (progress). El efecto
-  // NUNCA va dentro del updater de setQIndex: React puede invocarlo dos veces
-  // (StrictMode) y duplicaría el envío.
+  // Avanza a un índice concreto. El paso canónico y el evento `progress` los
+  // emite el efecto de abajo (una sola fuente de verdad para el tracking): acá
+  // solo se cambia la pregunta visible. El efecto NUNCA va dentro del updater
+  // de setQIndex: React puede invocarlo dos veces (StrictMode) y duplicaría.
   const goTo = useCallback((next: number) => {
     setQIndex(next);
-    lastStepRef.current = { id: questions[next]?.id ?? "contact", index: next };
-    sendEvent("progress", { stepId: questions[next]?.id ?? "contact", stepIndex: next });
-  }, [sendEvent]);
+  }, []);
 
   const move = (delta: number) => {
     if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
@@ -233,7 +230,7 @@ export function QuizFlow() {
             sessionId: sessionIdRef.current!,
             source: sourceRef.current ?? capturarSource(),
             stepId: "result",
-            stepIndex: STEPS.length,
+            stepIndex: STEPS.indexOf("result"),
             visited: stages,
             contact,
             answers: finalAnswers,
@@ -245,12 +242,20 @@ export function QuizFlow() {
         setContactError("No pudimos guardar tu diagnóstico. Revisá los datos e intentá de nuevo.");
         return;
       }
-      // Contrato positivo completo (v3 M-06): un 200 genérico no prueba nada —
-      // el éxito exige que el servidor confirme el envío COMPLETED con su id.
+      // Contrato positivo completo (v3 M-06 + v4 M2): un 200 genérico no prueba
+      // nada — el éxito exige que el servidor confirme el envío COMPLETED con su
+      // id Y que el session_id devuelto sea exactamente el enviado (una
+      // respuesta de otra sesión no cuenta como éxito).
       const data = (await response.json().catch(() => null)) as
-        | { ok?: boolean; status?: string; submission_id?: string | null }
+        | { ok?: boolean; status?: string; submission_id?: string | null; session_id?: string | null }
         | null;
-      if (!data || data.ok !== true || data.status !== "completed" || !data.submission_id) {
+      if (
+        !data ||
+        data.ok !== true ||
+        data.status !== "completed" ||
+        !data.submission_id ||
+        data.session_id !== sessionIdRef.current
+      ) {
         setContactError("El diagnóstico no terminó de guardarse. Intentá de nuevo en unos segundos.");
         return;
       }
@@ -289,14 +294,20 @@ export function QuizFlow() {
   };
 
   useEffect(() => {
-    // El paso se registra al MOSTRAR cada pantalla: primera pregunta incluida
-    // (no solo al avanzar) y también al navegar hacia atrás — así el beacon de
-    // abandono reporta el paso real en el que estaba el lead (v3 H-09).
-    if (screen === SCREENS.WIZARD && questions[qIndex]?.id) {
-      recordStage(questions[qIndex].id);
-      lastStepRef.current = { id: questions[qIndex].id, index: qIndex };
+    // El paso se registra al MOSTRAR cada pantalla — primera pregunta incluida
+    // (no solo al avanzar) y también al navegar hacia atrás — y se emite un
+    // `progress` con el paso canónico. Así el beacon de abandono reporta el
+    // paso real y la métrica "hasta qué pregunta llegó" no queda en "start"
+    // (auditoría v4 I6). El evento es idempotente en el RPC, así que un doble
+    // disparo (StrictMode en dev) no corrompe nada.
+    if (screen === SCREENS.WIZARD && started && questions[qIndex]?.id) {
+      const id = questions[qIndex].id;
+      recordStage(id);
+      const index = STEPS.indexOf(id);
+      lastStepRef.current = { id, index };
+      sendEvent("progress", { stepId: id, stepIndex: index });
     }
-  }, [screen, qIndex, recordStage]);
+  }, [screen, qIndex, started, recordStage, sendEvent]);
 
   useEffect(() => () => { if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current); }, []);
 
