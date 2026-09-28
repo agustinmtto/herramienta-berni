@@ -23,18 +23,32 @@ describe("datos server-side de /leads", () => {
       nombre: `Cliente ${index}`,
       email: null,
       telefono_e164: null,
-      programas: [{ tier: "tier", tiers: { nombre: "Programa" } }],
+      programa: "Programa",
     }));
     rest.mockResolvedValue({ status: 200, json: rows });
     const result = await getClientesParaVincular("cliente", 1);
     expect(result.clientes).toHaveLength(50);
     expect(result.hayMas).toBe(true);
-    expect(rest).toHaveBeenCalledWith("GET", expect.stringContaining("programas!inner"));
+    expect(rest).toHaveBeenCalledWith("GET", expect.stringContaining("v_clientes_para_vincular"));
+  });
+
+  test("solicita y devuelve una página 2 real del selector", async () => {
+    rest.mockResolvedValue({
+      status: 200,
+      json: [{ id: "cliente-51", nombre: "Cliente 51", email: null, telefono_e164: null, programa: "Programa activo" }],
+    });
+    const result = await getClientesParaVincular("cliente", 2);
+    expect(rest).toHaveBeenCalledWith("GET", expect.stringContaining("offset=50"));
+    expect(result).toEqual({
+      clientes: [{ id: "cliente-51", nombre: "Cliente 51", email: null, telefono_e164: null, programa: "Programa activo" }],
+      hayMas: false,
+    });
   });
 
   test("la UI distingue legado sin evidencia de consentimiento", () => {
     expect(esConsentimientoLegacySinRegistro("legacy-sin-registro")).toBe(true);
     expect(esConsentimientoLegacySinRegistro("contacto-v1")).toBe(false);
+    expect(esConsentimientoLegacySinRegistro("contacto-v1", "legacy-unknown")).toBe(true);
   });
 
   test("una búsqueda nueva invalida respuestas anteriores antes de iniciar otro efecto", () => {

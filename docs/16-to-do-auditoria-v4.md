@@ -2,41 +2,40 @@
 
 La checklist v4 fue superada por la auditoria v5. La especificacion autoritativa es `docs/17-spec-correcciones-auditoria-v5-quiz-leads.md`.
 
-Estado actualizado: 24-sep-2026. Base auditada: `79d7f4f27bc5feddf3d9a260ca26b634d3f22db8`.
+Estado actualizado: 28-sep-2026. Base auditada: `79d7f4f27bc5feddf3d9a260ca26b634d3f22db8`.
 
 ## Estado por hallazgo v5
 
 | # | Problema | Estado actual | Evidencia pendiente |
 |---:|---|---|---|
-| 1 | Upgrade historico con strings vacios | Bloqueado | Numero global y matriz DB |
+| 1 | Upgrade historico con strings vacios | Cerrado local | Validacion remota/operativa |
 | 2 | Seguridad de tests destructivos | Corregido y validado local | Primera ejecucion del workflow remoto |
-| 3 | Tracking fuera de orden | Bloqueado | Nueva migracion y test RPC |
-| 4 | Lock canonico de `desvincular_lead` | Bloqueado | Nueva migracion y carreras deterministas |
-| 5 | Inmutabilidad del quiz | Bloqueado | Nueva migracion y matriz por columna/transicion |
-| 6 | Telefono argentino | Corregido en aplicacion | Matriz integrada con persistencia |
+| 3 | Tracking fuera de orden | Cerrado local | Workflow remoto |
+| 4 | Lock canonico de `desvincular_lead` | Cerrado local | Workflow remoto |
+| 5 | Inmutabilidad del quiz | Cerrado local | Workflow remoto |
+| 6 | Telefono argentino | Cerrado local | Workflow remoto |
 | 7 | CI obligatorio | Corregido en codigo | Primera ejecucion del workflow |
 | 8 | Rate limit | Parcial | Cuotas separadas listas; distribuido depende del operador |
-| 9 | Consentimiento historico | Parcial | UI corregida; procedencia DB requiere migracion |
-| 10 | Selector de clientes | Corregido en codigo | Prueba integrada con mas de 50 clientes |
-| 11 | Validacion de `/leads` | Parcial | Parser/query corregidos; falta integracion PostgREST y UI |
+| 9 | Consentimiento historico | Cerrado local | Workflow remoto |
+| 10 | Selector de clientes | Cerrado local | Workflow remoto |
+| 11 | Validacion de `/leads` | Cerrado local | Workflow remoto |
 | 12 | Validacion de `/api/lead` | Corregido y validado local | Primera ejecucion del workflow remoto |
-| 13 | Documentacion y transferencia | Parcial | Patch final se regenera al cerrar SQL y gates |
+| 13 | Documentacion y transferencia | Cerrado local; patch de 44 archivos aplicado sobre baseline reconstruido | `git apply --check` contra HEAD central |
 
 `Corregido en codigo` no significa cerrado para merge: cada fila requiere su evidencia final de `docs/17`.
 
 ## Cambios con prueba roja y verde
 
-La primera corrida enfocada de v5 produjo 11 fallos y 46 pases. Las regresiones posteriores cubrieron telefono, fechas, pais, pasos, bytes, pagina, selector, guarda local, invalidacion inmediata de busquedas y sincronizacion de tracking. Tras un reset limpio `0001` a `0072`, la integracion RPC + `/api/lead` produjo 48 pases y la suite Inbox completa 1.362 pases, ambas con 0 fallos y 0 omitidos. TypeScript paso tambien despues del build; ESLint termino con 0 errores y los 16 warnings preexistentes; ambos builds y los 39 tests de raiz pasaron.
+La primera corrida enfocada de v5 produjo 11 fallos y 46 pases. Tras implementar `0073`, un reset limpio `0001` a `0073` aplico 70 migraciones; la integracion RPC produjo 47 pases, incluidas seis carreras, y la suite Inbox completa produjo 1.380 pases con DB; la regresion pura final de doble submit elevo el total a 1.381, todo con 0 fallos y 0 omitidos. TypeScript paso; ESLint termino con 0 errores y los 16 warnings preexistentes; ambos builds y los 39 tests de raiz pasaron. La matriz historica paso las rutas `0068`, `0068+0069`, `0070`, `0071` y pre-`0072` con el preflight documentado; `0073` tambien se reaplico sobre una base ya actualizada sin error.
 
-La evidencia anterior prueba el esquema actual sobre una instalacion limpia. No prueba upgrades historicos hacia una migracion que todavia no puede crearse ni numerarse.
+La evidencia anterior cierra el desarrollo local. No prueba compatibilidad con un HEAD central no disponible ni las compuertas de infraestructura/produccion.
 
 ## Bloqueos
 
-1. El numero posterior a `0072` no esta confirmado globalmente. No se crea SQL provisional.
-2. La matriz de upgrades y las nuevas carreras SQL dependen de esa migracion; no se simulan contra `0072`.
-3. El patch existente tiene 36 archivos pero esta obsoleto respecto de esta rama; no se regenera una entrega incompleta.
-4. El rate limit distribuido requiere infraestructura externa.
-5. El HEAD real del repositorio central no esta disponible para `git apply --check` final.
+1. `0073` esta libre en referencias disponibles, pero requiere confirmacion global del operador.
+2. El rate limit distribuido requiere infraestructura externa.
+3. El HEAD real del repositorio central no esta disponible para `git apply --check` final.
+4. `npm audit --omit=dev` informa riesgos transitivos de PostCSS cuya correccion automatica exige Next 16; se trata fuera de este cambio acotado.
 
 ## Compuerta CI versionada
 

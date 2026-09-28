@@ -100,7 +100,7 @@ export function composePhone(countryPrefix: string, localNumber: string): string
   if (raw.startsWith("+") && !digits.startsWith(countryPrefix)) return null;
 
   if (countryPrefix === "54") {
-    if (raw.startsWith("+") && digits.startsWith("54")) digits = digits.slice(2);
+    if (digits.startsWith("54") && digits.length > 10) digits = digits.slice(2);
     digits = digits.replace(/^0/, "");
     if (digits.length === 11 && digits.startsWith("9")) digits = digits.slice(1);
     if (digits.length === 12 && digits.startsWith("15")) {
@@ -115,7 +115,20 @@ export function composePhone(countryPrefix: string, localNumber: string): string
     return /^\d{10}$/.test(digits) ? `+549${digits}` : null;
   }
 
-  if (raw.startsWith("+") && digits.startsWith(countryPrefix)) digits = digits.slice(countryPrefix.length);
+  // Sin `+`, un número local puede empezar por los mismos dígitos que el país
+  // (p. ej. área 55 en Brasil). Solo se consume el prefijo cuando la longitud
+  // total no puede ser nacional y el resto sí puede serlo.
+  const nationalLengths: Record<string, number[]> = {
+    "1": [10], "34": [9], "51": [9], "52": [10], "55": [10, 11],
+    "56": [9], "57": [10], "58": [10], "591": [8], "593": [9],
+    "595": [9], "598": [8], "506": [8], "507": [7], "1809": [7],
+  };
+  const lengths = nationalLengths[countryPrefix] ?? [];
+  if (digits.startsWith(countryPrefix)
+      && !lengths.includes(digits.length)
+      && lengths.includes(digits.length - countryPrefix.length)) {
+    digits = digits.slice(countryPrefix.length);
+  }
   const phone = `+${countryPrefix}${digits}`;
   return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : null;
 }
@@ -128,6 +141,16 @@ export function composePhonePorPais(codigoPais: string, localNumber: string): st
   const pais = COUNTRIES.find((c) => c.code === codigoPais);
   if (!pais) return null;
   return composePhone(pais.prefix, localNumber);
+}
+
+export function tryAcquireSubmission(lock: { current: boolean }): boolean {
+  if (lock.current) return false;
+  lock.current = true;
+  return true;
+}
+
+export function releaseSubmission(lock: { current: boolean }): void {
+  lock.current = false;
 }
 
 // Mapea el estado de respuestas del wizard al arreglo de respuestas del

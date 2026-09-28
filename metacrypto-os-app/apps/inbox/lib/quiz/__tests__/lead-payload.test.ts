@@ -8,6 +8,8 @@ import {
   buildQuizPayload,
   composePhone,
   composePhonePorPais,
+  releaseSubmission,
+  tryAcquireSubmission,
   type SourceData,
 } from "@/lib/quiz/lead-payload";
 
@@ -49,6 +51,22 @@ describe("composePhonePorPais (teléfono del selector país+local → E.164)", (
     expect(composePhonePorPais("AR", "12345678901")).toBeNull();
     expect(composePhonePorPais("AR", "351 15 15 123456")).toBeNull();
   });
+
+  test("un prefijo internacional escrito sin + no se duplica", () => {
+    for (const [country, local, expected] of [
+      ["ES", "34600111222", "+34600111222"],
+      ["MX", "525512345678", "+525512345678"],
+      ["CO", "573001234567", "+573001234567"],
+      ["BR", "5511987654321", "+5511987654321"],
+    ]) {
+      expect(composePhonePorPais(country, local)).toBe(expected);
+      expect(composePhonePorPais(country, `+${local}`)).toBe(expected);
+    }
+  });
+
+  test("un área local igual al prefijo del país no se recorta", () => {
+    expect(composePhonePorPais("BR", "55 99999-9999")).toBe("+5555999999999");
+  });
 });
 
 describe("buildQuizPayload (honeypot v4 M1)", () => {
@@ -79,4 +97,12 @@ describe("buildQuizPayload (honeypot v4 M1)", () => {
     const lead = payload.lead as { website?: string };
     expect(lead.website).toBe("http://bot.com");
   });
+});
+
+test("el lock de completed admite un solo submit y se libera para reintentar", () => {
+  const lock = { current: false };
+  expect(tryAcquireSubmission(lock)).toBe(true);
+  expect(tryAcquireSubmission(lock)).toBe(false);
+  releaseSubmission(lock);
+  expect(tryAcquireSubmission(lock)).toBe(true);
 });

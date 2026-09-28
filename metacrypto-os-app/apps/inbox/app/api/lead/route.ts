@@ -15,6 +15,7 @@ import {
   mapRpcError,
   utf8ByteLength,
   validateLeadContract,
+  validateLeadRpcResult,
 } from "@/lib/quiz/lead-validate";
 
 export const runtime = "nodejs";
@@ -115,7 +116,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     { p_payload: validation.payload }
   );
 
-  if (r.status === 200 && r.json?.ok) {
+  if (r.status === 200 && validateLeadRpcResult(
+    r.json,
+    validation.payload.session_id,
+    validation.payload.event,
+  )) {
     const evento = String(validation.payload.event);
     const estado = r.json.status;
     const nRespuestas = Array.isArray(validation.payload.answers) ? validation.payload.answers.length : 0;

@@ -17,6 +17,7 @@ process.env.LEAD_COMPLETED_RATE_LIMIT_MAX = "1";
 process.env.LEAD_RAW_RATE_LIMIT_MAX = "10";
 
 const { POST } = await import("@/app/api/lead/route");
+const { rest } = await import("@/lib/supabase");
 const { resetRateLimiter } = await import("@/lib/quiz/rate-limit");
 
 const sessionId = "00000000-0000-4000-8000-000000000098";
@@ -82,5 +83,13 @@ describe("POST /api/lead - validación sin base", () => {
     let response: Response | null = null;
     for (let i = 0; i < 11; i += 1) response = await call({}, "127.0.0.12");
     expect(response?.status).toBe(429);
+  });
+
+  test("un HTTP 200 con respuesta RPC malformada se convierte en 502", async () => {
+    vi.mocked(rest).mockResolvedValueOnce({
+      status: 200,
+      json: { ok: true, session_id: "00000000-0000-4000-8000-000000000000" },
+    } as never);
+    expect((await call(completed, "127.0.0.13")).status).toBe(502);
   });
 });

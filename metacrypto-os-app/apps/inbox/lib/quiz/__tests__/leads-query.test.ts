@@ -65,6 +65,7 @@ describe("buildLeadsQuery", () => {
     expect(con({ desde: "2026-09-01" })).toContain("created_at=gte.2026-09-01T00:00:00Z");
     expect(con({ hasta: "2026-09-30" })).toContain("created_at=lt.2026-10-01T00:00:00Z");
     expect(con({ paso: "capital" })).toContain("last_step_id=eq.capital");
+    expect(con({ paso: "capital" })).toContain("estado=eq.dropped");
     expect(con({ version: "a-b-c" })).toContain("quiz_version_id=eq.a-b-c");
     expect(con({ utm_source: "instagram" })).toContain("utm_source=eq.instagram");
     expect(con({ utm_campaign: "diag 2026" })).toContain("utm_campaign=eq.diag%202026");
@@ -105,14 +106,16 @@ describe("buildLeadsQuery", () => {
     expect(con({ hasta: "99-99-9999" })).not.toContain("created_at=lt");
     expect(con({ hasta: "2026-02-31" })).not.toContain("created_at=lt"); // fecha imposible
     expect(con({ desde: "2026-09-01" })).toContain("created_at=gte.2026-09-01T00:00:00Z");
+    expect(con({ hasta: "9999-12-31" })).toContain("created_at=lt.10000-01-01T00:00:00.000Z");
   });
 });
 
 describe("buildClientesQuery (v4 I7/I8)", () => {
-  test("el inner join de programas va DENTRO del select (exige programa)", () => {
+  test("consulta la vista autoritativa de programa activo", () => {
     const q = buildClientesQuery();
-    expect(q).toContain("personas?estado=eq.cliente");
-    expect(q).toContain("select=id,nombre,email,telefono_e164,programas!inner(tier,tiers(nombre))");
+    expect(q).toContain("v_clientes_para_vincular?");
+    expect(q).toContain("select=id,nombre,email,telefono_e164,programa");
+    expect(q).not.toContain("programas!inner");
     expect(q).toContain("limit=51");
   });
 

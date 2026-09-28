@@ -46,7 +46,10 @@ export default async function LeadDetallePage({ params }: { params: Promise<{ id
   const lead = await getLeadDetalle(id);
   if (!lead) notFound();
 
-  const { clientes, hayMas: hayMasClientes } = await getClientesParaVincular();
+  const picker = lead.persona_id && lead.persona_estado === "lead"
+    ? await getClientesParaVincular()
+    : { clientes: [], hayMas: false };
+  const { clientes, hayMas: hayMasClientes } = picker;
   const diagJson = lead.diagnosis_result ? JSON.stringify(lead.diagnosis_result, null, 2) : null;
 
   return (
@@ -91,7 +94,7 @@ export default async function LeadDetallePage({ params }: { params: Promise<{ id
             <dt>País</dt><dd>{lead.pais_capturado || "—"}</dd>
             <dt>Consentimiento</dt>
             <dd>
-              {esConsentimientoLegacySinRegistro(lead.consentimiento_version) ? (
+              {esConsentimientoLegacySinRegistro(lead.consentimiento_version, lead.consentimiento_origen) ? (
                 <>Sin registro verificable · revisar</>
               ) : lead.consentimiento_aceptado === true ? (
                 <>Sí · <code>{lead.consentimiento_version}</code> · {lead.consentimiento_at ? dateEs(lead.consentimiento_at) : "—"}</>

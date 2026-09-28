@@ -125,12 +125,17 @@ export function buildLeadsQuery(f: LeadFilters): string {
   if (desde) parts.push(`created_at=gte.${desde}T00:00:00Z`);
   // L-01 (auditoría v3): el hasta con 23:59:59Z se comía el último segundo
   // fraccionario — excluye con < medianoche del día siguiente.
-  if (hasta) {
+  if (hasta === "9999-12-31") {
+    parts.push("created_at=lt.10000-01-01T00:00:00.000Z");
+  } else if (hasta) {
     const d = new Date(`${hasta}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() + 1);
     parts.push(`created_at=lt.${d.toISOString().slice(0, 10)}T00:00:00Z`);
   }
-  if (f.paso) parts.push(`last_step_id=eq.${encodeURIComponent(f.paso)}`);
+  if (f.paso) {
+    parts.push("estado=eq.dropped");
+    parts.push(`last_step_id=eq.${encodeURIComponent(f.paso)}`);
+  }
   if (f.utm_source) parts.push(`utm_source=eq.${encodeURIComponent(f.utm_source)}`);
   if (f.utm_medium) parts.push(`utm_medium=eq.${encodeURIComponent(f.utm_medium)}`);
   if (f.utm_campaign) parts.push(`utm_campaign=eq.${encodeURIComponent(f.utm_campaign)}`);
@@ -204,6 +209,8 @@ export interface LeadDetalle extends LeadRow {
   consentimiento_aceptado: boolean | null;
   consentimiento_version: string | null;
   consentimiento_at: string | null;
+  consentimiento_origen: "canonical" | "legacy-unknown" | null;
+  registro_origen: "canonical" | "legacy-unknown" | null;
   started_at: string | null;
   utm_term: string | null;
   referrer: string | null;
@@ -223,7 +230,7 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
         "id", "session_id", "estado", "schema_version", "created_at", "started_at", "finished_at",
         "dropped_at", "last_activity_at", "last_step_id", "last_step_index",
         "nombre_capturado", "email_capturado", "telefono_e164_capturado", "pais_capturado",
-        "consentimiento_aceptado", "consentimiento_version", "consentimiento_at",
+        "consentimiento_aceptado", "consentimiento_version", "consentimiento_at", "consentimiento_origen", "registro_origen",
         "capital_min_usd", "capital_max_usd", "es_lead_caliente", "qualification_rule_version",
         "motivo_calificacion", "diagnosis_version", "diagnosis_result",
         "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "referrer",
@@ -258,6 +265,8 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
     consentimiento_aceptado: fila.consentimiento_aceptado as boolean | null,
     consentimiento_version: fila.consentimiento_version as string | null,
     consentimiento_at: fila.consentimiento_at as string | null,
+    consentimiento_origen: fila.consentimiento_origen as LeadDetalle["consentimiento_origen"],
+    registro_origen: fila.registro_origen as LeadDetalle["registro_origen"],
     started_at: fila.started_at as string | null,
     utm_term: fila.utm_term as string | null,
     referrer: fila.referrer as string | null,
@@ -292,8 +301,8 @@ export const CLIENTES_PAGE_SIZE = 50;
 export function buildClientesQuery(q?: string, page = 1): string {
   const safePage = parseLeadPage(page);
   const parts = [
-    "personas?estado=eq.cliente",
-    "select=id,nombre,email,telefono_e164,programas!inner(tier,tiers(nombre))",
+    "v_clientes_para_vincular?",
+    "select=id,nombre,email,telefono_e164,programa",
     "order=nombre.asc,id.asc",
     `limit=${CLIENTES_PAGE_SIZE + 1}`,
   ];
@@ -305,8 +314,8 @@ export function buildClientesQuery(q?: string, page = 1): string {
   return parts.join("&");
 }
 
-export function esConsentimientoLegacySinRegistro(version: string | null): boolean {
-  return version === "legacy-sin-registro";
+export function esConsentimientoLegacySinRegistro(version: string | null, origen?: string | null): boolean {
+  return origen === "legacy-unknown" || version === "legacy-sin-registro";
 }
 
 export async function getClientesParaVincular(q?: string, page = 1): Promise<{ clientes: ClienteParaVincular[]; hayMas: boolean }> {
@@ -316,7 +325,7 @@ export async function getClientesParaVincular(q?: string, page = 1): Promise<{ c
       nombre: string;
       email: string | null;
       telefono_e164: string | null;
-      programas: { tier: string; tiers: { nombre: string } | null }[];
+      programa: string | null;
     }[]
   >("GET", buildClientesQuery(q, page));
   if (r.status >= 400) throw new Error(`clientes_para_vincular_http_${r.status}`);
@@ -326,7 +335,7 @@ export async function getClientesParaVincular(q?: string, page = 1): Promise<{ c
     nombre: c.nombre,
     email: c.email,
     telefono_e164: c.telefono_e164,
-    programa: c.programas?.[0]?.tiers?.nombre ?? c.programas?.[0]?.tier ?? null,
+    programa: c.programa,
   })), hayMas: rows.length > CLIENTES_PAGE_SIZE };
 }
 

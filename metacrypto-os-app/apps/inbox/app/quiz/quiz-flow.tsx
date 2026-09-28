@@ -32,6 +32,8 @@ import {
   buildQuizPayload,
   capturarSource,
   composePhonePorPais,
+  releaseSubmission,
+  tryAcquireSubmission,
   type QuizAnswerState,
   type SourceData,
 } from "@/lib/quiz/lead-payload";
@@ -53,6 +55,7 @@ export function QuizFlow() {
   const [transitioning, setTransitioning] = useState(false);
   const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
   const [leadName, setLeadName] = useState("");
+  const [submittingContact, setSubmittingContact] = useState(false);
 
   const sessionIdRef = useRef<string | null>(null);
   const sourceRef = useRef<SourceData | null>(null);
@@ -65,6 +68,7 @@ export function QuizFlow() {
   const lastStepRef = useRef<{ id: string; index: number }>({ id: "start", index: 0 });
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedRef = useRef(false);
+  const submittingContactRef = useRef(false);
   const eventQueueRef = useRef(Promise.resolve());
 
   // Los hooks de envío viven en callbacks estables para no re-registrar
@@ -232,6 +236,9 @@ export function QuizFlow() {
     );
     const stages = recordStage("analysis");
     lastStepRef.current = { id: "analysis", index: CANONICAL_STEPS.indexOf("analysis") };
+    const submittedSessionId = sessionIdRef.current!;
+    if (!tryAcquireSubmission(submittingContactRef)) return;
+    setSubmittingContact(true);
 
     // El contacto se persiste ANTES de mostrar el resultado (docs/11 Fase B.6).
     // Si falla, el lead ve el error y reintenta: no se pierde ni se finge éxito.
@@ -243,7 +250,7 @@ export function QuizFlow() {
         body: JSON.stringify(
           buildQuizPayload({
             event: "completed",
-            sessionId: sessionIdRef.current!,
+            sessionId: submittedSessionId,
             source: sourceRef.current ?? capturarSource(),
             stepId: "result",
             stepIndex: CANONICAL_STEPS.indexOf("result"),
@@ -255,6 +262,8 @@ export function QuizFlow() {
         ),
       });
       if (!response.ok) {
+        releaseSubmission(submittingContactRef);
+        setSubmittingContact(false);
         setContactError("No pudimos guardar tu diagnóstico. Revisá los datos e intentá de nuevo.");
         return;
       }
@@ -270,12 +279,16 @@ export function QuizFlow() {
         data.ok !== true ||
         data.status !== "completed" ||
         !data.submission_id ||
-        data.session_id !== sessionIdRef.current
+        data.session_id !== submittedSessionId
       ) {
+        releaseSubmission(submittingContactRef);
+        setSubmittingContact(false);
         setContactError("El diagnóstico no terminó de guardarse. Intentá de nuevo en unos segundos.");
         return;
       }
     } catch {
+      releaseSubmission(submittingContactRef);
+      setSubmittingContact(false);
       setContactError("Problema de conexión. Intentá de nuevo en unos segundos.");
       return;
     }
@@ -417,7 +430,7 @@ export function QuizFlow() {
           {question.hint && <p className="q-hint">{question.hint}</p>}
 
           {isContact ? (
-            <ContactForm onSubmit={submitContact} error={contactError} />
+            <ContactForm onSubmit={submitContact} error={contactError} submitting={submittingContact} />
           ) : question.type === "allocation" ? (
             <AllocationQuestion question={question} answer={answers[question.id]} onPick={pickAllocation} />
           ) : (
@@ -617,9 +630,11 @@ function AnalysisTimer({ step, onDone }: { step: number; onDone: () => void }) {
 function ContactForm({
   onSubmit,
   error,
+  submitting,
 }: {
   onSubmit: (form: { name: string; email: string; phoneLocal: string; country: string; consent: boolean; consentAcceptedAt: string; website: string }) => void;
   error: string | null;
+  submitting: boolean;
 }) {
   const [form, setForm] = useState({ name: "", email: "", phoneLocal: "", country: "AR", consent: false, consentAcceptedAt: "", website: "" });
   const update = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -668,8 +683,8 @@ function ContactForm({
         <span>{CONSENT_TEXT}</span>
       </label>
       {error && <div className="contact-error" role="alert">{error}</div>}
-      <button className="btn-gold opt-next" type="button" onClick={() => onSubmit(form)}>
-        Ver mi diagnóstico personalizado
+      <button className="btn-gold opt-next" type="button" disabled={submitting} onClick={() => onSubmit(form)}>
+        {submitting ? "Guardando diagnóstico..." : "Ver mi diagnóstico personalizado"}
       </button>
     </div>
   );

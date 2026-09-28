@@ -113,6 +113,7 @@ function validateLead(lead: unknown): string | null {
   // la normalización E.164 completa queda para el endpoint + documentación.
   const normalizedPhone = composePhonePorPais(countryCode, lead.phone);
   if (!normalizedPhone) return "bad_phone";
+  if (lead.website !== undefined && typeof lead.website !== "string") return "bad_honeypot";
   if (typeof lead.website === "string" && lead.website.trim() !== "") return "honeypot";
   const consent = lead.consent;
   if (!isObj(consent)) return "bad_consent";
@@ -144,6 +145,7 @@ export function validateLeadContract(input: unknown): ValidationOk | ValidationE
   for (const key of Object.keys(input)) {
     if (!["schema_version", "quiz_version", "session_id", "event", "occurred_at", "source", "progress", "lead", "answers", "diagnosis", "client_context", "website"].includes(key)) return { ok: false, reason: "unexpected_field" };
   }
+  if (input.website !== undefined && typeof input.website !== "string") return { ok: false, reason: "bad_honeypot" };
   if (typeof input.website === "string" && input.website.trim() !== "") return { ok: false, reason: "honeypot" };
   if (input.schema_version !== 1) return { ok: false, reason: "bad_schema_version" };
   if (!isStr(input.quiz_version, 64)) return { ok: false, reason: "bad_quiz_version" };
@@ -186,8 +188,9 @@ export function validateLeadContract(input: unknown): ValidationOk | ValidationE
   const payload: Record<string, unknown> = { ...input };
   delete payload.website;
   if (lead) {
+    const { website: _website, ...safeLead } = lead;
     payload.lead = {
-      ...lead,
+      ...safeLead,
       name: String(lead.name).trim(),
       email: String(lead.email).trim().toLowerCase(),
       country: String(lead.country).toUpperCase(),
@@ -196,6 +199,19 @@ export function validateLeadContract(input: unknown): ValidationOk | ValidationE
   }
   if (input.source === undefined) payload.source = null;
   return { ok: true, payload };
+}
+
+export function validateLeadRpcResult(
+  value: unknown,
+  expectedSessionId: unknown,
+  event: unknown,
+): value is { ok: true; session_id: string; submission_id: string; status: string } {
+  if (!isObj(value) || value.ok !== true) return false;
+  if (typeof expectedSessionId !== "string" || value.session_id !== expectedSessionId) return false;
+  if (typeof value.session_id !== "string" || !UUID_RE.test(value.session_id)) return false;
+  if (typeof value.submission_id !== "string" || !UUID_RE.test(value.submission_id)) return false;
+  if (typeof value.status !== "string" || !new Set(["started", "in_progress", "dropped", "completed"]).has(value.status)) return false;
+  return event !== "completed" || value.status === "completed";
 }
 
 // Mapea el mensaje del RPC (prefijo quiz_leads/) a código HTTP sin filtrar

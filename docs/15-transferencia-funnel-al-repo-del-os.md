@@ -2,14 +2,14 @@
 
 ## Estado del artefacto
 
-`release/funnel-leads.patch` corresponde al checkout auditado anterior: 36 archivos y migraciones `0068` a `0072`. No contiene las correcciones v5 en curso y **no debe transferirse ni desplegarse** como artefacto final.
+`release/funnel-leads.patch` se regenera desde la base auditada con las correcciones v5 y `0073`. Queda como artefacto candidato: no debe desplegarse hasta pasar `git apply --check` y todas las compuertas contra el HEAD central real.
 
-El patch se regenera solo cuando:
+El artefacto se considera transferible solo cuando:
 
-1. se reserve el numero global posterior a `0072`;
-2. se implemente la reconciliacion append-only;
-3. pasen instalacion limpia, matriz historica y gates completos;
-4. el checkout integrado este cerrado.
+1. el operador confirme globalmente `0073`;
+2. pase `git apply --check` contra el HEAD central;
+3. pase el workflow remoto sin omitidos;
+4. el diff integrado sea revisado.
 
 ## Procedimiento de transferencia
 
@@ -32,19 +32,18 @@ No se hace commit, push, merge o PR hasta revisar el diff y ejecutar las compuer
 - `/quiz`, `/api/lead`, tracking, consentimiento, telefono y rate limit.
 - `/leads`, selector y acciones de vinculacion/descarte/rollback.
 - Tests unitarios, HTTP, RPC, concurrencia y upgrade historico.
-- Migraciones `0068` a `0072` y la nueva reconciliacion numerada globalmente.
+- Migraciones `0068` a `0073`.
 - Workflow de integracion del modulo.
 - `package.json`, lockfile y configuracion indispensables para reproducir el checkout.
-- Documentacion `13` a `17` aplicable al modulo.
+- El seed ficticio minimo necesario para que el reset respete el catalogo vigente.
 
-No se incluyen seeds o basura local, credenciales ni cambios generales del OS.
+No se incluyen datos reales, basura local, credenciales ni cambios generales del OS.
 
 ## Validacion en checkout limpio
 
 ```bash
-git apply --check release/funnel-leads.patch
+git apply --check ../herramienta-berni/release/funnel-leads.patch
 
-cd metacrypto-os-app
 supabase start
 supabase db reset
 
@@ -63,7 +62,7 @@ Ademas se ejecuta la matriz historica definida en `docs/17`. Un `db reset` limpi
 
 1. Backup y restauracion probada.
 2. Preflight de datos historicos.
-3. Migraciones `0068 -> 0072 -> <nueva reconciliacion>`.
+3. Migraciones `0068 -> 0073`.
 4. Verificacion de catalogo y RPC.
 5. Deploy de codigo.
 6. Smoke del modulo.

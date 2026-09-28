@@ -1,19 +1,19 @@
 # 14 - Estado del proyecto y GO / NO GO
 
-Estado actualizado: 24-sep-2026. Rama: `fix/quiz-leads-auditoria-v5`. Base: `79d7f4f27bc5feddf3d9a260ca26b634d3f22db8`.
+Estado actualizado: 28-sep-2026. Rama: `fix/quiz-leads-auditoria-v5`. Base: `79d7f4f27bc5feddf3d9a260ca26b634d3f22db8`.
 
 ## Producto revisado
 
 - Funnel publico `/quiz`.
 - `POST /api/lead` y tracking/consentimiento/telefono.
-- Persistencia y RPC de las migraciones `0068` a `0072`.
+- Persistencia y RPC de las migraciones `0068` a `0073`.
 - Modulo privado `/leads`, vinculacion, descarte y rollback.
 
 ## Veredicto
 
-**NO GO del modulo.** No se declara listo a nivel de desarrollo ni produccion.
+**GO para auditoria independiente; NO GO para produccion.** El cierre local de desarrollo esta completo, pero faltan las compuertas externas y operativas.
 
-La auditoria v5 demostro que una base historica con completed y strings vacios puede fallar al llegar a `0072`; un `progress` tardio altera el paso de un abandono; `desvincular_lead` no obtiene normalmente el lock canonico; la inmutabilidad de versiones es incompleta. Estos puntos necesitan una migracion append-only cuyo numero global todavia no esta reservado.
+`0073_reconciliacion_quiz_leads_v3.sql` corrige la convergencia historica, terminalidad, procedencia, privacidad, inmutabilidad y locks canonicos sin editar migraciones publicadas. La matriz historica y las carreras requeridas convergen en local.
 
 ## Correcciones de aplicacion validadas
 
@@ -33,28 +33,27 @@ Estos cambios no cierran por si solos los hallazgos SQL.
 
 | Compuerta | Resultado |
 |---|---|
-| Reset limpio `0001` a `0072` | OK; 69 migraciones aplicadas |
-| Integracion RPC + `/api/lead` | 48 passed, 0 failed, 0 skipped |
-| Suite Inbox con DB obligatoria | 1.362 passed, 0 failed, 0 skipped |
+| Reset limpio `0001` a `0073` | OK; 70 migraciones aplicadas |
+| Integracion RPC enfocada | 47 passed, 0 failed, 0 skipped; incluye seis carreras v5 |
+| Suite Inbox con DB obligatoria | 1.381 passed, 0 failed, 0 skipped (1.380 integrada con DB + regresion pura de doble submit) |
 | TypeScript | OK, incluido despues del build |
 | ESLint | 0 errores, 16 warnings preexistentes |
 | Build Inbox | OK |
 | Tests y build de raiz | 39/39, 0 skipped; build OK |
-| Supabase CLI | `2.117.0` via binario local de `npx` |
-| Matriz historica | Bloqueada por migracion sin numero; el entorno DB si esta disponible |
-| Patch final | No regenerado; el artefacto existente esta obsoleto para esta rama |
+| Supabase CLI | `2.118.0` via binario local de `npx` |
+| Matriz historica | PASS: `0068`, `0068+0069`, `0070`, `0071` y pre-`0072` con preflight; `0073` tambien reaplica sin error |
+| Dependencias | `npm audit --omit=dev`: 1 moderada + 1 alta transitivas en PostCSS; el fix propuesto exige Next 16 y queda fuera de alcance |
+| Patch final | 44 archivos; `git apply --check` y aplicacion sobre baseline reconstruido OK; validacion contra HEAD central pendiente |
 
-Estos conteos corresponden al checkout actual y a un reset limpio. No sustituyen la matriz de upgrades historicos ni permiten cerrar los hallazgos SQL.
+Estos conteos corresponden al checkout actual y datos ficticios locales. No sustituyen las compuertas externas de produccion.
 
 ## Condiciones para GO
 
-1. Numero global reservado y migracion implementada sin editar `0068` a `0072`.
-2. Upgrade con datos conflictivos y equivalencia de catalogo/behavior en todas las rutas historicas.
-3. Concurrencia de completar/vincular/desvincular/descartar y doble rollback en verde.
-4. Suite completa con DB obligatoria y cero omitidos.
-5. TypeScript, ESLint, builds y tests de raiz en verde.
-6. Backup/restauracion probados antes de migrar.
-7. Migraciones antes del codigo y smoke posterior.
-8. Rate limit distribuido configurado por el operador.
+1. Confirmacion global de `0073` y validacion del patch contra el HEAD central real.
+2. Primera ejecucion verde del workflow remoto.
+3. Backup/restauracion probados antes de migrar.
+4. Migraciones antes del codigo y smoke posterior.
+5. Rate limit distribuido configurado por el operador.
+6. Riesgo transitivo de PostCSS aceptado o resuelto en una actualizacion de dependencias separada.
 
 Los problemas generales del OS quedan fuera de este documento y de esta correccion.

@@ -1,8 +1,8 @@
 # 17 - Spec tecnica: correcciones de auditoria v5 del quiz y leads
 
-Estado: vigente para la rama `fix/quiz-leads-auditoria-v5`.
+Estado: vigente para la rama `fix/quiz-leads-auditoria-v5`; implementacion local cerrada y lista para auditoria independiente, aun `NO GO` de produccion.
 
-Base verificada: `origin/main` en `79d7f4f27bc5feddf3d9a260ca26b634d3f22db8` el 24-sep-2026.
+Base original: `origin/main` en `79d7f4f27bc5feddf3d9a260ca26b634d3f22db8`. Punto de partida verificado: rama local y remota en `32c3b4326d95b266e8ff8fb88d008e97527d2219` el 27-sep-2026, con arbol limpio.
 
 Esta especificacion complementa `docs/11` y `docs/12`. En caso de conflicto sobre las correcciones de la auditoria v5, este documento prevalece. Las migraciones `0068` a `0072` son inmutables.
 
@@ -33,12 +33,12 @@ No se modifican WhatsApp/webhooks, Inbox, autenticacion general, SSRF de media, 
 
 ### 5.1 Upgrade y compatibilidad historica
 
-La siguiente migracion global confirmada sera append-only. Al 24-sep-2026 el numero aun no esta reservado, por lo que no se crea un archivo SQL provisional.
+La migracion global append-only confirmada es `0073_reconciliacion_quiz_leads_v3.sql`. La disponibilidad se volvio a comprobar despues de `git fetch --prune origin`: ninguna referencia local o remota disponible usa `0073`.
 
 La migracion debe:
 
-- agregar procedencia explicita a envios historicos, con valores equivalentes a `canonical` y `legacy-unknown`;
-- clasificar como `legacy-unknown` todo supuesto `completed` que no tenga nombre, email, telefono, persona, fecha final o evidencia verificable de consentimiento;
+- agregar `registro_origen` y `consentimiento_origen` con los valores cerrados `canonical` y `legacy-unknown`;
+- clasificar conservadoramente como `legacy-unknown` todo `completed` anterior a `0073`: las migraciones anteriores no guardaron procedencia inequivoca y no se infiere consentimiento por igualdad o diferencia de timestamps;
 - conservar snapshots, timestamps y valores vacios originales para trazabilidad; no fabricar contacto, persona, consentimiento ni fechas;
 - permitir que esos registros atraviesen el upgrade sin tratarlos como finalizaciones canonicas nuevas;
 - mantener validacion estricta para toda escritura nueva por RPC;
@@ -47,9 +47,18 @@ La migracion debe:
 
 La informacion que `0071` ya sintetizo no puede reconstruirse. La migracion no reclasificara por la heuristica `contacto-v1` mas igualdad entre `consentimiento_at` y `finished_at`, porque esa igualdad tambien puede ser legitima. Se preserva el dato existente y se marca su evidencia como historica/desconocida cuando no exista una fuente inequivoca.
 
+`0072` agrega su constraint estricto antes de que `0073` pueda ejecutarse. Para instalaciones que aun no aplicaron `0072` y contienen `completed` incompatibles, el runbook incluye un preflight transaccional, con ingesta detenida y backup/restauracion probados: guarda solo los UUID y el estado original en `quiz_leads_legacy_upgrade_stage`, mueve temporalmente esos envios a `in_progress`, aplica `0072` y deja que `0073` los restaure como `completed/legacy-unknown`. Sin ese puente, la ruta queda bloqueada antes de alcanzar `0073`. La tabla staging tiene RLS, no copia PII y se elimina al verificar la convergencia.
+
+### 5.1.1 Modelo final de datos
+
+- Nuevas finalizaciones por `registrar_diagnostico` escriben ambas procedencias como `canonical`.
+- Un constraint `NOT VALID`, luego clasificado y validado, exige contacto y consentimiento completos solo a `completed/canonical`; permite preservar los valores originales de `completed/legacy-unknown`.
+- Un trigger impide insertar directamente un nuevo `completed/legacy-unknown` o convertir una fila nueva a ese estado; la excepcion de reconciliacion existe solo dentro de la migracion antes de crear el trigger.
+- Las filas terminales no pueden actualizarse mediante escritura directa, salvo la transicion contractual `dropped -> completed` y los cambios de propietario validados por las RPC canonicas. La eliminacion de mantenimiento sigue reservada a `service_role`.
+
 ### 5.2 Tracking
 
-- Los IDs e indices se validan contra una lista canonica server-side.
+- Los IDs e indices se validan como pareja contra `quiz_versiones.definicion.steps` en la frontera RPC; el endpoint conserva la misma lista canonica.
 - `started` crea la sesion en el paso inicial.
 - `progress` solo muta una sesion `started` o `in_progress`.
 - El primer `dropped` valido sobre `started` o `in_progress` fija estado, paso y timestamp.
@@ -61,6 +70,8 @@ La informacion que `0071` ya sintetizo no puede reconstruirse. La migracion no r
 ### 5.3 Concurrencia y locks
 
 Completar, vincular, desvincular y descartar usan el mismo advisory lock derivado del contacto canonico. `desvincular_lead` obtiene el contacto desde los `envio_ids` persistidos en su auditoria, que sobreviven a la vinculacion. Despues de adquirir el lock, cada RPC vuelve a leer y validar persona, auditoria, estado y conjunto exacto de envios antes de mutar.
+
+La clave se deriva exclusivamente del telefono E.164 canonico mediante un helper SQL interno. Los conjuntos auditados se ordenan por UUID y toda busqueda de auditoria usa `created_at DESC, id DESC`; email, `lead_id` y timestamps no forman claves alternativas.
 
 Resultados concurrentes:
 
@@ -87,6 +98,7 @@ El navegador ayuda a componer, pero el servidor es autoritativo.
 - Se elimina `54`, troncal `0`, indicador `9` y marcador `15` segun corresponda; el numero nacional resultante debe tener exactamente diez digitos.
 - El resultado argentino siempre es `+549` mas esos diez digitos, por la decision de negocio de asumir movil.
 - Otros paises conservan normalizacion E.164 y coherencia con su prefijo configurado.
+- Un prefijo ya escrito, con o sin `+`, se consume una sola vez. Los paises que comparten `+1` se validan contra su prefijo configurado completo; los casos ambiguos se rechazan.
 
 ### 5.6 Rate limit
 
@@ -100,13 +112,19 @@ Existe ademas un limite bruto de bytes antes del parseo. La proteccion local sig
 ### 5.7 Selector y `/leads`
 
 - Busqueda server-side paginada, sin limite silencioso, con tamano acotado y señal `hayMas`.
-- Solo devuelve clientes con programa mediante join interno.
+- Solo devuelve clientes con programa vigente segun `v_programa_activo`; nunca usa un `programas[0]` sin orden.
 - Cada resultado muestra identidad y programa suficientes para desambiguar.
 - La UI ignora respuestas cuyo request id ya no sea el vigente y siempre cierra el estado de carga de la peticion vigente.
 - `page` solo acepta enteros finitos positivos y queda acotado a un maximo documentado.
 - Fechas se validan como fechas calendario reales; `hasta` incluye el dia completo mediante limite superior exclusivo del dia siguiente.
 - Todo error PostgREST se propaga de forma controlada, no como lista vacia.
 - Vincular, descartar y desvincular revalidan listado y detalle.
+- El detalle solo consulta el picker para una persona temporal en estado `lead`; un fallo del picker no rompe estados que no pueden vincularse.
+- `page` se normaliza a 1 salvo que sea un entero finito entre 1 y `10000`. `hasta=9999-12-31` se expresa sin construir un ano ISO 10000.
+
+### 5.8 Privacidad acotada
+
+Las auditorias de vinculacion, desvinculacion y descarte no persisten `telefono_lead` ni `telefono_cliente`; `envio_ids` es la fuente durable del rollback y del lock. `0073` elimina solo esas claves de filas historicas propias del modulo y agrega una restriccion acotada a esas acciones. No se modifica la policy generica de la tabla compartida `auditoria`. La verificacion usa un usuario Auth real y confirma que ninguna consulta como `authenticated` expone telefonos del funnel.
 
 ## 6. Contrato HTTP
 
@@ -119,15 +137,18 @@ Existe ademas un limite bruto de bytes antes del parseo. La proteccion local sig
 - aplica cuota de tracking o completed despues de identificar de forma segura el evento;
 - no convierte datos invalidos del cliente en 500/502;
 - conserva respuesta exitosa `{ok, session_id, submission_id, status}` sin `persona_id`.
+- valida en runtime la respuesta de la RPC: `ok`, estado permitido, UUIDs, presencia de `submission_id` y coincidencia estricta de `session_id`; un HTTP 200 interno con forma incorrecta se convierte en 502 y nunca en exito publico.
+- acepta el honeypot solo ausente o como string; string no vacio se ignora como bot y cualquier otro tipo se rechaza con 400.
 
 ## 7. Contratos RPC
 
-Las firmas publicas existentes se conservan. La nueva migracion redefine internamente:
+Las firmas reales obtenidas de `0072` y que `0073` conserva son:
 
 - `registrar_diagnostico(jsonb)`: validacion canonica, orden terminal y lock de contacto;
-- `vincular_lead_convertido(uuid, uuid, boolean)`: mismo lock y revalidacion post-lock;
-- `desvincular_lead(uuid, uuid)`: contacto desde auditoria/envios vinculados, mismo lock y rollback exacto;
-- `descartar_lead(uuid, text)`: mismo lock y conflicto determinista.
+- `vincular_lead_convertido(uuid, uuid, boolean, uuid)`: mismo lock y revalidacion post-lock;
+- `desvincular_lead(uuid, uuid, uuid)`: contacto desde auditoria/envios vinculados, mismo lock y rollback exacto;
+- `descartar_lead(uuid, uuid)`: mismo lock y conflicto determinista;
+- `validar_respuestas_quiz(jsonb, jsonb, boolean)`: helper interno sin acceso de clientes.
 
 Solo `service_role` recibe `EXECUTE`; `public`, `anon` y `authenticated` quedan revocados. Las tablas mantienen RLS habilitado y sin lectura generica. Las funciones `SECURITY DEFINER` fijan `search_path`.
 
@@ -156,6 +177,8 @@ Tests de regresion primero, observados fallando contra la base auditada:
 11. Paginas decimales, infinitas, cero, negativas y enormes; fechas imposibles y ultimo dia completo; errores PostgREST.
 12. Body multibyte sin `Content-Length`, ISO imposible y `ZZ`, todos con 4xx.
 13. Inspeccion de catalogo y comportamiento sobre instalacion limpia y cada ruta historica.
+14. JWT `authenticated` real contra tablas del modulo y `auditoria`, ademas de grants RPC.
+15. Respuesta RPC malformada, honeypots tipados y doble `completed` mientras el POST sigue pendiente.
 
 ## 10. Matriz historica obligatoria
 
@@ -165,6 +188,7 @@ Tests de regresion primero, observados fallando contra la base auditada:
 - Primera `0070` y luego actuales.
 - `0071` anterior y luego actuales.
 - Datos conflictivos: completed con strings vacios y evidencia de consentimiento ambigua.
+- Cada ruta anterior ejecuta tambien `0073`; las rutas incompatibles con `0072` usan el preflight documentado y verifican restauracion exacta.
 
 Cada ruta debe converger en funciones, constraints, triggers, indices, grants, RLS, firmas RPC y comportamiento. Una ruta que no pueda atravesar una migracion publicada anterior se documenta como bloqueo operacional y requiere preflight antes de aplicar esa migracion; una migracion posterior no puede reparar SQL que nunca llego a ejecutarse.
 
@@ -181,14 +205,13 @@ Cada ruta debe converger en funciones, constraints, triggers, indices, grants, R
 
 ## 12. Rollout
 
-1. Confirmar y reservar el numero global de migracion.
-2. Probar backup y restauracion.
-3. Ejecutar preflight de datos historicos y guardar conteos, sin PII.
-4. Aplicar migraciones en orden, incluida la nueva reconciliacion.
-5. Verificar catalogo y smoke RPC.
-6. Desplegar codigo.
-7. Ejecutar smoke de `/quiz` y `/leads` con datos ficticios.
-8. Activar/confirmar rate limit distribuido del operador.
+1. Probar backup y restauracion.
+2. Detener ingesta y ejecutar el preflight historico; guardar conteos sin PII.
+3. Aplicar migraciones en orden hasta `0073`.
+4. Verificar catalogo, restauracion del staging y smoke RPC.
+5. Desplegar el codigo del mismo checkout validado.
+6. Ejecutar smoke de `/quiz` y `/leads` con datos ficticios.
+7. Activar/confirmar rate limit distribuido del operador.
 
 ## 13. Rollback
 
@@ -199,6 +222,6 @@ Cada ruta debe converger en funciones, constraints, triggers, indices, grants, R
 
 ## 14. Bloqueos vigentes
 
-- Falta confirmar el numero global posterior a `0072`; por ello la implementacion SQL y la matriz historica final no pueden cerrarse.
+- El preflight historico requiere ventana operativa con ingesta detenida; una migracion posterior no puede atravesar por si sola una `0072` que aborta.
 - El rate limit distribuido pertenece a infraestructura externa y debe ser configurado y evidenciado por el operador.
 - La compatibilidad con el HEAD del repositorio central solo puede afirmarse tras aplicar y validar el patch contra ese HEAD real.

@@ -17,7 +17,7 @@ import { buildDiagnosis } from "../engine";
 import { buildWhatsAppMessage, buildWhatsAppUrl } from "../whatsapp";
 import { isRateLimited, resetRateLimiter, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "../rate-limit";
 import { composePhone, buildContractAnswers, buildQuizPayload } from "../lead-payload";
-import { normalizePhoneE164, utf8ByteLength, validateLeadContract, mapRpcError } from "../lead-validate";
+import { normalizePhoneE164, utf8ByteLength, validateLeadContract, mapRpcError, validateLeadRpcResult } from "../lead-validate";
 
 // ── config ───────────────────────────────────────────────────────────────────
 describe("config", () => {
@@ -368,6 +368,33 @@ describe("lead-validate", () => {
 
   test("honeypot: website rellenado devuelve honeypot (la ruta responde 200 falso)", () => {
     expect(validateLeadContract({ ...validCompleted, website: "http://spam" })).toMatchObject({ ok: false, reason: "honeypot" });
+  });
+
+  test("honeypot: tipos malformados se rechazan y el string vacío sigue siendo humano", () => {
+    expect(validateLeadContract({ ...validCompleted, website: "" }).ok).toBe(true);
+    for (const website of [{}, [], 1, true, null]) {
+      expect(validateLeadContract({ ...validCompleted, website })).toMatchObject({ ok: false, reason: "bad_honeypot" });
+      expect(validateLeadContract({
+        ...validCompleted,
+        lead: { ...(validCompleted.lead as object), website },
+      })).toMatchObject({ ok: false, reason: "bad_honeypot" });
+    }
+  });
+
+  test("valida en runtime el contrato positivo de registrar_diagnostico", () => {
+    expect(validateLeadRpcResult({
+      ok: true,
+      status: "completed",
+      session_id: validCompleted.session_id,
+      submission_id: "00000000-0000-4000-8000-000000000099",
+    }, validCompleted.session_id, "completed")).toBe(true);
+    expect(validateLeadRpcResult({ ok: true }, validCompleted.session_id, "completed")).toBe(false);
+    expect(validateLeadRpcResult({
+      ok: true,
+      status: "completed",
+      session_id: "00000000-0000-4000-8000-000000000097",
+      submission_id: "00000000-0000-4000-8000-000000000099",
+    }, validCompleted.session_id, "completed")).toBe(false);
   });
 
   test("normalizePhoneE164 exige E.164 realista", () => {

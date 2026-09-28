@@ -1,14 +1,77 @@
+diff --git a/.github/workflows/quiz-leads-integration.yml b/.github/workflows/quiz-leads-integration.yml
+new file mode 100644
+index 0000000..e221058
+--- /dev/null
++++ b/.github/workflows/quiz-leads-integration.yml
+@@ -0,0 +1,57 @@
++name: Quiz leads integration
++
++on:
++  pull_request:
++    paths:
++      - "apps/inbox/**"
++      - "supabase/migrations/**"
++      - "supabase/seed.sql"
++      - ".github/workflows/quiz-leads-integration.yml"
++  workflow_dispatch:
++
++jobs:
++  quiz-leads:
++    runs-on: ubuntu-latest
++    timeout-minutes: 30
++    steps:
++      - uses: actions/checkout@v4
++      - uses: actions/setup-node@v4
++        with:
++          node-version: 22
++          cache: npm
++          cache-dependency-path: apps/inbox/package-lock.json
++      - uses: supabase/setup-cli@v1
++        with:
++          version: 2.118.0
++      - name: Install Inbox dependencies
++        working-directory: apps/inbox
++        run: npm ci
++      - name: Start local Supabase and apply migrations
++        run: |
++          supabase start
++          supabase db reset
++          supabase status -o env > /tmp/supabase.env
++          source /tmp/supabase.env
++          echo "SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
++          echo "SUPABASE_ANON_KEY=$ANON_KEY" >> "$GITHUB_ENV"
++          echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
++      - name: Run required database suites with zero skips
++        working-directory: apps/inbox
++        env:
++          LEAD_TESTS_REQUIRE_DB: "1"
++        run: |
++          npx --no-install vitest run lib/quiz/__tests__/lead-route.test.ts lib/__tests__/quiz-leads-rpc.test.ts --reporter=json --outputFile=/tmp/quiz-leads-integration.json
++          node -e "const r=require('/tmp/quiz-leads-integration.json'); if(r.numPendingTests || r.numTodoTests) process.exit(1)"
++      - name: Run complete Inbox suite with zero skips
++        working-directory: apps/inbox
++        env:
++          LEAD_TESTS_REQUIRE_DB: "1"
++        run: |
++          npx --no-install vitest run --reporter=json --outputFile=/tmp/inbox-tests.json
++          node -e "const r=require('/tmp/inbox-tests.json'); if(r.numPendingTests || r.numTodoTests) process.exit(1)"
++      - name: Run Inbox static and build gates
++        working-directory: apps/inbox
++        run: |
++          npm run typecheck
++          npm run lint
++          npm run build
 diff --git a/apps/inbox/app/(os)/leads/[id]/page.tsx b/apps/inbox/app/(os)/leads/[id]/page.tsx
 new file mode 100644
-index 0000000..e6f6195
+index 0000000..1276e77
 --- /dev/null
 +++ b/apps/inbox/app/(os)/leads/[id]/page.tsx
-@@ -0,0 +1,205 @@
+@@ -0,0 +1,212 @@
 +import Link from "next/link";
 +import { notFound } from "next/navigation";
 +import { requireModulo } from "@/lib/guard";
 +import { puedeVer } from "@/lib/modulos";
-+import { getLeadDetalle, getClientesParaVincular } from "@/lib/leads";
++import { esConsentimientoLegacySinRegistro, getLeadDetalle, getClientesParaVincular } from "@/lib/leads";
 +import { dateEs, fullTime } from "@/lib/format";
 +import VincularLead from "@/components/VincularLead";
 +
@@ -52,7 +115,10 @@ index 0000000..e6f6195
 +  const lead = await getLeadDetalle(id);
 +  if (!lead) notFound();
 +
-+  const clientes = await getClientesParaVincular();
++  const picker = lead.persona_id && lead.persona_estado === "lead"
++    ? await getClientesParaVincular()
++    : { clientes: [], hayMas: false };
++  const { clientes, hayMas: hayMasClientes } = picker;
 +  const diagJson = lead.diagnosis_result ? JSON.stringify(lead.diagnosis_result, null, 2) : null;
 +
 +  return (
@@ -97,7 +163,9 @@ index 0000000..e6f6195
 +            <dt>País</dt><dd>{lead.pais_capturado || "—"}</dd>
 +            <dt>Consentimiento</dt>
 +            <dd>
-+              {lead.consentimiento_aceptado === true ? (
++              {esConsentimientoLegacySinRegistro(lead.consentimiento_version, lead.consentimiento_origen) ? (
++                <>Sin registro verificable · revisar</>
++              ) : lead.consentimiento_aceptado === true ? (
 +                <>Sí · <code>{lead.consentimiento_version}</code> · {lead.consentimiento_at ? dateEs(lead.consentimiento_at) : "—"}</>
 +              ) : lead.estado === "completed" ? "FALTA (envío completado sin consentimiento)" : "No llegó (sin completar)"}
 +            </dd>
@@ -149,6 +217,8 @@ index 0000000..e6f6195
 +                leadPersonaId={lead.persona_id}
 +                leadTelefono={lead.telefono_e164_capturado}
 +                clientes={clientes}
++                hayMasClientes={hayMasClientes}
++                envioId={lead.id}
 +                personaEstado={lead.persona_estado}
 +                leadVinculadoId={lead.leadVinculadoId}
 +              />
@@ -211,13 +281,13 @@ index 0000000..e6f6195
 +}
 diff --git a/apps/inbox/app/(os)/leads/page.tsx b/apps/inbox/app/(os)/leads/page.tsx
 new file mode 100644
-index 0000000..c17ec94
+index 0000000..eb84eae
 --- /dev/null
 +++ b/apps/inbox/app/(os)/leads/page.tsx
 @@ -0,0 +1,201 @@
 +import Link from "next/link";
 +import { requireModulo } from "@/lib/guard";
-+import { getLeads, getVersiones, BANDAS_CAPITAL, LEADS_PAGE_SIZE, type LeadFilters } from "@/lib/leads";
++import { getLeads, getVersiones, BANDAS_CAPITAL, LEADS_PAGE_SIZE, parseLeadPage, type LeadFilters } from "@/lib/leads";
 +import { dateEs } from "@/lib/format";
 +
 +export const dynamic = "force-dynamic";
@@ -280,7 +350,7 @@ index 0000000..c17ec94
 +    utm_term: val("utm_term") || undefined,
 +    banda: val("banda") || undefined,
 +    q: val("q") || undefined,
-+    page: Math.max(1, Number(val("page")) || 1),
++    page: parseLeadPage(val("page")),
 +  };
 +
 +  const [{ rows, hayMas }, versiones] = await Promise.all([getLeads(filtros), getVersiones()]);
@@ -418,10 +488,10 @@ index 0000000..c17ec94
 +}
 diff --git a/apps/inbox/app/api/lead/route.ts b/apps/inbox/app/api/lead/route.ts
 new file mode 100644
-index 0000000..ee4069c
+index 0000000..260f29d
 --- /dev/null
 +++ b/apps/inbox/app/api/lead/route.ts
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,150 @@
 +// POST /api/lead — ingestión del Quiz Funnel (docs/11 Fase B, docs/09).
 +// Público por diseño (el funnel es una ruta pública del OS, docs/11 D1), pero
 +// endurecido: rate limit por IP, chequeo same-origin, cap de body, honeypot y
@@ -433,11 +503,13 @@ index 0000000..ee4069c
 +
 +import { NextResponse } from "next/server";
 +import { rest } from "@/lib/supabase";
-+import { isRateLimited, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "@/lib/quiz/rate-limit";
++import { isRateLimited, RATE_LIMIT_COMPLETED_MAX, RATE_LIMIT_MAX, RATE_LIMIT_RAW_MAX, RATE_LIMIT_WINDOW_MS } from "@/lib/quiz/rate-limit";
 +import {
 +  MAX_BODY_BYTES,
 +  mapRpcError,
++  utf8ByteLength,
 +  validateLeadContract,
++  validateLeadRpcResult,
 +} from "@/lib/quiz/lead-validate";
 +
 +export const runtime = "nodejs";
@@ -447,6 +519,8 @@ index 0000000..ee4069c
 +  return Number.isFinite(n) && n > 0 ? n : fallback;
 +};
 +const RATE_LIMIT_MAX_EFF = envInt("LEAD_RATE_LIMIT_MAX", RATE_LIMIT_MAX);
++const RATE_LIMIT_COMPLETED_MAX_EFF = envInt("LEAD_COMPLETED_RATE_LIMIT_MAX", RATE_LIMIT_COMPLETED_MAX);
++const RATE_LIMIT_RAW_MAX_EFF = envInt("LEAD_RAW_RATE_LIMIT_MAX", RATE_LIMIT_RAW_MAX);
 +const RATE_LIMIT_WINDOW_MS_EFF = envInt("LEAD_RATE_LIMIT_WINDOW_MS", RATE_LIMIT_WINDOW_MS);
 +
 +const ip = (request: Request): string =>
@@ -468,16 +542,16 @@ index 0000000..ee4069c
 +}
 +
 +export async function POST(request: Request): Promise<NextResponse> {
-+  // 1) Rate limit por IP: 429 y fuera (antes de gastar más recursos).
-+  const limited = isRateLimited(ip(request), {
-+    max: RATE_LIMIT_MAX_EFF,
++  const requestIp = ip(request);
++  const rawLimited = isRateLimited(`${requestIp}:raw`, {
++    max: RATE_LIMIT_RAW_MAX_EFF,
 +    windowMs: RATE_LIMIT_WINDOW_MS_EFF,
 +  });
-+  if (limited.limited) {
++  if (rawLimited.limited) {
 +    return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
 +  }
 +
-+  // 2) Solo JSON — el beacon manda Blob con este Content-Type. El standalone
++  // 1) Solo JSON — el beacon manda Blob con este Content-Type. El standalone
 +  //    lo exigía (route.js §2, con tests 415); el port lo había perdido.
 +  const contentType = (request.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
 +  if (contentType !== "application/json") {
@@ -498,7 +572,7 @@ index 0000000..ee4069c
 +    return NextResponse.json({ ok: false, error: "body_too_large" }, { status: 413 });
 +  }
 +  const raw = await request.text();
-+  if (raw.length > MAX_BODY_BYTES) {
++  if (utf8ByteLength(raw) > MAX_BODY_BYTES) {
 +    return NextResponse.json({ ok: false, error: "body_too_large" }, { status: 413 });
 +  }
 +
@@ -519,13 +593,28 @@ index 0000000..ee4069c
 +    return NextResponse.json({ ok: false, error: validation.reason }, { status: 400 });
 +  }
 +
++  // Tracking y finalización no comparten presupuesto: una navegación con
++  // avances, retrocesos y recargas nunca puede consumir la cuota de completed.
++  const bucket = validation.payload.event === "completed" ? "completed" : "tracking";
++  const limited = isRateLimited(`${requestIp}:${bucket}`, {
++    max: bucket === "completed" ? RATE_LIMIT_COMPLETED_MAX_EFF : RATE_LIMIT_MAX_EFF,
++    windowMs: RATE_LIMIT_WINDOW_MS_EFF,
++  });
++  if (limited.limited) {
++    return NextResponse.json({ ok: false, error: "rate_limited" }, { status: 429 });
++  }
++
 +  const r = await rest<{ ok: boolean; session_id: string; submission_id: string; status: string }>(
 +    "POST",
 +    "rpc/registrar_diagnostico",
 +    { p_payload: validation.payload }
 +  );
 +
-+  if (r.status === 200 && r.json?.ok) {
++  if (r.status === 200 && validateLeadRpcResult(
++    r.json,
++    validation.payload.session_id,
++    validation.payload.event,
++  )) {
 +    const evento = String(validation.payload.event);
 +    const estado = r.json.status;
 +    const nRespuestas = Array.isArray(validation.payload.answers) ? validation.payload.answers.length : 0;
@@ -626,10 +715,10 @@ index 9c9a861..2a65d9c 100644
 +.vincular-rollback { color: var(--red); }
 diff --git a/apps/inbox/app/leads-actions.ts b/apps/inbox/app/leads-actions.ts
 new file mode 100644
-index 0000000..21fdd05
+index 0000000..533fb9c
 --- /dev/null
 +++ b/apps/inbox/app/leads-actions.ts
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,132 @@
 +"use server";
 +// ============================================================
 +// Server actions del módulo de leads (docs/11 §9).
@@ -655,11 +744,11 @@ index 0000000..21fdd05
 +// local era el problema). Acá se consulta PostgREST con el texto y se devuelve
 +// el lote acotado.
 +export async function buscarClientesParaVincular(
-+  q: string
-+): Promise<{ clientes: ClienteParaVincular[] }> {
++  q: string,
++  page = 1,
++): Promise<{ clientes: ClienteParaVincular[]; hayMas: boolean }> {
 +  await requireModulo("leads");
-+  const clientes = await getClientesParaVincular(typeof q === "string" ? q : "");
-+  return { clientes };
++  return getClientesParaVincular(typeof q === "string" ? q : "", page);
 +}
 +
 +export async function vincularLeadAccion(
@@ -669,6 +758,7 @@ index 0000000..21fdd05
 +
 +  const leadPersonaId = String(formData.get("leadPersonaId") ?? "");
 +  const clienteId = String(formData.get("clienteId") ?? "");
++  const envioId = String(formData.get("envioId") ?? "");
 +  const confirmar = formData.get("confirmar") === "on" || formData.get("confirmar") === "true";
 +  if (!leadPersonaId || !clienteId) {
 +    return { ok: false, error: "Falta el cliente definitivo para vincular." };
@@ -682,7 +772,7 @@ index 0000000..21fdd05
 +
 +  if (r.status === 200 && r.json?.ok) {
 +    revalidatePath("/leads");
-+    revalidatePath(`/leads`);
++    if (envioId) revalidatePath(`/leads/${envioId}`);
 +    const n = r.json.envios_reasignados;
 +    const sufijo = confirmar ? " (teléfonos distintos — confirmado manualmente)" : "";
 +    return { ok: true, mensaje: n > 0 ? `Vinculado: ${n} ${n === 1 ? "envío reasignado" : "envíos reasignados"} al cliente.${sufijo}` : "Ya estaba vinculado." };
@@ -703,6 +793,7 @@ index 0000000..21fdd05
 +
 +  const clienteId = String(formData.get("clienteId") ?? "");
 +  const leadPersonaId = String(formData.get("leadPersonaId") ?? "");
++  const envioId = String(formData.get("envioId") ?? "");
 +  if (!clienteId) {
 +    return { ok: false, error: "Falta el cliente a desvincular." };
 +  }
@@ -721,7 +812,7 @@ index 0000000..21fdd05
 +
 +  if (r.status === 200 && r.json?.ok) {
 +    revalidatePath("/leads");
-+    revalidatePath(`/leads`);
++    if (envioId) revalidatePath(`/leads/${envioId}`);
 +    const n = r.json.envios_restaurados;
 +    return { ok: true, mensaje: n > 0 ? `Desvinculado: ${n} ${n === 1 ? "envío devuelto" : "envíos devueltos"} al lead temporal.` : "No había envíos que devolver." };
 +  }
@@ -739,6 +830,7 @@ index 0000000..21fdd05
 +  const u = await requireModulo("leads");
 +
 +  const leadPersonaId = String(formData.get("leadPersonaId") ?? "");
++  const envioId = String(formData.get("envioId") ?? "");
 +  if (!leadPersonaId) {
 +    return { ok: false, error: "Falta el lead a descartar." };
 +  }
@@ -751,7 +843,7 @@ index 0000000..21fdd05
 +
 +  if (r.status === 200 && r.json?.ok) {
 +    revalidatePath("/leads");
-+    revalidatePath(`/leads`);
++    if (envioId) revalidatePath(`/leads/${envioId}`);
 +    return { ok: true, mensaje: "Lead descartado: queda fuera del ciclo comercial (quedó auditado y visible en /leads)." };
 +  }
 +
@@ -1752,10 +1844,10 @@ index 0000000..22b2d6c
 +}
 diff --git a/apps/inbox/app/quiz/quiz-flow.tsx b/apps/inbox/app/quiz/quiz-flow.tsx
 new file mode 100644
-index 0000000..e91659c
+index 0000000..533160b
 --- /dev/null
 +++ b/apps/inbox/app/quiz/quiz-flow.tsx
-@@ -0,0 +1,659 @@
+@@ -0,0 +1,692 @@
 +"use client";
 +
 +// Flow del Quiz Funnel portado al OS (docs/11 Fase B). Original: components/
@@ -1771,9 +1863,12 @@ index 0000000..e91659c
 +import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 +import {
 +  buildAllocationResponse,
++  CANONICAL_STEPS,
++  CONSENT_TEXT,
 +  progressFor,
 +  progressMessageFor,
 +  questions,
++  quizQuestionStep,
 +  wizardConfig,
 +  type AllocationSelection,
 +  type QuizAssetRange,
@@ -1787,6 +1882,8 @@ index 0000000..e91659c
 +  buildQuizPayload,
 +  capturarSource,
 +  composePhonePorPais,
++  releaseSubmission,
++  tryAcquireSubmission,
 +  type QuizAnswerState,
 +  type SourceData,
 +} from "@/lib/quiz/lead-payload";
@@ -1798,8 +1895,6 @@ index 0000000..e91659c
 +// Índice canónico del recorrido, alineado con la definición publicada (0068 §8
 +// "steps"): start=0, situation=1 … contact=9, analysis=10, result=11. El índice
 +// se usa para el `last_step_index` y debe matchear el del contrato.
-+const STEPS = ["start", ...questions.map((q) => q.id), "analysis", "result"];
-+
 +export function QuizFlow() {
 +  const [screen, setScreen] = useState<Screen>(SCREENS.HERO);
 +  const [qIndex, setQIndex] = useState(0);
@@ -1810,6 +1905,7 @@ index 0000000..e91659c
 +  const [transitioning, setTransitioning] = useState(false);
 +  const [diagnosis, setDiagnosis] = useState<Diagnosis | null>(null);
 +  const [leadName, setLeadName] = useState("");
++  const [submittingContact, setSubmittingContact] = useState(false);
 +
 +  const sessionIdRef = useRef<string | null>(null);
 +  const sourceRef = useRef<SourceData | null>(null);
@@ -1822,6 +1918,8 @@ index 0000000..e91659c
 +  const lastStepRef = useRef<{ id: string; index: number }>({ id: "start", index: 0 });
 +  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 +  const completedRef = useRef(false);
++  const submittingContactRef = useRef(false);
++  const eventQueueRef = useRef(Promise.resolve());
 +
 +  // Los hooks de envío viven en callbacks estables para no re-registrar
 +  // listeners en cada render (el efecto de pagehide del original corría sin
@@ -1858,6 +1956,17 @@ index 0000000..e91659c
 +    return visitedStagesRef.current;
 +  }, []);
 +
++  const enqueueEvent = useCallback((event: string, extra: Record<string, unknown>) => {
++    eventQueueRef.current = eventQueueRef.current.then(() => sendEvent(event, extra));
++  }, [sendEvent]);
++
++  const recordQuestionStage = useCallback((index: number) => {
++    const step = quizQuestionStep(index);
++    if (!step) return;
++    recordStage(step.id);
++    lastStepRef.current = step;
++  }, [recordStage]);
++
 +  const startWizard = () => {
 +    // I6d: rotar SIEMPRE a una sesión nueva al arrancar desde HERO. Recargar la
 +    // página resetea la UI (React) pero sessionStorage conservaba el session_id
@@ -1867,25 +1976,25 @@ index 0000000..e91659c
 +    try { sessionStorage.setItem(SESSION_KEY, sessionIdRef.current); } catch { /* modo privado */ }
 +    if (!sourceRef.current) sourceRef.current = capturarSource();
 +    recordStage("start");
-+    recordStage(questions[0].id);
-+    lastStepRef.current = { id: "start", index: STEPS.indexOf("start") };
++    recordQuestionStage(0);
 +    setStarted(true);
 +    setScreen(SCREENS.WIZARD);
-+    sendEvent("started", { stepId: "start", stepIndex: STEPS.indexOf("start") });
++    enqueueEvent("started", { stepId: "start", stepIndex: CANONICAL_STEPS.indexOf("start") });
 +  };
 +
-+  // Avanza a un índice concreto. El paso canónico y el evento `progress` los
-+  // emite el efecto de abajo (una sola fuente de verdad para el tracking): acá
-+  // solo se cambia la pregunta visible. El efecto NUNCA va dentro del updater
-+  // de setQIndex: React puede invocarlo dos veces (StrictMode) y duplicaría.
++  // La referencia del paso cambia antes que el estado visible para que un
++  // `pagehide` en esa ventana no reporte la pregunta anterior. El efecto emite
++  // `progress` después del render; nunca se hace dentro del updater porque
++  // React puede invocarlo dos veces en StrictMode.
 +  const goTo = useCallback((next: number) => {
++    recordQuestionStage(next);
 +    setQIndex(next);
-+  }, []);
++  }, [recordQuestionStage]);
 +
 +  const move = (delta: number) => {
 +    if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
 +    setTransitioning(false);
-+    setQIndex((current) => Math.max(0, Math.min(current + delta, questions.length - 1)));
++    goTo(Math.max(0, Math.min(qIndex + delta, questions.length - 1)));
 +  };
 +
 +  const pick = (question: QuizQuestion, option: QuizOption) => {
@@ -1935,8 +2044,10 @@ index 0000000..e91659c
 +    phoneLocal: string;
 +    country: string;
 +    consent: boolean;
++    consentAcceptedAt: string;
 +    website: string;
 +  }) => {
++    if (submittingContactRef.current) return;
 +    setContactError(null);
 +    const name = form.name.trim();
 +    const email = form.email.trim();
@@ -1961,7 +2072,7 @@ index 0000000..e91659c
 +      return;
 +    }
 +
-+    const contact = { name, email, phone, country: form.country, consent: form.consent, website: form.website };
++    const contact = { name, email, phone, country: form.country, consent: form.consent, consentAcceptedAt: form.consentAcceptedAt, website: form.website };
 +    const contactState: QuizAnswerState = { answer: null, tags: [] };
 +    const finalAnswers: Record<string, QuizAnswerState> = { ...answers, contact: contactState };
 +    const diagnosisSnapshot = buildDiagnosis(
@@ -1975,20 +2086,25 @@ index 0000000..e91659c
 +        }))
 +    );
 +    const stages = recordStage("analysis");
++    lastStepRef.current = { id: "analysis", index: CANONICAL_STEPS.indexOf("analysis") };
++    const submittedSessionId = sessionIdRef.current!;
++    if (!tryAcquireSubmission(submittingContactRef)) return;
++    setSubmittingContact(true);
 +
 +    // El contacto se persiste ANTES de mostrar el resultado (docs/11 Fase B.6).
 +    // Si falla, el lead ve el error y reintenta: no se pierde ni se finge éxito.
 +    try {
++      await eventQueueRef.current;
 +      const response = await fetch("/api/lead", {
 +        method: "POST",
 +        headers: { "Content-Type": "application/json" },
 +        body: JSON.stringify(
 +          buildQuizPayload({
 +            event: "completed",
-+            sessionId: sessionIdRef.current!,
++            sessionId: submittedSessionId,
 +            source: sourceRef.current ?? capturarSource(),
 +            stepId: "result",
-+            stepIndex: STEPS.indexOf("result"),
++            stepIndex: CANONICAL_STEPS.indexOf("result"),
 +            visited: stages,
 +            contact,
 +            answers: finalAnswers,
@@ -1997,6 +2113,8 @@ index 0000000..e91659c
 +        ),
 +      });
 +      if (!response.ok) {
++        releaseSubmission(submittingContactRef);
++        setSubmittingContact(false);
 +        setContactError("No pudimos guardar tu diagnóstico. Revisá los datos e intentá de nuevo.");
 +        return;
 +      }
@@ -2012,12 +2130,16 @@ index 0000000..e91659c
 +        data.ok !== true ||
 +        data.status !== "completed" ||
 +        !data.submission_id ||
-+        data.session_id !== sessionIdRef.current
++        data.session_id !== submittedSessionId
 +      ) {
++        releaseSubmission(submittingContactRef);
++        setSubmittingContact(false);
 +        setContactError("El diagnóstico no terminó de guardarse. Intentá de nuevo en unos segundos.");
 +        return;
 +      }
 +    } catch {
++      releaseSubmission(submittingContactRef);
++      setSubmittingContact(false);
 +      setContactError("Problema de conexión. Intentá de nuevo en unos segundos.");
 +      return;
 +    }
@@ -2048,6 +2170,7 @@ index 0000000..e91659c
 +      return;
 +    }
 +    recordStage("result");
++    lastStepRef.current = { id: "result", index: CANONICAL_STEPS.indexOf("result") };
 +    setScreen(SCREENS.FINAL);
 +  };
 +
@@ -2061,11 +2184,11 @@ index 0000000..e91659c
 +    if (screen === SCREENS.WIZARD && started && questions[qIndex]?.id) {
 +      const id = questions[qIndex].id;
 +      recordStage(id);
-+      const index = STEPS.indexOf(id);
++      const index = CANONICAL_STEPS.indexOf(id);
 +      lastStepRef.current = { id, index };
-+      sendEvent("progress", { stepId: id, stepIndex: index });
++      enqueueEvent("progress", { stepId: id, stepIndex: index });
 +    }
-+  }, [screen, qIndex, started, recordStage, sendEvent]);
++  }, [screen, qIndex, started, recordStage, enqueueEvent]);
 +
 +  useEffect(() => () => { if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current); }, []);
 +
@@ -2158,7 +2281,7 @@ index 0000000..e91659c
 +          {question.hint && <p className="q-hint">{question.hint}</p>}
 +
 +          {isContact ? (
-+            <ContactForm onSubmit={submitContact} error={contactError} />
++            <ContactForm onSubmit={submitContact} error={contactError} submitting={submittingContact} />
 +          ) : question.type === "allocation" ? (
 +            <AllocationQuestion question={question} answer={answers[question.id]} onPick={pickAllocation} />
 +          ) : (
@@ -2358,11 +2481,13 @@ index 0000000..e91659c
 +function ContactForm({
 +  onSubmit,
 +  error,
++  submitting,
 +}: {
-+  onSubmit: (form: { name: string; email: string; phoneLocal: string; country: string; consent: boolean; website: string }) => void;
++  onSubmit: (form: { name: string; email: string; phoneLocal: string; country: string; consent: boolean; consentAcceptedAt: string; website: string }) => void;
 +  error: string | null;
++  submitting: boolean;
 +}) {
-+  const [form, setForm] = useState({ name: "", email: "", phoneLocal: "", country: "AR", consent: false, website: "" });
++  const [form, setForm] = useState({ name: "", email: "", phoneLocal: "", country: "AR", consent: false, consentAcceptedAt: "", website: "" });
 +  const update = (key: keyof typeof form) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
 +    setForm((current) => ({ ...current, [key]: event.target.value }));
 +  const country = useMemo(() => COUNTRIES.find((c) => c.code === form.country) ?? COUNTRIES[0], [form.country]);
@@ -2405,12 +2530,12 @@ index 0000000..e91659c
 +        <input id="w-website" tabIndex={-1} autoComplete="off" value={form.website} onChange={update("website")} />
 +      </div>
 +      <label className="consent-option">
-+        <input type="checkbox" checked={form.consent} onChange={(event) => setForm((current) => ({ ...current, consent: event.target.checked }))} />
-+        <span>Acepto recibir mi diagnóstico y que Metacrypto Club me contacte por email, teléfono o WhatsApp según mis respuestas.</span>
++        <input type="checkbox" checked={form.consent} onChange={(event) => setForm((current) => ({ ...current, consent: event.target.checked, consentAcceptedAt: event.target.checked ? new Date().toISOString() : "" }))} />
++        <span>{CONSENT_TEXT}</span>
 +      </label>
 +      {error && <div className="contact-error" role="alert">{error}</div>}
-+      <button className="btn-gold opt-next" type="button" onClick={() => onSubmit(form)}>
-+        Ver mi diagnóstico personalizado
++      <button className="btn-gold opt-next" type="button" disabled={submitting} onClick={() => onSubmit(form)}>
++        {submitting ? "Guardando diagnóstico..." : "Ver mi diagnóstico personalizado"}
 +      </button>
 +    </div>
 +  );
@@ -2438,10 +2563,10 @@ index 2c6cd0d..b46bf12 100644
    const groups = allGroups
 diff --git a/apps/inbox/components/VincularLead.tsx b/apps/inbox/components/VincularLead.tsx
 new file mode 100644
-index 0000000..ccc0742
+index 0000000..a886a19
 --- /dev/null
 +++ b/apps/inbox/components/VincularLead.tsx
-@@ -0,0 +1,237 @@
+@@ -0,0 +1,322 @@
 +"use client";
 +// Picker de vinculación post-venta (docs/11 §9) + rollback (§9.3) + descarte (§9.4).
 +//
@@ -2450,9 +2575,10 @@ index 0000000..ccc0742
 +// bien pero NINGÚN click hace nada. Por eso esto es un onSubmit manual con
 +// useTransition, que sí existe en 18.
 +
-+import { useEffect, useState, useTransition } from "react";
++import { useEffect, useRef, useState } from "react";
 +import { descartarLeadAccion, desvincularLeadAccion, vincularLeadAccion, buscarClientesParaVincular } from "@/app/leads-actions";
 +import type { ClienteParaVincular } from "@/lib/leads";
++import { createLatestRequestSequence } from "@/lib/latest-request";
 +
 +type Resultado = { ok: boolean; error?: string; mensaje?: string };
 +
@@ -2460,21 +2586,27 @@ index 0000000..ccc0742
 +  leadPersonaId,
 +  leadTelefono,
 +  clientes,
++  hayMasClientes,
++  envioId,
 +  personaEstado,
 +  leadVinculadoId = null,
 +}: {
 +  leadPersonaId: string;
 +  leadTelefono: string | null; // teléfono capturado en el quiz (snapshot del envío)
 +  clientes: ClienteParaVincular[];
++  hayMasClientes: boolean;
++  envioId: string;
 +  personaEstado: string | null;
 +  leadVinculadoId?: string | null; // lead temporal que ya fue vinculado (auditoría)
 +}) {
++  const [pending, setPending] = useState(false);
++
 +  if (!leadPersonaId) {
 +    return <p className="vincular-nota">Este envío no llegó a completarse: no hay lead temporal que vincular.</p>;
 +  }
 +  // El RPC revalida TODO; acá solo decidimos QUÉ pantalla mostrar.
 +  if (personaEstado === "cliente") {
-+    return <Desvincular clienteId={leadPersonaId} leadPersonaId={leadVinculadoId} />;
++    return <Desvincular clienteId={leadPersonaId} leadPersonaId={leadVinculadoId} envioId={envioId} pending={pending} setPending={setPending} />;
 +  }
 +  if (personaEstado === "descartado") {
 +    return <p className="vincular-nota">El lead fue descartado por el triaje (no hubo venta). Queda auditado; la reactivación es manual.</p>;
@@ -2485,8 +2617,8 @@ index 0000000..ccc0742
 +  // Persona temporal viva: se puede vincular (hubo venta) o descartar (no la hubo).
 +  return (
 +    <div className="vincular-form">
-+      <Picker leadPersonaId={leadPersonaId} leadTelefono={leadTelefono} clientes={clientes} />
-+      <Descartar leadPersonaId={leadPersonaId} />
++      <Picker leadPersonaId={leadPersonaId} leadTelefono={leadTelefono} clientes={clientes} hayMasInicial={hayMasClientes} envioId={envioId} pending={pending} setPending={setPending} />
++      <Descartar leadPersonaId={leadPersonaId} envioId={envioId} pending={pending} setPending={setPending} />
 +    </div>
 +  );
 +}
@@ -2496,18 +2628,28 @@ index 0000000..ccc0742
 +  leadPersonaId,
 +  leadTelefono,
 +  clientes,
++  hayMasInicial,
++  envioId,
++  pending,
++  setPending,
 +}: {
 +  leadPersonaId: string;
 +  leadTelefono: string | null;
 +  clientes: ClienteParaVincular[];
++  hayMasInicial: boolean;
++  envioId: string;
++  pending: boolean;
++  setPending: (pending: boolean) => void;
 +}) {
 +  const [resultado, setResultado] = useState<Resultado | null>(null);
-+  const [pending, startTransition] = useTransition();
 +  const [clienteId, setClienteId] = useState("");
 +  const [confirmado, setConfirmado] = useState(false);
 +  const [busqueda, setBusqueda] = useState("");
 +  const [lista, setLista] = useState<ClienteParaVincular[]>(clientes);
 +  const [buscando, setBuscando] = useState(false);
++  const [pagina, setPagina] = useState(1);
++  const [hayMas, setHayMas] = useState(hayMasInicial);
++  const requestSequenceRef = useRef(createLatestRequestSequence());
 +
 +  // Búsqueda SERVER-SIDE con debounce (auditoría v4 I8): antes se filtraba
 +  // localmente sobre los primeros 500 cargados — clientes fuera de ese lote
@@ -2515,20 +2657,57 @@ index 0000000..ccc0742
 +  useEffect(() => {
 +    const q = busqueda.trim();
 +    if (!q) {
++      requestSequenceRef.current.invalidate();
 +      setLista(clientes);
++      setClienteId((current) => clientes.some((cliente) => cliente.id === current) ? current : "");
++      setPagina(1);
++      setHayMas(hayMasInicial);
 +      setBuscando(false);
 +      return;
 +    }
++    const requestId = requestSequenceRef.current.next();
 +    setBuscando(true);
 +    const t = setTimeout(() => {
-+      startTransition(async () => {
-+        const res = await buscarClientesParaVincular(q);
-+        setLista(res.clientes);
-+        setBuscando(false);
-+      });
++      void (async () => {
++        try {
++          const res = await buscarClientesParaVincular(q, 1);
++          if (!requestSequenceRef.current.isCurrent(requestId)) return;
++          setLista(res.clientes);
++          setClienteId((current) => res.clientes.some((cliente) => cliente.id === current) ? current : "");
++          setPagina(1);
++          setHayMas(res.hayMas);
++        } catch {
++          if (requestSequenceRef.current.isCurrent(requestId)) {
++            setResultado({ ok: false, error: "No se pudo buscar clientes. Intentá de nuevo." });
++          }
++        } finally {
++          if (requestSequenceRef.current.isCurrent(requestId)) setBuscando(false);
++        }
++      })();
 +    }, 300);
 +    return () => clearTimeout(t);
-+  }, [busqueda, clientes]);
++  }, [busqueda, clientes, hayMasInicial]);
++
++  const cargarMas = () => {
++    const requestId = requestSequenceRef.current.next();
++    const nextPage = pagina + 1;
++    setBuscando(true);
++    void (async () => {
++      try {
++        const res = await buscarClientesParaVincular(busqueda.trim(), nextPage);
++        if (!requestSequenceRef.current.isCurrent(requestId)) return;
++        setLista((actual) => [...actual, ...res.clientes.filter((cliente) => !actual.some((item) => item.id === cliente.id))]);
++        setPagina(nextPage);
++        setHayMas(res.hayMas);
++      } catch {
++        if (requestSequenceRef.current.isCurrent(requestId)) {
++          setResultado({ ok: false, error: "No se pudieron cargar más clientes. Intentá de nuevo." });
++        }
++      } finally {
++        if (requestSequenceRef.current.isCurrent(requestId)) setBuscando(false);
++      }
++    })();
++  };
 +
 +  // La comparación EXACTA la hace el RPC (server); acá es solo para mostrar
 +  // el aviso y exigir la confirmación visible (docs/11 §9.1).
@@ -2539,24 +2718,40 @@ index 0000000..ccc0742
 +
 +  const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
 +    event.preventDefault();
++    if (pending) return;
++    if (!cliente) {
++      setClienteId("");
++      setResultado({ ok: false, error: "Elegí un cliente de los resultados visibles." });
++      return;
++    }
 +    const formData = new FormData(event.currentTarget);
 +    if (telefonosDifieren && !confirmado) {
 +      setResultado({ ok: false, error: "Los teléfonos no coinciden: marcá la confirmación para vincular de todos modos." });
 +      return;
 +    }
-+    startTransition(async () => {
-+      setResultado(await vincularLeadAccion(formData));
-+    });
++    setPending(true);
++    void vincularLeadAccion(formData)
++      .then(setResultado)
++      .catch(() => setResultado({ ok: false, error: "No se pudo vincular el lead. Intentá de nuevo." }))
++      .finally(() => setPending(false));
 +  };
 +
 +  return (
 +    <form onSubmit={onSubmit} className="vincular-form">
 +      <input type="hidden" name="leadPersonaId" value={leadPersonaId} />
++      <input type="hidden" name="envioId" value={envioId} />
 +      <input
 +        type="text"
 +        className="vincular-busqueda"
 +        value={busqueda}
-+        onChange={(e) => setBusqueda(e.target.value)}
++        onChange={(e) => {
++          requestSequenceRef.current.invalidate();
++          setBusqueda(e.target.value);
++          setClienteId("");
++          setConfirmado(false);
++          setResultado(null);
++          setBuscando(Boolean(e.target.value.trim()));
++        }}
 +        placeholder="Buscar cliente por nombre, email o teléfono…"
 +      />
 +      <select name="clienteId" value={clienteId} onChange={(e) => { setClienteId(e.target.value); setResultado(null); setConfirmado(false); }} required>
@@ -2571,6 +2766,11 @@ index 0000000..ccc0742
 +          </option>
 +        ))}
 +      </select>
++      {hayMas && (
++        <button type="button" disabled={buscando} onClick={cargarMas}>
++          {buscando ? "Buscando…" : "Cargar más clientes"}
++        </button>
++      )}
 +      <button type="submit" disabled={pending || !clienteId}>
 +        {pending ? "Vinculando…" : "Vincular con cliente"}
 +      </button>
@@ -2599,18 +2799,23 @@ index 0000000..ccc0742
 +}
 +
 +// ── camino sin venta (docs/11 §9.4): el lead sale del ciclo, con auditoría ───
-+function Descartar({ leadPersonaId }: { leadPersonaId: string }) {
++function Descartar({ leadPersonaId, envioId, pending, setPending }: { leadPersonaId: string; envioId: string; pending: boolean; setPending: (pending: boolean) => void }) {
 +  const [resultado, setResultado] = useState<Resultado | null>(null);
-+  const [pending, startTransition] = useTransition();
 +  const [confirmando, setConfirmando] = useState(false);
 +
 +  const descartar = () => {
++    if (pending) return;
 +    const formData = new FormData();
 +    formData.set("leadPersonaId", leadPersonaId);
-+    startTransition(async () => {
-+      setResultado(await descartarLeadAccion(formData));
-+      setConfirmando(false);
-+    });
++    formData.set("envioId", envioId);
++    setPending(true);
++    void descartarLeadAccion(formData)
++      .then((result) => {
++        setResultado(result);
++        setConfirmando(false);
++      })
++      .catch(() => setResultado({ ok: false, error: "No se pudo descartar el lead. Intentá de nuevo." }))
++      .finally(() => setPending(false));
 +  };
 +
 +  return (
@@ -2637,19 +2842,24 @@ index 0000000..ccc0742
 +}
 +
 +// ── rollback (docs/11 §9.3): visible cuando el envío ya es del cliente ───────
-+function Desvincular({ clienteId, leadPersonaId = null }: { clienteId: string; leadPersonaId?: string | null }) {
++function Desvincular({ clienteId, leadPersonaId = null, envioId, pending, setPending }: { clienteId: string; leadPersonaId?: string | null; envioId: string; pending: boolean; setPending: (pending: boolean) => void }) {
 +  const [resultado, setResultado] = useState<Resultado | null>(null);
-+  const [pending, startTransition] = useTransition();
 +  const [confirmando, setConfirmando] = useState(false);
 +
 +  const revertir = () => {
++    if (pending) return;
 +    const formData = new FormData();
 +    formData.set("clienteId", clienteId);
++    formData.set("envioId", envioId);
 +    if (leadPersonaId) formData.set("leadPersonaId", leadPersonaId);
-+    startTransition(async () => {
-+      setResultado(await desvincularLeadAccion(formData));
-+      setConfirmando(false);
-+    });
++    setPending(true);
++    void desvincularLeadAccion(formData)
++      .then((result) => {
++        setResultado(result);
++        setConfirmando(false);
++      })
++      .catch(() => setResultado({ ok: false, error: "No se pudo desvincular el lead. Intentá de nuevo." }))
++      .finally(() => setPending(false));
 +  };
 +
 +  return (
@@ -2720,10 +2930,10 @@ index 0000000..26248ad
 +];
 diff --git a/apps/inbox/lib/__tests__/quiz-leads-rpc.test.ts b/apps/inbox/lib/__tests__/quiz-leads-rpc.test.ts
 new file mode 100644
-index 0000000..bb0e5a1
+index 0000000..d36f16f
 --- /dev/null
 +++ b/apps/inbox/lib/__tests__/quiz-leads-rpc.test.ts
-@@ -0,0 +1,860 @@
+@@ -0,0 +1,1148 @@
 +// Tests de integraciÃ³n del mÃ³dulo de leads (docs/11 Â§2â€“Â§9) contra el Supabase
 +// LOCAL por PostgREST, igual que la app (service_role, solo servidor).
 +//
@@ -2733,7 +2943,8 @@ index 0000000..bb0e5a1
 +
 +import { readFileSync } from "node:fs";
 +import { join } from "node:path";
-+import { beforeAll, afterAll, describe, expect, test } from "vitest";
++import { beforeAll, afterAll, describe, expect, test, vi } from "vitest";
++import { guardedLocalFetch, isLocalSupabaseUrl } from "../quiz/local-db-guard";
 +
 +// â”€â”€ entorno local â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 +function loadEnvLocal(): Record<string, string> {
@@ -2761,21 +2972,26 @@ index 0000000..bb0e5a1
 +};
 +
 +let reachable = false;
++async function probe(baseUrl: string, key: string, fetchFn: typeof fetch = fetch): Promise<boolean> {
++  if (!baseUrl || !key || !isLocalSupabaseUrl(baseUrl)) return false;
++  try {
++    const response = await guardedLocalFetch(baseUrl, "/rest/v1/", {
++      headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
++    }, fetchFn);
++    return response.status < 500;
++  } catch {
++    return false;
++  }
++}
++
 +// GUARDA ANTI-PRODUCCIÃ“N: los suites gated son destructivos (DELETE de filas
 +// de prueba). Solo corren contra el Supabase LOCAL â€” si alguien apunta
 +// SUPABASE_URL a otro entorno, se saltan con un aviso claro, jamÃ¡s corren.
-+const esLocal = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/.*)?$/i.test(URL_BASE ?? "");
++const esLocal = isLocalSupabaseUrl(URL_BASE);
 +if (URL_BASE && KEY && !esLocal) {
 +  console.warn(`[quiz-leads-rpc] SUPABASE_URL no es local (${URL_BASE}): los tests de integraciÃ³n NO corren.`);
 +}
-+if (URL_BASE && KEY && esLocal) {
-+  try {
-+    const r = await fetch(`${URL_BASE}/rest/v1/`, { headers: HDRS });
-+    reachable = r.status < 500;
-+  } catch {
-+    reachable = false;
-+  }
-+}
++reachable = await probe(URL_BASE, KEY);
 +
 +// â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 +const QUIZ = "diagnostico-cripto-v1-a";
@@ -2804,7 +3020,7 @@ index 0000000..bb0e5a1
 +}
 +
 +async function rpc(name: string, args: Record<string, unknown>) {
-+  const r = await fetch(`${URL_BASE}/rest/v1/rpc/${name}`, {
++  const r = await guardedLocalFetch(URL_BASE, `/rest/v1/rpc/${name}`, {
 +    method: "POST",
 +    headers: HDRS,
 +    body: JSON.stringify(args),
@@ -2814,7 +3030,7 @@ index 0000000..bb0e5a1
 +}
 +
 +async function rest(method: string, table: string, query: string, json?: unknown) {
-+  const r = await fetch(`${URL_BASE}/rest/v1/${table}?${query}`, {
++  const r = await guardedLocalFetch(URL_BASE, `/rest/v1/${table}?${query}`, {
 +    method,
 +    headers: { ...HDRS, Prefer: "return=representation" },
 +    body: json === undefined ? undefined : JSON.stringify(json),
@@ -2852,6 +3068,7 @@ index 0000000..bb0e5a1
 +}
 +
 +function completedPayload(opts: { sessionId: string; email: string; capital: string; diagnosis?: boolean }) {
++  const phoneSuffix = String(Number(/(\d+)@/.exec(opts.email)?.[1] ?? 1)).padStart(6, "0");
 +  return payload({
 +    session_id: opts.sessionId,
 +    event: "completed",
@@ -2861,7 +3078,7 @@ index 0000000..bb0e5a1
 +    lead: {
 +      name: "Lead de prueba RPC",
 +      email: opts.email,
-+      phone: "+5493585000001",
++      phone: `+5493585${phoneSuffix}`,
 +      country: "AR",
 +      consent: { accepted: true, version: "contacto-v1", accepted_at: "2026-09-21T10:07:30Z" },
 +    },
@@ -2870,12 +3087,29 @@ index 0000000..bb0e5a1
 +  });
 +}
 +
-+async function limpiar() {
-+  if (SESSIONS.length) {
-+    await rest("DELETE", "diagnostico_envios", `session_id=in.(${SESSIONS.join(",")})`);
++async function limpiar(baseUrl: string = URL_BASE) {
++  if (!isLocalSupabaseUrl(baseUrl)) throw new Error("cleanup requires local Supabase");
++  const reservedSessions = Array.from({ length: 120 }, (_, index) =>
++    `0000c0de-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
++  await rest("DELETE", "diagnostico_envios", `session_id=in.(${reservedSessions.join(",")})`);
++
++  // Un proceso terminado antes del afterAll no deja sus arrays en memoria. Los
++  // prefijos reservados permiten limpiar esos residuos al iniciar la siguiente
++  // corrida sin abarcar otras fixtures @test.local del OS.
++  const prefixes = [
++    "quiz-rpc-", "quiz-cliente-", "cliente-", "clientemismo-", "rollback-",
++    "descarto-", "estricto-", "estricto2-", "revd-", "vinc-a-", "vinc-b-",
++    "multi-a-", "multi-b-",
++  ];
++  const predicate = `or=(${prefixes.map((prefix) => `email.like.${prefix}*`).join(",")})`;
++  const stalePeople = await rest("GET", "personas", `${predicate}&select=id`);
++  const staleIds = (stalePeople.body as { id: string }[]).map((person) => person.id);
++  if (staleIds.length) {
++    await rest("DELETE", "programas", `persona_id=in.(${staleIds.join(",")})`);
++    await rest("DELETE", "personas", `id=in.(${staleIds.join(",")})`);
 +  }
-+  // la versiÃ³n de prueba se elimina despuÃ©s de sus envÃ­os (FK de quiz_version_id)
-+  await rest("DELETE", "quiz_versiones", `codigo=eq.${MC_VERSION}`);
++  // Las versiones publicadas son irreversibles desde 0073. La fixture se
++  // reutiliza entre corridas locales y el reset de Supabase la elimina.
 +  if (PROGRAMA_IDS.length) {
 +    await rest("DELETE", "programas", `id=in.(${PROGRAMA_IDS.join(",")})`);
 +  }
@@ -2884,9 +3118,50 @@ index 0000000..bb0e5a1
 +  }
 +}
 +
++async function crearCliente(n: number, phone: string) {
++  const clienteEmail = `quiz-cliente-${n}@test.local`;
++  EMAILS.push(clienteEmail);
++  const cliente = await rest("POST", "personas", "select=id", {
++    estado: "cliente", nombre: `Cliente ${n}`, email: clienteEmail,
++    telefono_e164: phone, divisa_preferida: "USD",
++  });
++  const clienteId = cliente.body[0].id as string;
++  const programa = await rest("POST", "programas", "select=id", {
++    persona_id: clienteId, tier: "3000", motivo: "nueva_venta",
++    fecha_inicio: "2026-09-01", monto: 3000, divisa: "EUR",
++  });
++  PROGRAMA_IDS.push(programa.body[0].id);
++  return clienteId;
++}
++
++async function activeLeadIdsForPhone(phone: string): Promise<string[]> {
++  const rows = await rest("GET", "diagnostico_envios", `telefono_e164_capturado=eq.${encodeURIComponent(phone)}&select=persona_id`);
++  const ids = [...new Set((rows.body as { persona_id: string | null }[]).map((row) => row.persona_id).filter(Boolean))] as string[];
++  if (!ids.length) return [];
++  const personas = await rest("GET", "personas", `id=in.(${ids.join(",")})&estado=eq.lead&select=id`);
++  return (personas.body as { id: string }[]).map((row) => row.id);
++}
++
++describe("guarda del arnés RPC", () => {
++  test("una URL externa no ejecuta probes ni cleanup", async () => {
++    const fetchFn = vi.fn<typeof fetch>();
++    expect(await probe("https://example.supabase.co", "test-key", fetchFn)).toBe(false);
++    const globalFetch = vi.spyOn(globalThis, "fetch");
++    try {
++      await expect(limpiar("https://example.supabase.co")).rejects.toThrow(/local/i);
++      expect(globalFetch).not.toHaveBeenCalled();
++    } finally {
++      globalFetch.mockRestore();
++    }
++    expect(fetchFn).not.toHaveBeenCalled();
++  });
++});
++
 +// Clona la definiciÃ³n vigente, le agrega una pregunta multiple_choice y la
 +// publica como versiÃ³n de pruebas (estado active, mismo funnel).
 +async function crearVersionMultiChoice() {
++  const existing = await rest("GET", "quiz_versiones", `codigo=eq.${MC_VERSION}&select=id`);
++  if (existing.body?.length) return;
 +  const src = await rest("GET", "quiz_versiones", `codigo=eq.${QUIZ}&select=funnel,definicion`);
 +  const def = src.body[0].definicion;
 +  def.questions.push({
@@ -2921,7 +3196,7 @@ index 0000000..bb0e5a1
 +  });
 +
 +  afterAll(async () => {
-+    await limpiar();
++    if (reachable && esLocal) await limpiar();
 +  });
 +
 +  test("la versiÃ³n vigente del quiz estÃ¡ publicada y activa", async () => {
@@ -3107,7 +3382,8 @@ index 0000000..bb0e5a1
 +    const audit = await rest("GET", "auditoria", `entidad=eq.persona&accion=eq.vinculacion&entidad_id=eq.${leadId}&select=datos&order=created_at.desc&limit=1`);
 +    expect(audit.body[0].datos.envios_reasignados).toBeGreaterThanOrEqual(1);
 +    expect(audit.body[0].datos.confirmado).toBe(true);
-+    expect(audit.body[0].datos.telefono_lead).toBe("+5493585000001");
++    expect(audit.body[0].datos.telefono_lead).toBeUndefined();
++    expect(audit.body[0].datos.telefono_cliente).toBeUndefined();
 +
 +    // idempotente: repetir no rompe ni duplica
 +    const v2 = await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteId, p_confirmar: true });
@@ -3241,13 +3517,13 @@ index 0000000..bb0e5a1
 +
 +  test("(B6) multiple_choice vacÃ­a o con ids repetidos â†’ rechazada", async () => {
 +    const s1 = session(57);
-+    const vacia = payload({ quiz_version: MC_VERSION, session_id: s1, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "extras", step_index: 8 },
++    const vacia = payload({ quiz_version: MC_VERSION, session_id: s1, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "start", step_index: 0 },
 +      answers: [{ question_id: "extras", type: "multiple_choice", question_text: "extras", order: 1, answer_id: null, answer_text: "", value: { ids: [] }, answered_at: null }] });
 +    const rVacia = await rpc("registrar_diagnostico", { p_payload: vacia });
 +    expect(rVacia.body.message).toContain("seleccion_vacia");
 +
 +    const s2 = session(58);
-+    const repetida = payload({ quiz_version: MC_VERSION, session_id: s2, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "extras", step_index: 8 },
++    const repetida = payload({ quiz_version: MC_VERSION, session_id: s2, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "start", step_index: 0 },
 +      answers: [{ question_id: "extras", type: "multiple_choice", question_text: "extras", order: 1, answer_id: null, answer_text: "", value: { ids: ["mc_a", "mc_a"] }, answered_at: null }] });
 +    const rRepetida = await rpc("registrar_diagnostico", { p_payload: repetida });
 +    expect(rRepetida.body.message).toContain("respuestas_duplicadas");
@@ -3402,20 +3678,52 @@ index 0000000..bb0e5a1
 +
 +  test("(H-08) RLS: un JWT `authenticated` (anon) NO lee nada del funnel; helper sin EXECUTE", async () => {
 +    expect(ANON).toBeTruthy();
-+    const rAnon = await fetch(`${URL_BASE}/rest/v1/diagnostico_envios?select=id,telefono_e164_capturado`, {
++    const rAnon = await guardedLocalFetch(URL_BASE, "/rest/v1/diagnostico_envios?select=id,telefono_e164_capturado", {
 +      headers: { apikey: ANON },
 +    });
 +    expect(rAnon.status).toBe(200);
 +    expect((await rAnon.json() as { id: string }[]).length).toBe(0); // policies eliminadas: denegado por defecto
 +
 +    // el helper de validaciÃ³n ya no es ejecutable por anon (antes PUBLIC)
-+    const rHelper = await fetch(`${URL_BASE}/rest/v1/rpc/validar_respuestas_quiz`, {
++    const rHelper = await guardedLocalFetch(URL_BASE, "/rest/v1/rpc/validar_respuestas_quiz", {
 +      method: "POST",
 +      headers: { apikey: ANON, "Content-Type": "application/json" },
 +      body: JSON.stringify({ p_definicion: {}, p_answers: [], p_exigir_todas: false }),
 +    });
 +    expect(rHelper.status).toBeGreaterThanOrEqual(400);
 +  });
++
++  test("(H-08) un usuario Auth real no obtiene teléfonos del funnel desde auditoría", async () => {
++    const authEmail = `quiz-auth-${Date.now()}@test.local`;
++    const password = "Quiz-test-2026!";
++    const created = await guardedLocalFetch(URL_BASE, "/auth/v1/admin/users", {
++      method: "POST",
++      headers: HDRS,
++      body: JSON.stringify({ email: authEmail, password, email_confirm: true }),
++    });
++    expect(created.status).toBeLessThan(300);
++    const user = await created.json() as { id: string };
++    try {
++      const login = await guardedLocalFetch(URL_BASE, "/auth/v1/token?grant_type=password", {
++        method: "POST",
++        headers: { apikey: ANON, "Content-Type": "application/json" },
++        body: JSON.stringify({ email: authEmail, password }),
++      });
++      expect(login.status).toBe(200);
++      const { access_token: token } = await login.json() as { access_token: string };
++      const headers = { apikey: ANON, Authorization: `Bearer ${token}` };
++      const envios = await guardedLocalFetch(URL_BASE, "/rest/v1/diagnostico_envios?select=id,telefono_e164_capturado", { headers });
++      expect(envios.status).toBe(200);
++      expect(await envios.json()).toEqual([]);
++      const audit = await guardedLocalFetch(URL_BASE, "/rest/v1/auditoria?select=datos", { headers });
++      expect(audit.status).toBe(200);
++      const serialized = JSON.stringify(await audit.json());
++      expect(serialized).not.toContain("telefono_lead");
++      expect(serialized).not.toContain("telefono_cliente");
++    } finally {
++      await guardedLocalFetch(URL_BASE, `/auth/v1/admin/users/${user.id}`, { method: "DELETE", headers: HDRS });
++    }
++  }, 15_000);
 +
 +  test("(H-04) la definiciÃ³n de una versiÃ³n PUBLICADA es inmutable", async () => {
 +    const r = await rest("GET", "quiz_versiones", `codigo=eq.${QUIZ}&select=id`);
@@ -3428,6 +3736,30 @@ index 0000000..bb0e5a1
 +    expect(pausa.status).toBeLessThan(300);
 +    const reactiva = await rest("PATCH", "quiz_versiones", `id=eq.${id}`, { estado: "active" });
 +    expect(reactiva.status).toBe(200);
++  });
++
++  test("(H-04) publicar es irreversible y un draft nunca publicado sí se elimina", async () => {
++    const current = await rest("GET", "quiz_versiones", `codigo=eq.${QUIZ}&select=id,created_at,publicada_at`);
++    const version = current.body[0];
++    for (const patch of [
++      { created_at: "2020-01-01T00:00:00Z" },
++      { publicada_at: null },
++      { publicada_at: "2030-01-01T00:00:00Z" },
++      { estado: "draft" },
++    ]) {
++      expect((await rest("PATCH", "quiz_versiones", `id=eq.${version.id}`, patch)).status).toBeGreaterThanOrEqual(400);
++    }
++    expect((await rest("DELETE", "quiz_versiones", `id=eq.${version.id}`)).status).toBeGreaterThanOrEqual(400);
++
++    const draftCode = `quiz-draft-${Date.now()}`;
++    const draft = await rest("POST", "quiz_versiones", "select=id", {
++      codigo: draftCode, funnel: "diagnostico-cripto", variante: "test", version: 999,
++      estado: "draft", definicion: { steps: ["start"], questions: [] },
++    });
++    expect(draft.status).toBe(201);
++    const removed = await rest("DELETE", "quiz_versiones", `id=eq.${draft.body[0].id}`);
++    expect(removed.status).toBeLessThan(300);
++    expect(removed.body).toHaveLength(1);
 +  });
 +
 +  test("(H-05) consentimiento de versiÃ³n distinta de 'contacto-v1' â†’ contacto_incompleto", async () => {
@@ -3529,6 +3861,88 @@ index 0000000..bb0e5a1
 +    expect(e.last_step_index).toBe(2);
 +  });
 +
++  test("0073 un retry completed no puede reasignarse con otro teléfono", async () => {
++    const s = session(108);
++    const original = completedPayload({ sessionId: s, email: email(108), capital: "capital_10k_25k" });
++    expect((await rpc("registrar_diagnostico", { p_payload: original })).status).toBe(200);
++    const before = await envio(s);
++    const retry = structuredClone(original) as Record<string, any>;
++    retry.lead.phone = "+5493585000109";
++    expect((await rpc("registrar_diagnostico", { p_payload: retry })).status).toBe(200);
++    expect((await envio(s)).persona_id).toBe(before.persona_id);
++    expect((await envio(s)).telefono_e164_capturado).toBe(before.telefono_e164_capturado);
++  });
++
++  test("0073 dos completed simultáneos de la misma sesión no mezclan teléfonos", async () => {
++    const s = session(111);
++    const first = completedPayload({ sessionId: s, email: email(111), capital: "capital_10k_25k" }) as Record<string, any>;
++    const second = structuredClone(first) as Record<string, any>;
++    second.lead.phone = "+5493585000112";
++    const results = await Promise.all([
++      rpc("registrar_diagnostico", { p_payload: first }),
++      rpc("registrar_diagnostico", { p_payload: second }),
++    ]);
++    expect(results.every((result) => result.status === 200)).toBe(true);
++    const stored = await envio(s);
++    expect([first.lead.phone, second.lead.phone]).toContain(stored.telefono_e164_capturado);
++    expect(await activeLeadIdsForPhone(stored.telefono_e164_capturado)).toEqual([stored.persona_id]);
++  });
++
++  test("0073 una vinculación hacia ex_cliente no bloquea una finalización futura", async () => {
++    const mail = email(109);
++    const first = session(109);
++    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: first, email: mail, capital: "capital_10k_25k" }) });
++    const before = await envio(first);
++    const leadId = before.persona_id as string;
++    const clientId = await crearCliente(109, "+5491100010109");
++    await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clientId, p_confirmar: true });
++    expect((await rest("PATCH", "personas", `id=eq.${clientId}`, { estado: "ex_cliente" })).status).toBeLessThan(300);
++
++    const second = session(110);
++    expect((await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: second, email: mail, capital: "capital_10k_25k" }) })).status).toBe(200);
++    const after = await envio(second);
++    expect(after.persona_id).not.toBe(clientId);
++    expect((await rest("GET", "personas", `id=eq.${after.persona_id}&select=estado`)).body[0].estado).toBe("lead");
++    expect((await rpc("desvincular_lead", { p_cliente_id: clientId, p_lead_id: leadId })).status).toBe(200);
++    expect((await envio(first)).persona_id).toBe(after.persona_id);
++    expect(await activeLeadIdsForPhone(before.telefono_e164_capturado)).toEqual([after.persona_id]);
++  });
++
++  test("I6: progress tardío no altera paso, actividad ni respuestas del primer dropped", async () => {
++    const s = session(95);
++    await rpc("registrar_diagnostico", { p_payload: payload({ session_id: s, event: "started", progress: { step_id: "start", step_index: 0 }, answers: [] }) });
++    const answer = respuestasCompletas("capital_10k_25k")[0];
++    await rpc("registrar_diagnostico", { p_payload: payload({ session_id: s, event: "dropped", progress: { step_id: "challenge", step_index: 2 }, answers: [answer] }) });
++    const before = await envio(s);
++    const answersBefore = await rest("GET", "diagnostico_respuestas", `envio_id=eq.${before.id}&select=question_id,answer_id,answer_text`);
++
++    const late = await rpc("registrar_diagnostico", { p_payload: payload({
++      session_id: s, event: "progress", progress: { step_id: "situation", step_index: 1 },
++      answers: [{ ...answer, answer_id: "exposure_none", answer_text: "Fuera" }],
++    }) });
++    expect(late.status).toBeGreaterThanOrEqual(400);
++    expect(late.body.message).toContain("dropped_es_terminal");
++    const after = await envio(s);
++    expect(after.last_step_id).toBe("challenge");
++    expect(after.last_step_index).toBe(2);
++    expect(after.last_activity_at).toBe(before.last_activity_at);
++    expect(await rest("GET", "diagnostico_respuestas", `envio_id=eq.${before.id}&select=question_id,answer_id,answer_text`)).toEqual(answersBefore);
++  });
++
++  test("0073 marca nuevas finalizaciones como canonical y rechaza país/prefijo incoherente", async () => {
++    const s = session(96);
++    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: email(96), capital: "capital_10k_25k" }) });
++    const e = await envio(s);
++    expect(e.registro_origen).toBe("canonical");
++    expect(e.consentimiento_origen).toBe("canonical");
++
++    const bad = completedPayload({ sessionId: session(97), email: email(97), capital: "capital_10k_25k" }) as Record<string, any>;
++    bad.lead.country = "ES";
++    const rejected = await rpc("registrar_diagnostico", { p_payload: bad });
++    expect(rejected.status).toBeGreaterThanOrEqual(400);
++    expect(rejected.body.message).toContain("telefono_pais_incoherente");
++  });
++
 +  test("I1: consentimiento anterior al inicio del recorrido se rechaza", async () => {
 +    const s = session(91);
 +    await rpc("registrar_diagnostico", { p_payload: payload({ session_id: s, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "start", step_index: 0 } }) });
@@ -3579,11 +3993,95 @@ index 0000000..bb0e5a1
 +    expect(e).not.toBeNull();
 +    expect(e.quiz_version_id).not.toBeNull();
 +  });
++
++  test("0073 concurrencia completar/vincular conserva un conjunto exacto", async () => {
++    const mail = email(100);
++    const first = session(100);
++    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: first, email: mail, capital: "capital_10k_25k" }) });
++    const before = await envio(first);
++    const leadId = before.persona_id as string;
++    const clientId = await crearCliente(100, "+5491100010100");
++    const second = session(101);
++    const [completed, linked] = await Promise.all([
++      rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: second, email: mail, capital: "capital_10k_25k" }) }),
++      rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clientId, p_confirmar: true }),
++    ]);
++    expect(completed.status).toBe(200);
++    expect(linked.status).toBe(200);
++    expect((await envio(first)).persona_id).toBe(clientId);
++    expect((await envio(second)).persona_id).toBe(clientId);
++    expect(await activeLeadIdsForPhone(before.telefono_e164_capturado)).toEqual([]);
++  });
++
++  test("0073 concurrencia completar/desvincular no deja dos leads temporales", async () => {
++    const mail = email(102);
++    const first = session(102);
++    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: first, email: mail, capital: "capital_10k_25k" }) });
++    const before = await envio(first);
++    const leadId = before.persona_id as string;
++    const clientId = await crearCliente(102, "+5491100010102");
++    await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clientId, p_confirmar: true });
++    const second = session(103);
++    const [completed, unlinked] = await Promise.all([
++      rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: second, email: mail, capital: "capital_10k_25k" }) }),
++      rpc("desvincular_lead", { p_cliente_id: clientId, p_lead_id: leadId }),
++    ]);
++    expect(completed.status).toBe(200);
++    expect(unlinked.status).toBe(200);
++    expect((await envio(first)).persona_id).toBe(leadId);
++    expect((await envio(second)).persona_id).toBe(leadId);
++    expect(await activeLeadIdsForPhone(before.telefono_e164_capturado)).toEqual([leadId]);
++  });
++
++  test("0073 concurrencia completar/descartar conserva como máximo un lead activo", async () => {
++    const mail = email(104);
++    const first = session(104);
++    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: first, email: mail, capital: "capital_10k_25k" }) });
++    const before = await envio(first);
++    const second = session(105);
++    const [completed, discarded] = await Promise.all([
++      rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: second, email: mail, capital: "capital_10k_25k" }) }),
++      rpc("descartar_lead", { p_lead_id: before.persona_id }),
++    ]);
++    expect(completed.status).toBe(200);
++    expect(discarded.status).toBe(200);
++    expect((await activeLeadIdsForPhone(before.telefono_e164_capturado)).length).toBeLessThanOrEqual(1);
++  });
++
++  test("0073 concurrencia vincular/descartar aplica exactamente una operación", async () => {
++    const mail = email(106);
++    const s = session(106);
++    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: mail, capital: "capital_10k_25k" }) });
++    const e = await envio(s);
++    const clientId = await crearCliente(106, "+5491100010106");
++    const results = await Promise.all([
++      rpc("vincular_lead_convertido", { p_lead_id: e.persona_id, p_cliente_id: clientId, p_confirmar: true }),
++      rpc("descartar_lead", { p_lead_id: e.persona_id }),
++    ]);
++    expect(results.filter((result) => result.status === 200)).toHaveLength(1);
++    expect(results.filter((result) => result.status >= 400)).toHaveLength(1);
++  });
++
++  test("0073 dos rollbacks simultáneos restauran una sola vez y sin parcial", async () => {
++    const mail = email(107);
++    const s = session(107);
++    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: mail, capital: "capital_10k_25k" }) });
++    const e = await envio(s);
++    const clientId = await crearCliente(107, "+5491100010107");
++    await rpc("vincular_lead_convertido", { p_lead_id: e.persona_id, p_cliente_id: clientId, p_confirmar: true });
++    const results = await Promise.all([
++      rpc("desvincular_lead", { p_cliente_id: clientId, p_lead_id: e.persona_id }),
++      rpc("desvincular_lead", { p_cliente_id: clientId, p_lead_id: e.persona_id }),
++    ]);
++    expect(results.filter((result) => result.status === 200)).toHaveLength(1);
++    expect(results.filter((result) => result.status >= 400)).toHaveLength(1);
++    expect((await envio(s)).persona_id).toBe(e.persona_id);
++  });
 +});
 +
 +// mapa auxiliar para el test de concurrencia
 +const sessionIds: Record<number, string> = {};
-+for (let n = 1; n <= 99; n++) sessionIds[n] = `0000c0de-0000-4000-8000-${String(n).padStart(12, "0")}`;
++for (let n = 1; n <= 120; n++) sessionIds[n] = `0000c0de-0000-4000-8000-${String(n).padStart(12, "0")}`;
 diff --git a/apps/inbox/lib/__tests__/server-only-stub.ts b/apps/inbox/lib/__tests__/server-only-stub.ts
 new file mode 100644
 index 0000000..60c989a
@@ -3595,12 +4093,27 @@ index 0000000..60c989a
 +// garantiza que el módulo no llegue a un Client Component; en vitest basta
 +// con que exista como módulo vacío (ver vitest.config.ts).
 +export default {};
+diff --git a/apps/inbox/lib/latest-request.ts b/apps/inbox/lib/latest-request.ts
+new file mode 100644
+index 0000000..0e35105
+--- /dev/null
++++ b/apps/inbox/lib/latest-request.ts
+@@ -0,0 +1,9 @@
++export function createLatestRequestSequence() {
++  let current = 0;
++
++  return {
++    next: () => ++current,
++    invalidate: () => { current += 1; },
++    isCurrent: (request: number) => request === current,
++  };
++}
 diff --git a/apps/inbox/lib/leads.ts b/apps/inbox/lib/leads.ts
 new file mode 100644
-index 0000000..e9d020e
+index 0000000..3be1db5
 --- /dev/null
 +++ b/apps/inbox/lib/leads.ts
-@@ -0,0 +1,321 @@
+@@ -0,0 +1,350 @@
 +// Módulo de leads (docs/11 §10): consultas server-only contra PostgREST.
 +//
 +// El listado representa ENVÍOS del quiz (diagnostico_envios), no una tabla
@@ -3674,6 +4187,12 @@ index 0000000..e9d020e
 +];
 +
 +export const LEADS_PAGE_SIZE = 50;
++export const MAX_LEADS_PAGE = 10000;
++
++export function parseLeadPage(value: string | number | undefined): number {
++  const page = typeof value === "number" ? value : Number(value);
++  return Number.isInteger(page) && page >= 1 && page <= MAX_LEADS_PAGE ? page : 1;
++}
 +
 +// Fecha de filtro válida (YYYY-MM-DD) o null: los inputs de /leads llegan por
 +// URL y un valor inválido ("abc", "99-99-9999") rompería el `new Date(...)`
@@ -3722,12 +4241,17 @@ index 0000000..e9d020e
 +  if (desde) parts.push(`created_at=gte.${desde}T00:00:00Z`);
 +  // L-01 (auditoría v3): el hasta con 23:59:59Z se comía el último segundo
 +  // fraccionario — excluye con < medianoche del día siguiente.
-+  if (hasta) {
++  if (hasta === "9999-12-31") {
++    parts.push("created_at=lt.10000-01-01T00:00:00.000Z");
++  } else if (hasta) {
 +    const d = new Date(`${hasta}T00:00:00Z`);
 +    d.setUTCDate(d.getUTCDate() + 1);
 +    parts.push(`created_at=lt.${d.toISOString().slice(0, 10)}T00:00:00Z`);
 +  }
-+  if (f.paso) parts.push(`last_step_id=eq.${encodeURIComponent(f.paso)}`);
++  if (f.paso) {
++    parts.push("estado=eq.dropped");
++    parts.push(`last_step_id=eq.${encodeURIComponent(f.paso)}`);
++  }
 +  if (f.utm_source) parts.push(`utm_source=eq.${encodeURIComponent(f.utm_source)}`);
 +  if (f.utm_medium) parts.push(`utm_medium=eq.${encodeURIComponent(f.utm_medium)}`);
 +  if (f.utm_campaign) parts.push(`utm_campaign=eq.${encodeURIComponent(f.utm_campaign)}`);
@@ -3747,7 +4271,7 @@ index 0000000..e9d020e
 +    parts.push(`or=(nombre_capturado.ilike.${like},email_capturado.ilike.${like},telefono_e164_capturado.ilike.${like})`);
 +  }
 +
-+  const offset = Math.max(0, ((f.page ?? 1) - 1) * LEADS_PAGE_SIZE);
++  const offset = (parseLeadPage(f.page) - 1) * LEADS_PAGE_SIZE;
 +  if (offset > 0) parts.push(`offset=${offset}`);
 +
 +  return parts.join("&");
@@ -3770,6 +4294,7 @@ index 0000000..e9d020e
 +  let filtros: LeadFilters = f;
 +  if (f.version) {
 +    const v = await rest<{ id: string }[]>("GET", `quiz_versiones?codigo=eq.${encodeURIComponent(f.version)}&select=id`);
++    if (v.status >= 400) throw new Error(`quiz_versiones_http_${v.status}`);
 +    const id = v.json?.[0]?.id;
 +    if (!id) return { rows: [], hayMas: false };
 +    filtros = { ...f, version: id };
@@ -3778,6 +4303,7 @@ index 0000000..e9d020e
 +  const query = buildLeadsQuery(filtros);
 +
 +  const r = await rest<Record<string, unknown>[]>("GET", `diagnostico_envios?${query}`);
++  if (r.status >= 400) throw new Error(`diagnostico_envios_http_${r.status}`);
 +  const filas = r.json ?? [];
 +  const hayMas = filas.length > LEADS_PAGE_SIZE;
 +  return { rows: filas.slice(0, LEADS_PAGE_SIZE).map(filaToRow), hayMas };
@@ -3799,6 +4325,8 @@ index 0000000..e9d020e
 +  consentimiento_aceptado: boolean | null;
 +  consentimiento_version: string | null;
 +  consentimiento_at: string | null;
++  consentimiento_origen: "canonical" | "legacy-unknown" | null;
++  registro_origen: "canonical" | "legacy-unknown" | null;
 +  started_at: string | null;
 +  utm_term: string | null;
 +  referrer: string | null;
@@ -3818,7 +4346,7 @@ index 0000000..e9d020e
 +        "id", "session_id", "estado", "schema_version", "created_at", "started_at", "finished_at",
 +        "dropped_at", "last_activity_at", "last_step_id", "last_step_index",
 +        "nombre_capturado", "email_capturado", "telefono_e164_capturado", "pais_capturado",
-+        "consentimiento_aceptado", "consentimiento_version", "consentimiento_at",
++        "consentimiento_aceptado", "consentimiento_version", "consentimiento_at", "consentimiento_origen", "registro_origen",
 +        "capital_min_usd", "capital_max_usd", "es_lead_caliente", "qualification_rule_version",
 +        "motivo_calificacion", "diagnosis_version", "diagnosis_result",
 +        "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "referrer",
@@ -3827,6 +4355,7 @@ index 0000000..e9d020e
 +        "persona:persona_id(estado,nombre)",
 +      ].join(","),
 +  );
++  if (r.status >= 400) throw new Error(`diagnostico_envio_detalle_http_${r.status}`);
 +  const fila = r.json?.[0];
 +  if (!fila) return null;
 +
@@ -3834,6 +4363,7 @@ index 0000000..e9d020e
 +    "GET",
 +    `diagnostico_respuestas?envio_id=eq.${encodeURIComponent(id)}&select=question_id,question_type,question_text,question_order,answer_id,answer_text,answer_value,answered_at&order=question_order.asc`,
 +  );
++  if (respuestas.status >= 400) throw new Error(`diagnostico_respuestas_http_${respuestas.status}`);
 +
 +  // Si este envío ya fue vinculado a un cliente, la auditoría guarda QUÉ lead
 +  // temporal se movió (evita que el rollback mueva la vinculación equivocada).
@@ -3841,6 +4371,7 @@ index 0000000..e9d020e
 +    "GET",
 +    `auditoria?accion=eq.vinculacion${"&"}datos.cs=${encodeURIComponent(`{"envio_ids":["${id}"]}`)}&select=entidad_id&order=created_at.desc&limit=1`,
 +  );
++  if (vinculaciones.status >= 400) throw new Error(`auditoria_vinculacion_http_${vinculaciones.status}`);
 +
 +  const row = filaToRow(fila);
 +  const diagnosisResult = fila.diagnosis_result;
@@ -3850,6 +4381,8 @@ index 0000000..e9d020e
 +    consentimiento_aceptado: fila.consentimiento_aceptado as boolean | null,
 +    consentimiento_version: fila.consentimiento_version as string | null,
 +    consentimiento_at: fila.consentimiento_at as string | null,
++    consentimiento_origen: fila.consentimiento_origen as LeadDetalle["consentimiento_origen"],
++    registro_origen: fila.registro_origen as LeadDetalle["registro_origen"],
 +    started_at: fila.started_at as string | null,
 +    utm_term: fila.utm_term as string | null,
 +    referrer: fila.referrer as string | null,
@@ -3872,7 +4405,7 @@ index 0000000..e9d020e
 +  programa: string | null;
 +}
 +
-+const CLIENTES_PAGE_SIZE = 50;
++export const CLIENTES_PAGE_SIZE = 50;
 +
 +// Query PURA del picker (testeable sin base): inner join con programas y
 +// búsqueda server-side por nombre/email/teléfono.
@@ -3881,37 +4414,45 @@ index 0000000..e9d020e
 +// parámetro suelto PostgREST lo ignoraba y listaba clientes sin programa
 +// (HTTP 200, error silencioso). Dentro del select exige al menos un programa.
 +// I8: búsqueda server-side (no local sobre los primeros 500) y sin cap duro.
-+export function buildClientesQuery(q?: string, limit = CLIENTES_PAGE_SIZE): string {
++export function buildClientesQuery(q?: string, page = 1): string {
++  const safePage = parseLeadPage(page);
 +  const parts = [
-+    "personas?estado=eq.cliente",
-+    "select=id,nombre,email,telefono_e164,programas!inner(tier,tiers(nombre))",
-+    "order=nombre.asc",
-+    `limit=${limit}`,
++    "v_clientes_para_vincular?",
++    "select=id,nombre,email,telefono_e164,programa",
++    "order=nombre.asc,id.asc",
++    `limit=${CLIENTES_PAGE_SIZE + 1}`,
 +  ];
 +  if (q && q.trim()) {
 +    const like = encodeURIComponent(`*${patronLike(q.trim())}*`);
 +    parts.push(`or=(nombre.ilike.${like},email.ilike.${like},telefono_e164.ilike.${like})`);
 +  }
++  if (safePage > 1) parts.push(`offset=${(safePage - 1) * CLIENTES_PAGE_SIZE}`);
 +  return parts.join("&");
 +}
 +
-+export async function getClientesParaVincular(q?: string): Promise<ClienteParaVincular[]> {
++export function esConsentimientoLegacySinRegistro(version: string | null, origen?: string | null): boolean {
++  return origen === "legacy-unknown" || version === "legacy-sin-registro";
++}
++
++export async function getClientesParaVincular(q?: string, page = 1): Promise<{ clientes: ClienteParaVincular[]; hayMas: boolean }> {
 +  const r = await rest<
 +    {
 +      id: string;
 +      nombre: string;
 +      email: string | null;
 +      telefono_e164: string | null;
-+      programas: { tier: string; tiers: { nombre: string } | null }[];
++      programa: string | null;
 +    }[]
-+  >("GET", buildClientesQuery(q));
-+  return (r.json ?? []).map((c) => ({
++  >("GET", buildClientesQuery(q, page));
++  if (r.status >= 400) throw new Error(`clientes_para_vincular_http_${r.status}`);
++  const rows = r.json ?? [];
++  return { clientes: rows.slice(0, CLIENTES_PAGE_SIZE).map((c) => ({
 +    id: c.id,
 +    nombre: c.nombre,
 +    email: c.email,
 +    telefono_e164: c.telefono_e164,
-+    programa: c.programas?.[0]?.tiers?.nombre ?? c.programas?.[0]?.tier ?? null,
-+  }));
++    programa: c.programa,
++  })), hayMas: rows.length > CLIENTES_PAGE_SIZE };
 +}
 +
 +// Versiones publicadas del quiz (para el filtro del listado)
@@ -3920,6 +4461,7 @@ index 0000000..e9d020e
 +    "GET",
 +    "quiz_versiones?order=created_at.desc&limit=50",
 +  );
++  if (r.status >= 400) throw new Error(`quiz_versiones_http_${r.status}`);
 +  return r.json ?? [];
 +}
 diff --git a/apps/inbox/lib/modulos.ts b/apps/inbox/lib/modulos.ts
@@ -3951,10 +4493,10 @@ index 0360753..b1597ef 100644
  ];
 diff --git a/apps/inbox/lib/quiz/__tests__/lead-payload.test.ts b/apps/inbox/lib/quiz/__tests__/lead-payload.test.ts
 new file mode 100644
-index 0000000..60f2a87
+index 0000000..16175f4
 --- /dev/null
 +++ b/apps/inbox/lib/quiz/__tests__/lead-payload.test.ts
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,108 @@
 +// Tests de las funciones PURAS del contrato del funnel (docs/11 §5): el
 +// armado del payload y sobre todo el componer del teléfono desde el selector
 +// de país — el bug que mandaba "+AR…" al servidor (auditoría v2 #2).
@@ -3965,6 +4507,8 @@ index 0000000..60f2a87
 +  buildQuizPayload,
 +  composePhone,
 +  composePhonePorPais,
++  releaseSubmission,
++  tryAcquireSubmission,
 +  type SourceData,
 +} from "@/lib/quiz/lead-payload";
 +
@@ -3978,9 +4522,17 @@ index 0000000..60f2a87
 +    }
 +  });
 +
-+  test("Argentina deja el prefijo 54 y quita el 0 troncal", () => {
-+    expect(composePhonePorPais("AR", "01155554444")).toBe("+541155554444");
-+    expect(composePhonePorPais("AR", "3585123456")).toBe("+543585123456");
++  test("Argentina asume móvil y converge formatos equivalentes", () => {
++    for (const input of [
++      "+54 9 3585 401429",
++      "0 3585 401429",
++      "15 3585 401429",
++      "9 3585 401429",
++      "3585 401429",
++      "03585 15 401429",
++    ]) {
++      expect(composePhonePorPais("AR", input)).toBe("+5493585401429");
++    }
 +  });
 +
 +  test("país desconocido → null (la UI pide reelegir país, el servidor igual revalida)", () => {
@@ -3988,14 +4540,31 @@ index 0000000..60f2a87
 +  });
 +
 +  test("composePhone directo sigue aceptando prefijo (contrato legacy del helper)", () => {
-+    expect(composePhone("54", "3585123456")).toBe("+543585123456");
++    expect(composePhone("54", "3585123456")).toBe("+5493585123456");
 +    expect(composePhone("1", "5551234567")).toBe("+15551234567");
 +  });
 +
-+  test("Argentina normaliza el prefijo 15 de celular a 9 y quita el 0 (I11)", () => {
-+    expect(composePhonePorPais("AR", "153585401429")).toBe("+5493585401429");
-+    expect(composePhonePorPais("AR", "03585401429")).toBe("+543585401429");
-+    expect(composePhonePorPais("AR", "93585401429")).toBe("+5493585401429");
++  test("Argentina rechaza caracteres, longitudes y marcadores ambiguos", () => {
++    expect(composePhonePorPais("AR", "3585ABC1429")).toBeNull();
++    expect(composePhonePorPais("AR", "1234567")).toBeNull();
++    expect(composePhonePorPais("AR", "12345678901")).toBeNull();
++    expect(composePhonePorPais("AR", "351 15 15 123456")).toBeNull();
++  });
++
++  test("un prefijo internacional escrito sin + no se duplica", () => {
++    for (const [country, local, expected] of [
++      ["ES", "34600111222", "+34600111222"],
++      ["MX", "525512345678", "+525512345678"],
++      ["CO", "573001234567", "+573001234567"],
++      ["BR", "5511987654321", "+5511987654321"],
++    ]) {
++      expect(composePhonePorPais(country, local)).toBe(expected);
++      expect(composePhonePorPais(country, `+${local}`)).toBe(expected);
++    }
++  });
++
++  test("un área local igual al prefijo del país no se recorta", () => {
++    expect(composePhonePorPais("BR", "55 99999-9999")).toBe("+5555999999999");
 +  });
 +});
 +
@@ -4018,6 +4587,7 @@ index 0000000..60f2a87
 +        phone: "+5493585000000",
 +        country: "AR",
 +        consent: true,
++        consentAcceptedAt: "2026-09-21T15:39:40.000Z",
 +        website: "http://bot.com",
 +      },
 +      answers: {},
@@ -4027,12 +4597,121 @@ index 0000000..60f2a87
 +    expect(lead.website).toBe("http://bot.com");
 +  });
 +});
++
++test("el lock de completed admite un solo submit y se libera para reintentar", () => {
++  const lock = { current: false };
++  expect(tryAcquireSubmission(lock)).toBe(true);
++  expect(tryAcquireSubmission(lock)).toBe(false);
++  releaseSubmission(lock);
++  expect(tryAcquireSubmission(lock)).toBe(true);
++});
+diff --git a/apps/inbox/lib/quiz/__tests__/lead-route-validation.test.ts b/apps/inbox/lib/quiz/__tests__/lead-route-validation.test.ts
+new file mode 100644
+index 0000000..f90e92c
+--- /dev/null
++++ b/apps/inbox/lib/quiz/__tests__/lead-route-validation.test.ts
+@@ -0,0 +1,95 @@
++import { beforeEach, describe, expect, test, vi } from "vitest";
++
++vi.mock("@/lib/supabase", () => ({
++  rest: vi.fn(async (_method: string, _path: string, body: { p_payload: Record<string, unknown> }) => ({
++    status: 200,
++    json: {
++      ok: true,
++      session_id: body.p_payload.session_id,
++      submission_id: "00000000-0000-4000-8000-000000000099",
++      status: body.p_payload.event === "completed" ? "completed" : "in_progress",
++    },
++  })),
++}));
++
++process.env.LEAD_RATE_LIMIT_MAX = "2";
++process.env.LEAD_COMPLETED_RATE_LIMIT_MAX = "1";
++process.env.LEAD_RAW_RATE_LIMIT_MAX = "10";
++
++const { POST } = await import("@/app/api/lead/route");
++const { rest } = await import("@/lib/supabase");
++const { resetRateLimiter } = await import("@/lib/quiz/rate-limit");
++
++const sessionId = "00000000-0000-4000-8000-000000000098";
++
++function call(body: unknown, ip = "127.0.0.9"): Promise<Response> {
++  return POST(new Request("http://localhost:3000/api/lead", {
++    method: "POST",
++    headers: { "content-type": "application/json", host: "localhost:3000", "x-real-ip": ip },
++    body: JSON.stringify(body),
++  }));
++}
++
++const tracking = {
++  schema_version: 1,
++  quiz_version: "diagnostico-cripto-v1-a",
++  session_id: sessionId,
++  event: "progress",
++  occurred_at: "2026-09-21T15:40:00.000Z",
++  progress: { step_id: "situation", step_index: 1 },
++  answers: [],
++};
++
++const completed = {
++  ...tracking,
++  event: "completed",
++  progress: { step_id: "result", step_index: 11 },
++  lead: {
++    name: "Juan",
++    email: "juan@example.com",
++    phone: "+54 3585 401429",
++    country: "AR",
++    consent: { accepted: true, version: "contacto-v1", accepted_at: "2026-09-21T15:39:40.000Z" },
++  },
++};
++
++describe("POST /api/lead - validación sin base", () => {
++  beforeEach(() => resetRateLimiter());
++
++  test("mide bytes UTF-8 aunque no haya Content-Length", async () => {
++    const body = JSON.stringify({ data: "á".repeat(40 * 1024) });
++    const response = await POST(new Request("http://localhost:3000/api/lead", {
++      method: "POST",
++      headers: { "content-type": "application/json", host: "localhost:3000" },
++      body,
++    }));
++    expect(response.status).toBe(413);
++  });
++
++  test("datos de cliente imposibles reciben 4xx controlado", async () => {
++    expect((await call({ ...completed, occurred_at: "2026-02-31T15:40:00.000Z" }, "127.0.0.10")).status).toBe(400);
++    expect((await call({ ...completed, lead: { ...completed.lead, country: "ZZ" } }, "127.0.0.11")).status).toBe(400);
++  });
++
++  test("agotar tracking no bloquea completed y completed conserva antiabuso", async () => {
++    expect((await call(tracking)).status).toBe(200);
++    expect((await call(tracking)).status).toBe(200);
++    expect((await call(tracking)).status).toBe(429);
++    expect((await call(completed)).status).toBe(200);
++    expect((await call(completed)).status).toBe(429);
++  });
++
++  test("tráfico inválido repetido consume la cuota bruta temprana", async () => {
++    let response: Response | null = null;
++    for (let i = 0; i < 11; i += 1) response = await call({}, "127.0.0.12");
++    expect(response?.status).toBe(429);
++  });
++
++  test("un HTTP 200 con respuesta RPC malformada se convierte en 502", async () => {
++    vi.mocked(rest).mockResolvedValueOnce({
++      status: 200,
++      json: { ok: true, session_id: "00000000-0000-4000-8000-000000000000" },
++    } as never);
++    expect((await call(completed, "127.0.0.13")).status).toBe(502);
++  });
++});
 diff --git a/apps/inbox/lib/quiz/__tests__/lead-route.test.ts b/apps/inbox/lib/quiz/__tests__/lead-route.test.ts
 new file mode 100644
-index 0000000..3b8984a
+index 0000000..8acaa24
 --- /dev/null
 +++ b/apps/inbox/lib/quiz/__tests__/lead-route.test.ts
-@@ -0,0 +1,324 @@
+@@ -0,0 +1,338 @@
 +// Tests de integración de POST /api/lead (docs/11 Fase B): el handler real de
 +// Next contra el Supabase LOCAL, igual que quiz-leads-rpc.test.ts. Se saltan
 +// solos si la base no está arriba. La ruta se importa directo (route handler =
@@ -4041,7 +4720,8 @@ index 0000000..3b8984a
 +
 +import { readFileSync } from "node:fs";
 +import { join } from "node:path";
-+import { afterAll, beforeAll, describe, expect, test } from "vitest";
++import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
++import { guardedLocalFetch, isLocalSupabaseUrl } from "@/lib/quiz/local-db-guard";
 +
 +function loadEnvLocal(): Record<string, string> {
 +  try {
@@ -4072,22 +4752,25 @@ index 0000000..3b8984a
 +const { resetRateLimiter } = await import("@/lib/quiz/rate-limit");
 +
 +let reachable = false;
++async function probe(baseUrl: string, key: string, fetchFn: typeof fetch = fetch): Promise<boolean> {
++  if (!baseUrl || !key || !isLocalSupabaseUrl(baseUrl)) return false;
++  try {
++    const response = await guardedLocalFetch(baseUrl, "/rest/v1/", {
++      headers: { apikey: key, Authorization: `Bearer ${key}` },
++    }, fetchFn);
++    return response.status < 500;
++  } catch {
++    return false;
++  }
++}
++
 +// GUARDA ANTI-PRODUCCIÓN (igual que quiz-leads-rpc.test.ts): suites gated,
 +// escrituras reales — solo contra el Supabase LOCAL.
-+const esLocal = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/.*)?$/i.test(URL_BASE ?? "");
++const esLocal = isLocalSupabaseUrl(URL_BASE);
 +if (URL_BASE && KEY && !esLocal) {
 +  console.warn(`[lead-route] SUPABASE_URL no es local (${URL_BASE}): los tests de integración NO corren.`);
 +}
-+if (URL_BASE && KEY && esLocal) {
-+  try {
-+    const r = await fetch(`${URL_BASE}/rest/v1/`, {
-+      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
-+    });
-+    reachable = r.status < 500;
-+  } catch {
-+    reachable = false;
-+  }
-+}
++reachable = await probe(URL_BASE, KEY);
 +
 +const HOST = "localhost:3000";
 +const SESSIONS: string[] = [];
@@ -4115,20 +4798,30 @@ index 0000000..3b8984a
 +  );
 +}
 +
-+async function cleanup(): Promise<void> {
++async function cleanup(baseUrl: string = URL_BASE, fetchFn: typeof fetch = fetch): Promise<void> {
++  if (!isLocalSupabaseUrl(baseUrl)) throw new Error("cleanup requires local Supabase");
 +  if (SESSIONS.length) {
-+    await fetch(`${URL_BASE}/rest/v1/diagnostico_envios?session_id=in.(${SESSIONS.join(",")})`, {
++    await guardedLocalFetch(baseUrl, `/rest/v1/diagnostico_envios?session_id=in.(${SESSIONS.join(",")})`, {
 +      method: "DELETE",
 +      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
-+    });
++    }, fetchFn);
 +  }
 +  if (EMAILS.length) {
-+    await fetch(`${URL_BASE}/rest/v1/personas?email=in.(${EMAILS.map((e) => `"${e}"`).join(",")})`, {
++    await guardedLocalFetch(baseUrl, `/rest/v1/personas?email=in.(${EMAILS.map((e) => `"${e}"`).join(",")})`, {
 +      method: "DELETE",
 +      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
-+    });
++    }, fetchFn);
 +  }
 +}
++
++describe("guarda del arnés HTTP", () => {
++  test("una URL externa no ejecuta probes ni cleanup", async () => {
++    const fetchFn = vi.fn<typeof fetch>();
++    expect(await probe("https://example.supabase.co", "test-key", fetchFn)).toBe(false);
++    await expect(cleanup("https://example.supabase.co", fetchFn)).rejects.toThrow(/local/i);
++    expect(fetchFn).not.toHaveBeenCalled();
++  });
++});
 +
 +const d = reachable || process.env.LEAD_TESTS_REQUIRE_DB === "1" ? describe : describe.skip;
 +
@@ -4142,7 +4835,7 @@ index 0000000..3b8984a
 +    resetRateLimiter();
 +  });
 +  afterAll(async () => {
-+    await cleanup();
++    if (reachable && esLocal) await cleanup();
 +  });
 +
 +  test("completed válido persiste y responde ok con submission_id", async () => {
@@ -4153,7 +4846,7 @@ index 0000000..3b8984a
 +      event: "completed",
 +      occurred_at: "2026-09-21T15:40:00.000Z",
 +      source: { utm_source: "instagram", utm_medium: "organic", utm_campaign: "fase-b", utm_content: null, utm_term: null, referrer: "https://instagram.com/" },
-+      progress: { step_id: "result", step_index: 10 },
++      progress: { step_id: "result", step_index: 11 },
 +      lead: {
 +        name: "Lead de prueba ruta",
 +        email: email(1),
@@ -4184,7 +4877,7 @@ index 0000000..3b8984a
 +    expect(body.persona_id).toBeUndefined(); // docs/11 §5: nunca exponer persona_id
 +
 +    // Verificación de persistencia: caliente + contacto capturado
-+    const check = await fetch(`${URL_BASE}/rest/v1/diagnostico_envios?session_id=eq.${payload.session_id}&select=estado,es_lead_caliente,email_capturado,utm_campaign`, {
++    const check = await guardedLocalFetch(URL_BASE, `/rest/v1/diagnostico_envios?session_id=eq.${payload.session_id}&select=estado,es_lead_caliente,email_capturado,utm_campaign`, {
 +      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
 +    });
 +    const rows = (await check.json()) as { estado: string; es_lead_caliente: boolean; email_capturado: string; utm_campaign: string }[];
@@ -4239,7 +4932,7 @@ index 0000000..3b8984a
 +    const body = (await res.json()) as { status: string };
 +    expect(body.status).toBe("ignored");
 +
-+    const check = await fetch(`${URL_BASE}/rest/v1/diagnostico_envios?session_id=eq.${session(4)}&select=id`, {
++    const check = await guardedLocalFetch(URL_BASE, `/rest/v1/diagnostico_envios?session_id=eq.${session(4)}&select=id`, {
 +      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
 +    });
 +    expect(await check.json()).toHaveLength(0);
@@ -4332,7 +5025,7 @@ index 0000000..3b8984a
 +    );
 +    const contract = buildContractAnswers(answers, questions.filter((q) => q.type !== "contact").map((q) => q.id));
 +
-+    const defRes = await fetch(`${URL_BASE}/rest/v1/quiz_versiones?codigo=eq.diagnostico-cripto-v1-a&select=definicion`, {
++    const defRes = await guardedLocalFetch(URL_BASE, "/rest/v1/quiz_versiones?codigo=eq.diagnostico-cripto-v1-a&select=definicion", {
 +      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
 +    });
 +    const [version] = (await defRes.json()) as { definicion: { questions: { id: string; type: string }[] } }[];
@@ -4357,18 +5050,86 @@ index 0000000..3b8984a
 +    expect(res.status).toBe(200);
 +  });
 +});
+diff --git a/apps/inbox/lib/quiz/__tests__/leads-data.test.ts b/apps/inbox/lib/quiz/__tests__/leads-data.test.ts
+new file mode 100644
+index 0000000..9795259
+--- /dev/null
++++ b/apps/inbox/lib/quiz/__tests__/leads-data.test.ts
+@@ -0,0 +1,62 @@
++import { beforeEach, describe, expect, test, vi } from "vitest";
++
++const rest = vi.fn();
++vi.mock("@/lib/supabase", () => ({
++  patronLike: (value: string) => value,
++  rest,
++}));
++
++const { esConsentimientoLegacySinRegistro, getClientesParaVincular, getLeads } = await import("../../leads");
++const { createLatestRequestSequence } = await import("../../latest-request");
++
++describe("datos server-side de /leads", () => {
++  beforeEach(() => rest.mockReset());
++
++  test("propaga errores PostgREST en vez de devolver una lista vacía", async () => {
++    rest.mockResolvedValue({ status: 500, json: { message: "db down" } });
++    await expect(getLeads({})).rejects.toThrow("diagnostico_envios_http_500");
++  });
++
++  test("pagina más de 50 clientes sin perder resultados", async () => {
++    const rows = Array.from({ length: 51 }, (_, index) => ({
++      id: `cliente-${index}`,
++      nombre: `Cliente ${index}`,
++      email: null,
++      telefono_e164: null,
++      programa: "Programa",
++    }));
++    rest.mockResolvedValue({ status: 200, json: rows });
++    const result = await getClientesParaVincular("cliente", 1);
++    expect(result.clientes).toHaveLength(50);
++    expect(result.hayMas).toBe(true);
++    expect(rest).toHaveBeenCalledWith("GET", expect.stringContaining("v_clientes_para_vincular"));
++  });
++
++  test("solicita y devuelve una página 2 real del selector", async () => {
++    rest.mockResolvedValue({
++      status: 200,
++      json: [{ id: "cliente-51", nombre: "Cliente 51", email: null, telefono_e164: null, programa: "Programa activo" }],
++    });
++    const result = await getClientesParaVincular("cliente", 2);
++    expect(rest).toHaveBeenCalledWith("GET", expect.stringContaining("offset=50"));
++    expect(result).toEqual({
++      clientes: [{ id: "cliente-51", nombre: "Cliente 51", email: null, telefono_e164: null, programa: "Programa activo" }],
++      hayMas: false,
++    });
++  });
++
++  test("la UI distingue legado sin evidencia de consentimiento", () => {
++    expect(esConsentimientoLegacySinRegistro("legacy-sin-registro")).toBe(true);
++    expect(esConsentimientoLegacySinRegistro("contacto-v1")).toBe(false);
++    expect(esConsentimientoLegacySinRegistro("contacto-v1", "legacy-unknown")).toBe(true);
++  });
++
++  test("una búsqueda nueva invalida respuestas anteriores antes de iniciar otro efecto", () => {
++    const sequence = createLatestRequestSequence();
++    const first = sequence.next();
++    sequence.invalidate();
++    expect(sequence.isCurrent(first)).toBe(false);
++    const second = sequence.next();
++    expect(sequence.isCurrent(second)).toBe(true);
++  });
++});
 diff --git a/apps/inbox/lib/quiz/__tests__/leads-query.test.ts b/apps/inbox/lib/quiz/__tests__/leads-query.test.ts
 new file mode 100644
-index 0000000..cb50f27
+index 0000000..a306db2
 --- /dev/null
 +++ b/apps/inbox/lib/quiz/__tests__/leads-query.test.ts
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,137 @@
 +// Tests del builder de query del listado de leads (docs/11 §10). Función
 +// PURA: sin base, sin servidor. La cobertura apunta a que cada filtro del
 +// listado genere exactamente el filtro de PostgREST esperado.
 +
 +import { describe, expect, test } from "vitest";
-+import { buildLeadsQuery, buildClientesQuery, LEADS_PAGE_SIZE, type LeadFilters } from "../../leads";
++import { buildLeadsQuery, buildClientesQuery, LEADS_PAGE_SIZE, parseLeadPage, type LeadFilters } from "../../leads";
 +import { patronLike } from "../../supabase";
 +
 +const base: LeadFilters = {};
@@ -4430,6 +5191,7 @@ index 0000000..cb50f27
 +    expect(con({ desde: "2026-09-01" })).toContain("created_at=gte.2026-09-01T00:00:00Z");
 +    expect(con({ hasta: "2026-09-30" })).toContain("created_at=lt.2026-10-01T00:00:00Z");
 +    expect(con({ paso: "capital" })).toContain("last_step_id=eq.capital");
++    expect(con({ paso: "capital" })).toContain("estado=eq.dropped");
 +    expect(con({ version: "a-b-c" })).toContain("quiz_version_id=eq.a-b-c");
 +    expect(con({ utm_source: "instagram" })).toContain("utm_source=eq.instagram");
 +    expect(con({ utm_campaign: "diag 2026" })).toContain("utm_campaign=eq.diag%202026");
@@ -4456,20 +5218,31 @@ index 0000000..cb50f27
 +    expect(con({ page: 3 })).toContain(`offset=${LEADS_PAGE_SIZE * 2}`);
 +  });
 +
++  test("page solo acepta enteros finitos positivos y acotados", () => {
++    expect(parseLeadPage("2")).toBe(2);
++    for (const value of ["1.5", "Infinity", "0", "-4", "1000000000", "abc", ""]) {
++      expect(parseLeadPage(value)).toBe(1);
++    }
++    expect(con({ page: Number.POSITIVE_INFINITY })).not.toContain("offset=");
++    expect(con({ page: 2.5 })).not.toContain("offset=");
++  });
++
 +  test("fechas inválidas se descartan, no producen filtro roto (I9)", () => {
 +    expect(con({ desde: "abc" })).not.toContain("created_at=gte");
 +    expect(con({ hasta: "99-99-9999" })).not.toContain("created_at=lt");
 +    expect(con({ hasta: "2026-02-31" })).not.toContain("created_at=lt"); // fecha imposible
 +    expect(con({ desde: "2026-09-01" })).toContain("created_at=gte.2026-09-01T00:00:00Z");
++    expect(con({ hasta: "9999-12-31" })).toContain("created_at=lt.10000-01-01T00:00:00.000Z");
 +  });
 +});
 +
 +describe("buildClientesQuery (v4 I7/I8)", () => {
-+  test("el inner join de programas va DENTRO del select (exige programa)", () => {
++  test("consulta la vista autoritativa de programa activo", () => {
 +    const q = buildClientesQuery();
-+    expect(q).toContain("personas?estado=eq.cliente");
-+    expect(q).toContain("select=id,nombre,email,telefono_e164,programas!inner(tier,tiers(nombre))");
-+    expect(q).toContain("limit=50");
++    expect(q).toContain("v_clientes_para_vincular?");
++    expect(q).toContain("select=id,nombre,email,telefono_e164,programa");
++    expect(q).not.toContain("programas!inner");
++    expect(q).toContain("limit=51");
 +  });
 +
 +  test("búsqueda por texto filtra server-side (nombre/email/teléfono)", () => {
@@ -4478,13 +5251,46 @@ index 0000000..cb50f27
 +    expect(q).toContain("email.ilike.");
 +    expect(q).toContain("telefono_e164.ilike.");
 +  });
++
++  test("pagina resultados sin límite silencioso y conserva orden estable", () => {
++    const first = buildClientesQuery("juan", 1);
++    const second = buildClientesQuery("juan", 2);
++    expect(first).toContain("limit=51");
++    expect(first).not.toContain("offset=");
++    expect(second).toContain("offset=50");
++    expect(second).toContain("order=nombre.asc,id.asc");
++  });
++});
+diff --git a/apps/inbox/lib/quiz/__tests__/local-db-guard.test.ts b/apps/inbox/lib/quiz/__tests__/local-db-guard.test.ts
+new file mode 100644
+index 0000000..be537fb
+--- /dev/null
++++ b/apps/inbox/lib/quiz/__tests__/local-db-guard.test.ts
+@@ -0,0 +1,18 @@
++import { describe, expect, test, vi } from "vitest";
++import { guardedLocalFetch, isLocalSupabaseUrl } from "../local-db-guard";
++
++describe("guarda destructiva de Supabase local", () => {
++  test("acepta únicamente hosts loopback", () => {
++    expect(isLocalSupabaseUrl("http://127.0.0.1:54321")).toBe(true);
++    expect(isLocalSupabaseUrl("http://localhost:54321")).toBe(true);
++    expect(isLocalSupabaseUrl("http://[::1]:54321")).toBe(true);
++    expect(isLocalSupabaseUrl("https://example.supabase.co")).toBe(false);
++    expect(isLocalSupabaseUrl("http://localhost.evil.test:54321")).toBe(false);
++  });
++
++  test("una URL externa produce cero llamadas HTTP incluso en helpers destructivos", async () => {
++    const fetchFn = vi.fn<typeof fetch>();
++    await expect(guardedLocalFetch("https://example.supabase.co", "/rest/v1/personas", { method: "DELETE" }, fetchFn)).rejects.toThrow(/local/i);
++    expect(fetchFn).not.toHaveBeenCalled();
++  });
 +});
 diff --git a/apps/inbox/lib/quiz/__tests__/quiz-libs.test.ts b/apps/inbox/lib/quiz/__tests__/quiz-libs.test.ts
 new file mode 100644
-index 0000000..b96e6f1
+index 0000000..721f1ab
 --- /dev/null
 +++ b/apps/inbox/lib/quiz/__tests__/quiz-libs.test.ts
-@@ -0,0 +1,381 @@
+@@ -0,0 +1,458 @@
 +// Tests unitarios de las libs del quiz portado (docs/11 Fase B).
 +// Port de test/unit.config-engine.test.mjs y test/security.test.mjs del
 +// prototipo (node:test → vitest) + tests nuevos del contrato (lead-payload,
@@ -4493,8 +5299,10 @@ index 0000000..b96e6f1
 +import { describe, expect, test } from "vitest";
 +import {
 +  buildAllocationResponse,
++  CANONICAL_STEPS,
 +  progressFor,
 +  progressMessageFor,
++  quizQuestionStep,
 +  questions,
 +  wizardConfig,
 +} from "../question-config";
@@ -4502,7 +5310,7 @@ index 0000000..b96e6f1
 +import { buildWhatsAppMessage, buildWhatsAppUrl } from "../whatsapp";
 +import { isRateLimited, resetRateLimiter, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "../rate-limit";
 +import { composePhone, buildContractAnswers, buildQuizPayload } from "../lead-payload";
-+import { normalizePhoneE164, validateLeadContract, mapRpcError } from "../lead-validate";
++import { normalizePhoneE164, utf8ByteLength, validateLeadContract, mapRpcError, validateLeadRpcResult } from "../lead-validate";
 +
 +// ── config ───────────────────────────────────────────────────────────────────
 +describe("config", () => {
@@ -4730,7 +5538,7 @@ index 0000000..b96e6f1
 +describe("lead-payload", () => {
 +  test("composePhone arma E.164 con prefijo y limpia el troncal argentino", () => {
 +    expect(composePhone("54", "9 3585 000000")).toBe("+5493585000000");
-+    expect(composePhone("54", "011 5555 5555")).toBe("+541155555555");
++    expect(composePhone("54", "011 5555 5555")).toBe("+5491155555555");
 +    expect(composePhone("34", "600 000 000")).toBe("+34600000000");
 +  });
 +
@@ -4781,7 +5589,7 @@ index 0000000..b96e6f1
 +    const completed = buildQuizPayload({
 +      event: "completed",
 +      ...base,
-+      contact: { name: "Juan", email: "JUAN@x.com", phone: "+5493585000000", country: "AR", consent: true },
++      contact: { name: "Juan", email: "JUAN@x.com", phone: "+5493585000000", country: "AR", consent: true, consentAcceptedAt: "2026-09-21T15:39:40.000Z" },
 +      answers: {},
 +      diagnosisSnapshot: { version: "diagnostico-v1", result: { sections: [] } },
 +    });
@@ -4798,7 +5606,7 @@ index 0000000..b96e6f1
 +    session_id: "68cf2bd5-7c57-4cd3-9548-9197de2ebc44",
 +    event: "completed",
 +    occurred_at: "2026-09-21T15:40:00.000Z",
-+    progress: { step_id: "result", step_index: 9 },
++    progress: { step_id: "result", step_index: 11 },
 +    lead: {
 +      name: "Juan",
 +      email: "juan@example.com",
@@ -4842,6 +5650,9 @@ index 0000000..b96e6f1
 +    expect(
 +      validateLeadContract({ ...validCompleted, lead: { ...(validCompleted.lead as object), consent: { accepted: false, version: "contacto-v1" } } })
 +    ).toMatchObject({ ok: false, reason: "bad_consent" });
++    expect(
++      validateLeadContract({ ...validCompleted, lead: { ...(validCompleted.lead as object), consent: { accepted: true, version: "contacto-v1" } } })
++    ).toMatchObject({ ok: false, reason: "bad_consent" });
 +  });
 +
 +  test("started con lead se rechaza (lead_in_non_completed)", () => {
@@ -4852,11 +5663,83 @@ index 0000000..b96e6f1
 +    expect(validateLeadContract({ ...validCompleted, website: "http://spam" })).toMatchObject({ ok: false, reason: "honeypot" });
 +  });
 +
++  test("honeypot: tipos malformados se rechazan y el string vacío sigue siendo humano", () => {
++    expect(validateLeadContract({ ...validCompleted, website: "" }).ok).toBe(true);
++    for (const website of [{}, [], 1, true, null]) {
++      expect(validateLeadContract({ ...validCompleted, website })).toMatchObject({ ok: false, reason: "bad_honeypot" });
++      expect(validateLeadContract({
++        ...validCompleted,
++        lead: { ...(validCompleted.lead as object), website },
++      })).toMatchObject({ ok: false, reason: "bad_honeypot" });
++    }
++  });
++
++  test("valida en runtime el contrato positivo de registrar_diagnostico", () => {
++    expect(validateLeadRpcResult({
++      ok: true,
++      status: "completed",
++      session_id: validCompleted.session_id,
++      submission_id: "00000000-0000-4000-8000-000000000099",
++    }, validCompleted.session_id, "completed")).toBe(true);
++    expect(validateLeadRpcResult({ ok: true }, validCompleted.session_id, "completed")).toBe(false);
++    expect(validateLeadRpcResult({
++      ok: true,
++      status: "completed",
++      session_id: "00000000-0000-4000-8000-000000000097",
++      submission_id: "00000000-0000-4000-8000-000000000099",
++    }, validCompleted.session_id, "completed")).toBe(false);
++  });
++
 +  test("normalizePhoneE164 exige E.164 realista", () => {
 +    expect(normalizePhoneE164("+54 9 3585 000000")).toBe("+5493585000000");
 +    expect(normalizePhoneE164("5493585000000")).toBe("+5493585000000");
 +    expect(normalizePhoneE164("12345")).toBeNull();
 +    expect(normalizePhoneE164("")).toBeNull();
++  });
++
++  test("cada pregunta visible tiene un paso canónico sin esperar efectos de React", () => {
++    expect(CANONICAL_STEPS).toEqual([
++      "start", "situation", "challenge", "allocation", "capital", "horizon",
++      "drawdown", "influence", "rules", "contact", "analysis", "result",
++    ]);
++    expect(quizQuestionStep(0)).toEqual({ id: "situation", index: 1 });
++    expect(quizQuestionStep(8)).toEqual({ id: "contact", index: 9 });
++    expect(quizQuestionStep(-1)).toBeNull();
++    expect(quizQuestionStep(9)).toBeNull();
++  });
++
++  test("normaliza Argentina server-side y rechaza país o caracteres desconocidos", () => {
++    const lead = validCompleted.lead as Record<string, unknown>;
++    for (const phone of ["+54 9 3585 401429", "+54 3585 401429", "03585 15 401429", "3585 401429"]) {
++      const r = validateLeadContract({ ...validCompleted, lead: { ...lead, phone, country: "AR" } });
++      expect(r.ok).toBe(true);
++      if (r.ok) expect((r.payload.lead as { phone: string }).phone).toBe("+5493585401429");
++    }
++    expect(validateLeadContract({ ...validCompleted, lead: { ...lead, country: "ZZ" } })).toMatchObject({ ok: false, reason: "bad_country" });
++    expect(validateLeadContract({ ...validCompleted, lead: { ...lead, phone: "+54ABC3585401429" } })).toMatchObject({ ok: false, reason: "bad_phone" });
++    expect(validateLeadContract({ ...validCompleted, lead: { ...lead, phone: "+5493585401429", country: "ES" } })).toMatchObject({ ok: false, reason: "bad_phone" });
++  });
++
++  test("rechaza timestamps ISO sintácticos pero imposibles", () => {
++    expect(validateLeadContract({ ...validCompleted, occurred_at: "2026-02-31T15:40:00.000Z" })).toMatchObject({ ok: false, reason: "bad_occurred_at" });
++    expect(validateLeadContract({
++      ...validCompleted,
++      lead: {
++        ...validCompleted.lead,
++        consent: { accepted: true, version: "contacto-v1", accepted_at: "2026-99-99T15:39:40.000Z" },
++      },
++    })).toMatchObject({ ok: false, reason: "bad_consent" });
++  });
++
++  test("valida IDs e índices contra los pasos canónicos", () => {
++    expect(validateLeadContract({ ...validCompleted, progress: { step_id: "q1", step_index: 1 } })).toMatchObject({ ok: false, reason: "bad_progress" });
++    expect(validateLeadContract({ ...validCompleted, progress: { step_id: "situation", step_index: 2 } })).toMatchObject({ ok: false, reason: "bad_progress" });
++  });
++
++  test("mide el body por bytes UTF-8 y no por unidades UTF-16", () => {
++    expect(utf8ByteLength("a")).toBe(1);
++    expect(utf8ByteLength("á")).toBe(2);
++    expect(utf8ByteLength("😀")).toBe(4);
 +  });
 +
 +  test("mapRpcError traduce los códigos del RPC a HTTP honestos", () => {
@@ -4999,10 +5882,10 @@ index 0000000..24321f0
 +}
 diff --git a/apps/inbox/lib/quiz/lead-payload.ts b/apps/inbox/lib/quiz/lead-payload.ts
 new file mode 100644
-index 0000000..e6aed98
+index 0000000..2e542b8
 --- /dev/null
 +++ b/apps/inbox/lib/quiz/lead-payload.ts
-@@ -0,0 +1,209 @@
+@@ -0,0 +1,249 @@
 +// Constructor del payload del contrato JSON (docs/11 §5) usado por el funnel.
 +// Toda la forma del contrato vive acá para que los tests la cubran entera y el
 +// componente de UI solo decida QUÉ evento manda y cuándo.
@@ -5025,6 +5908,7 @@ index 0000000..e6aed98
 +  phone: string; // ya compuesto con prefijo, ej. "+5493585000000"
 +  country: string; // ISO 3166-1 alpha-2
 +  consent: boolean;
++  consentAcceptedAt: string;
 +  website?: string; // honeypot: el humano no lo rellena
 +}
 +
@@ -5097,15 +5981,44 @@ index 0000000..e6aed98
 +// salida de línea. El endpoint revalida el formato completo (docs/09).
 +// I11: normalización argentina — quita el 0 troncal y convierte el prefijo
 +// viejo de celular "15" en el indicador móvil E.164 "9".
-+export function composePhone(countryPrefix: string, localNumber: string): string {
-+  let digits = localNumber.replace(/\D/g, "");
++export function composePhone(countryPrefix: string, localNumber: string): string | null {
++  const raw = localNumber.trim();
++  if (!/^[+\d\s().-]+$/.test(raw)) return null;
++  let digits = raw.replace(/\D/g, "");
++  if (raw.startsWith("+") && !digits.startsWith(countryPrefix)) return null;
++
 +  if (countryPrefix === "54") {
-+    digits = digits.replace(/^0+/, ""); // troncal ARG (011/0351… → 11/351…)
-+    // "15 <área> <número>" → "9 <área> <número>": el 15 es el prefijo histórico
-+    // de celular; el 9 es el indicador de móvil en E.164 (+54 9 …).
-+    if (digits.startsWith("15")) digits = "9" + digits.slice(2);
++    if (digits.startsWith("54") && digits.length > 10) digits = digits.slice(2);
++    digits = digits.replace(/^0/, "");
++    if (digits.length === 11 && digits.startsWith("9")) digits = digits.slice(1);
++    if (digits.length === 12 && digits.startsWith("15")) {
++      digits = digits.slice(2);
++    } else if (digits.length === 12) {
++      const candidates = [2, 3, 4]
++        .filter((index) => digits.slice(index, index + 2) === "15")
++        .map((index) => digits.slice(0, index) + digits.slice(index + 2));
++      if (candidates.length !== 1) return null;
++      [digits] = candidates;
++    }
++    return /^\d{10}$/.test(digits) ? `+549${digits}` : null;
 +  }
-+  return `+${countryPrefix}${digits}`;
++
++  // Sin `+`, un número local puede empezar por los mismos dígitos que el país
++  // (p. ej. área 55 en Brasil). Solo se consume el prefijo cuando la longitud
++  // total no puede ser nacional y el resto sí puede serlo.
++  const nationalLengths: Record<string, number[]> = {
++    "1": [10], "34": [9], "51": [9], "52": [10], "55": [10, 11],
++    "56": [9], "57": [10], "58": [10], "591": [8], "593": [9],
++    "595": [9], "598": [8], "506": [8], "507": [7], "1809": [7],
++  };
++  const lengths = nationalLengths[countryPrefix] ?? [];
++  if (digits.startsWith(countryPrefix)
++      && !lengths.includes(digits.length)
++      && lengths.includes(digits.length - countryPrefix.length)) {
++    digits = digits.slice(countryPrefix.length);
++  }
++  const phone = `+${countryPrefix}${digits}`;
++  return /^\+[1-9]\d{7,14}$/.test(phone) ? phone : null;
 +}
 +
 +// Resuelve el PREFIJO desde el CÓDIGO de país del selector ("AR" → "54").
@@ -5116,6 +6029,16 @@ index 0000000..e6aed98
 +  const pais = COUNTRIES.find((c) => c.code === codigoPais);
 +  if (!pais) return null;
 +  return composePhone(pais.prefix, localNumber);
++}
++
++export function tryAcquireSubmission(lock: { current: boolean }): boolean {
++  if (lock.current) return false;
++  lock.current = true;
++  return true;
++}
++
++export function releaseSubmission(lock: { current: boolean }): void {
++  lock.current = false;
 +}
 +
 +// Mapea el estado de respuestas del wizard al arreglo de respuestas del
@@ -5200,7 +6123,7 @@ index 0000000..e6aed98
 +      consent: {
 +        accepted: contact.consent === true,
 +        version: CONSENT_VERSION,
-+        accepted_at: new Date().toISOString(),
++        accepted_at: contact.consentAcceptedAt,
 +      },
 +    };
 +    if (args.diagnosisSnapshot) payload.diagnosis = args.diagnosisSnapshot;
@@ -5214,10 +6137,10 @@ index 0000000..e6aed98
 +}
 diff --git a/apps/inbox/lib/quiz/lead-validate.ts b/apps/inbox/lib/quiz/lead-validate.ts
 new file mode 100644
-index 0000000..6f761e3
+index 0000000..6a78cca
 --- /dev/null
 +++ b/apps/inbox/lib/quiz/lead-validate.ts
-@@ -0,0 +1,194 @@
+@@ -0,0 +1,230 @@
 +// Funciones PURAS para que los tests no necesiten Next: la ruta solo hace
 +// parsing, rate limit, honeypot y esta validación antes del RPC.
 +//
@@ -5225,7 +6148,8 @@ index 0000000..6f761e3
 +// rechazar basura temprano, con códigos HTTP honestos y sin filtrar detalles
 +// internos al cliente.
 +
-+import { COUNTRIES } from "./lead-payload";
++import { COUNTRIES, composePhonePorPais } from "./lead-payload";
++import { CANONICAL_STEPS } from "./question-config";
 +
 +export const MAX_BODY_BYTES = 64 * 1024;
 +export const MAX_ANSWERS = 32;
@@ -5251,9 +6175,27 @@ index 0000000..6f761e3
 +// Teléfono → E.164. El navegador manda "+<prefijo><número>" compuesto por el
 +// selector de país; acá se re-normaliza sin confiar en su formato (docs/09).
 +export function normalizePhoneE164(raw: string): string | null {
++  if (!/^[+\d\s().-]+$/.test(String(raw ?? "").trim())) return null;
 +  let digits = String(raw ?? "").replace(/[^\d+]/g, "");
 +  if (!digits.startsWith("+")) digits = `+${digits}`;
 +  return E164_RE.test(digits) ? digits : null;
++}
++
++export function utf8ByteLength(value: string): number {
++  return new TextEncoder().encode(value).byteLength;
++}
++
++function isValidIsoTimestamp(value: unknown): value is string {
++  if (typeof value !== "string" || !ISO_TS_RE.test(value)) return false;
++  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/.exec(value);
++  const date = new Date(value);
++  if (!match || Number.isNaN(date.getTime())) return false;
++  return date.getUTCFullYear() === Number(match[1])
++    && date.getUTCMonth() + 1 === Number(match[2])
++    && date.getUTCDate() === Number(match[3])
++    && date.getUTCHours() === Number(match[4])
++    && date.getUTCMinutes() === Number(match[5])
++    && date.getUTCSeconds() === Number(match[6]);
 +}
 +
 +function validateSource(source: unknown): string | null {
@@ -5275,7 +6217,7 @@ index 0000000..6f761e3
 +  }
 +  if (!isStr(progress.step_id, 64)) return "bad_progress";
 +  const idx = progress.step_index;
-+  if (typeof idx !== "number" || !Number.isInteger(idx) || idx < 0 || idx > 99) return "bad_progress";
++  if (typeof idx !== "number" || !Number.isInteger(idx) || CANONICAL_STEPS[idx] !== progress.step_id) return "bad_progress";
 +  return null;
 +}
 +
@@ -5293,7 +6235,7 @@ index 0000000..6f761e3
 +    if (typeof a.order !== "number" || !Number.isInteger(a.order) || a.order < 0) return "bad_answer";
 +    if (!optStr(a.answer_id, 64)) return "bad_answer";
 +    if (!optStr(a.answer_text, 1000)) return "bad_answer";
-+    if (a.answered_at !== null && a.answered_at !== undefined && !(typeof a.answered_at === "string" && ISO_TS_RE.test(a.answered_at))) return "bad_answer";
++    if (a.answered_at !== null && a.answered_at !== undefined && !isValidIsoTimestamp(a.answered_at)) return "bad_answer";
 +  }
 +  return null;
 +}
@@ -5305,15 +6247,16 @@ index 0000000..6f761e3
 +  }
 +  if (!isStr(lead.name, 120) || lead.name.trim() === "") return "bad_name";
 +  if (!isStr(lead.email, 254) || !EMAIL_RE.test(lead.email)) return "bad_email";
-+  if (!isStr(lead.phone, 20)) return "bad_phone";
-+  if (lead.country !== null && lead.country !== undefined && !/^[A-Za-z]{2}$/.test(String(lead.country))) return "bad_country";
++  if (!isStr(lead.phone, 32)) return "bad_phone";
++  if (typeof lead.country !== "string") return "bad_country";
++  const countryCode = lead.country.toUpperCase();
++  if (!COUNTRIES.some((country) => country.code === countryCode)) return "bad_country";
 +  // Cross-check país↔prefijo (v3 M-01, barato): el funnel siempre manda ambos;
 +  // el servidor rechaza combinaciones incoherentes ("AR" con un +34…) aunque
 +  // la normalización E.164 completa queda para el endpoint + documentación.
-+  if (typeof lead.country === "string" && typeof lead.phone === "string" && lead.phone.startsWith("+")) {
-+    const pais = COUNTRIES.find((c) => c.code === String(lead.country).toUpperCase());
-+    if (pais && !String(lead.phone).startsWith(`+${pais.prefix}`)) return "country_phone_mismatch";
-+  }
++  const normalizedPhone = composePhonePorPais(countryCode, lead.phone);
++  if (!normalizedPhone) return "bad_phone";
++  if (lead.website !== undefined && typeof lead.website !== "string") return "bad_honeypot";
 +  if (typeof lead.website === "string" && lead.website.trim() !== "") return "honeypot";
 +  const consent = lead.consent;
 +  if (!isObj(consent)) return "bad_consent";
@@ -5322,7 +6265,7 @@ index 0000000..6f761e3
 +  }
 +  if (consent.accepted !== true) return "bad_consent";
 +  if (!isStr(consent.version, 64)) return "bad_consent";
-+  if (typeof consent.accepted_at === "string" && !ISO_TS_RE.test(consent.accepted_at)) return "bad_consent";
++  if (!isValidIsoTimestamp(consent.accepted_at)) return "bad_consent";
 +  return null;
 +}
 +
@@ -5345,12 +6288,13 @@ index 0000000..6f761e3
 +  for (const key of Object.keys(input)) {
 +    if (!["schema_version", "quiz_version", "session_id", "event", "occurred_at", "source", "progress", "lead", "answers", "diagnosis", "client_context", "website"].includes(key)) return { ok: false, reason: "unexpected_field" };
 +  }
++  if (input.website !== undefined && typeof input.website !== "string") return { ok: false, reason: "bad_honeypot" };
 +  if (typeof input.website === "string" && input.website.trim() !== "") return { ok: false, reason: "honeypot" };
 +  if (input.schema_version !== 1) return { ok: false, reason: "bad_schema_version" };
 +  if (!isStr(input.quiz_version, 64)) return { ok: false, reason: "bad_quiz_version" };
 +  if (!isStr(input.session_id, 36) || !UUID_RE.test(input.session_id)) return { ok: false, reason: "bad_session_id" };
 +  if (!isStr(input.event, 20) || !EVENTS.has(input.event)) return { ok: false, reason: "bad_event" };
-+  if (input.occurred_at !== undefined && !(typeof input.occurred_at === "string" && ISO_TS_RE.test(input.occurred_at))) return { ok: false, reason: "bad_occurred_at" };
++  if (input.occurred_at !== undefined && !isValidIsoTimestamp(input.occurred_at)) return { ok: false, reason: "bad_occurred_at" };
 +
 +  const event = input.event as string;
 +  if (input.source !== undefined && input.source !== null) {
@@ -5387,15 +6331,30 @@ index 0000000..6f761e3
 +  const payload: Record<string, unknown> = { ...input };
 +  delete payload.website;
 +  if (lead) {
++    const { website: _website, ...safeLead } = lead;
 +    payload.lead = {
-+      ...lead,
++      ...safeLead,
 +      name: String(lead.name).trim(),
 +      email: String(lead.email).trim().toLowerCase(),
-+      phone: normalizePhoneE164(String(lead.phone)) ?? String(lead.phone),
++      country: String(lead.country).toUpperCase(),
++      phone: composePhonePorPais(String(lead.country).toUpperCase(), String(lead.phone)),
 +    };
 +  }
 +  if (input.source === undefined) payload.source = null;
 +  return { ok: true, payload };
++}
++
++export function validateLeadRpcResult(
++  value: unknown,
++  expectedSessionId: unknown,
++  event: unknown,
++): value is { ok: true; session_id: string; submission_id: string; status: string } {
++  if (!isObj(value) || value.ok !== true) return false;
++  if (typeof expectedSessionId !== "string" || value.session_id !== expectedSessionId) return false;
++  if (typeof value.session_id !== "string" || !UUID_RE.test(value.session_id)) return false;
++  if (typeof value.submission_id !== "string" || !UUID_RE.test(value.submission_id)) return false;
++  if (typeof value.status !== "string" || !new Set(["started", "in_progress", "dropped", "completed"]).has(value.status)) return false;
++  return event !== "completed" || value.status === "completed";
 +}
 +
 +// Mapea el mensaje del RPC (prefijo quiz_leads/) a código HTTP sin filtrar
@@ -5412,12 +6371,40 @@ index 0000000..6f761e3
 +  ]);
 +  return { status: bad422.has(code) ? 422 : 400, code };
 +}
+diff --git a/apps/inbox/lib/quiz/local-db-guard.ts b/apps/inbox/lib/quiz/local-db-guard.ts
+new file mode 100644
+index 0000000..41c8641
+--- /dev/null
++++ b/apps/inbox/lib/quiz/local-db-guard.ts
+@@ -0,0 +1,22 @@
++export function isLocalSupabaseUrl(value: string | null | undefined): boolean {
++  if (!value) return false;
++  try {
++    const url = new URL(value);
++    return (url.protocol === "http:" || url.protocol === "https:")
++      && (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]");
++  } catch {
++    return false;
++  }
++}
++
++export async function guardedLocalFetch(
++  baseUrl: string,
++  path: string,
++  init?: RequestInit,
++  fetchFn: typeof fetch = fetch,
++): Promise<Response> {
++  if (!isLocalSupabaseUrl(baseUrl)) {
++    throw new Error(`Supabase URL must be local: ${baseUrl || "(empty)"}`);
++  }
++  return fetchFn(`${baseUrl.replace(/\/$/, "")}${path}`, init);
++}
 diff --git a/apps/inbox/lib/quiz/question-config.ts b/apps/inbox/lib/quiz/question-config.ts
 new file mode 100644
-index 0000000..008d93b
+index 0000000..0f55983
 --- /dev/null
 +++ b/apps/inbox/lib/quiz/question-config.ts
-@@ -0,0 +1,275 @@
+@@ -0,0 +1,284 @@
 +// Config del Quiz Funnel portado al OS (docs/11 D1). Fuente de contenido:
 +// lib/question-config.js del repo del prototipo (herramienta-berni).
 +//
@@ -5430,6 +6417,7 @@ index 0000000..008d93b
 +export const QUIZ_VERSION = "diagnostico-cripto-v1-a";
 +export const SCHEMA_VERSION = 1;
 +export const CONSENT_VERSION = "contacto-v1";
++export const CONSENT_TEXT = "Acepto recibir mi diagnóstico y que Metacrypto Club me contacte por email, teléfono o WhatsApp según mis respuestas.";
 +
 +export interface QuizOption {
 +  optionId: string;
@@ -5547,6 +6535,14 @@ index 0000000..008d93b
 +  "influence",
 +  "rules",
 +];
++
++export const CANONICAL_STEPS = ["start", ...QUESTIONS_ORDER, "contact", "analysis", "result"];
++
++export function quizQuestionStep(index: number): { id: string; index: number } | null {
++  const stepIndex = index + 1;
++  if (!Number.isInteger(index) || stepIndex < 1 || stepIndex > QUESTIONS_ORDER.length + 1) return null;
++  return { id: CANONICAL_STEPS[stepIndex], index: stepIndex };
++}
 +
 +export const questions: QuizQuestion[] = [  {
 +    id: "situation",
@@ -5695,10 +6691,10 @@ index 0000000..008d93b
 +}
 diff --git a/apps/inbox/lib/quiz/rate-limit.ts b/apps/inbox/lib/quiz/rate-limit.ts
 new file mode 100644
-index 0000000..bdb851f
+index 0000000..448a09d
 --- /dev/null
 +++ b/apps/inbox/lib/quiz/rate-limit.ts
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,55 @@
 +// Rate limiter en memoria "best-effort" para /api/lead (docs/11 §11).
 +// Port del lib/rate-limit.js del prototipo. Solo sirve para una sola
 +// instancia: en serverless cada isolate tiene sus propios contadores, así que
@@ -5714,6 +6710,8 @@ index 0000000..bdb851f
 +// (30 eventos/min por IP); el rate limit DEFINITIVO (distribuido, Upstash/WAF
 +// del host) queda en docs/06 #14/#15.
 +const MAX_REQUESTS = 30;     // máximo de requests por IP dentro de la ventana
++const MAX_COMPLETED_REQUESTS = 5;
++const MAX_RAW_REQUESTS = 120;
 +
 +const hits = new Map<string, number[]>();
 +
@@ -5749,6 +6747,8 @@ index 0000000..bdb851f
 +}
 +
 +export const RATE_LIMIT_MAX = MAX_REQUESTS;
++export const RATE_LIMIT_COMPLETED_MAX = MAX_COMPLETED_REQUESTS;
++export const RATE_LIMIT_RAW_MAX = MAX_RAW_REQUESTS;
 +export const RATE_LIMIT_WINDOW_MS = WINDOW_MS;
 diff --git a/apps/inbox/lib/quiz/whatsapp.ts b/apps/inbox/lib/quiz/whatsapp.ts
 new file mode 100644
@@ -12405,16 +13405,19 @@ index 9bfb31f..f74c95a 100644
    }
  }
 diff --git a/apps/inbox/package.json b/apps/inbox/package.json
-index b106fec..3560247 100644
+index b106fec..65ffb82 100644
 --- a/apps/inbox/package.json
 +++ b/apps/inbox/package.json
-@@ -6,12 +6,12 @@
+@@ -6,12 +6,14 @@
      "dev": "next dev",
      "build": "next build",
      "start": "next start",
 -    "lint": "next lint",
+-    "test": "vitest run"
 +    "lint": "eslint .",
-     "test": "vitest run"
++    "test": "vitest run",
++    "test:integration": "vitest run lib/quiz/__tests__/lead-route.test.ts lib/__tests__/quiz-leads-rpc.test.ts",
++    "typecheck": "tsc --noEmit"
    },
    "dependencies": {
      "ffmpeg-static": "^5.3.0",
@@ -12423,7 +13426,7 @@ index b106fec..3560247 100644
      "pdfkit": "^0.20.2",
      "react": "^18.3.1",
      "react-dom": "^18.3.1",
-@@ -19,12 +19,19 @@
+@@ -19,12 +21,19 @@
      "web-push": "^3.6.7"
    },
    "devDependencies": {
@@ -15347,3 +16350,607 @@ index 0000000..e0b3532
 +grant execute on function public.descartar_lead(uuid, uuid) to service_role;
 +
 +commit;
+diff --git a/supabase/migrations/0073_reconciliacion_quiz_leads_v3.sql b/supabase/migrations/0073_reconciliacion_quiz_leads_v3.sql
+new file mode 100644
+index 0000000..0e874e1
+--- /dev/null
++++ b/supabase/migrations/0073_reconciliacion_quiz_leads_v3.sql
+@@ -0,0 +1,567 @@
++-- Reconciliacion final append-only del quiz/leads (auditoria v5).
++--
++-- Preflight para instalaciones que aun no alcanzaron 0072 y tienen completed
++-- incompatibles: con ingesta detenida, crear quiz_leads_legacy_upgrade_stage
++-- (envio_id uuid PK, estado_original text='completed'), guardar los UUID,
++-- deshabilitar tg_diag_envios_estado_guard dentro de una transaccion y mover
++-- esos envios temporalmente a in_progress. 0073 restaura el estado y elimina
++-- el staging despues de comprobar que todos los UUID existen. No copiar PII.
++
++begin;
++
++-- Procedencia explicita. Nada anterior a esta migracion prueba por si solo que
++-- el consentimiento sea canonico, por lo que todo completed previo es legado.
++alter table public.diagnostico_envios
++  add column if not exists registro_origen text,
++  add column if not exists consentimiento_origen text;
++
++alter table public.diagnostico_envios
++  drop constraint if exists diagnostico_envios_registro_origen_check,
++  drop constraint if exists diagnostico_envios_consentimiento_origen_check;
++
++alter table public.diagnostico_envios
++  add constraint diagnostico_envios_registro_origen_check
++    check (registro_origen in ('canonical', 'legacy-unknown')) not valid,
++  add constraint diagnostico_envios_consentimiento_origen_check
++    check (consentimiento_origen in ('canonical', 'legacy-unknown')) not valid;
++
++update public.diagnostico_envios
++   set registro_origen = case when estado = 'completed' then 'legacy-unknown' else 'canonical' end,
++       consentimiento_origen = case when estado = 'completed' then 'legacy-unknown' else 'canonical' end
++ where registro_origen is null or consentimiento_origen is null;
++
++do $$
++begin
++  if to_regclass('public.quiz_leads_legacy_upgrade_stage') is not null then
++    execute $sql$
++      update public.diagnostico_envios e
++         set registro_origen = 'legacy-unknown',
++             consentimiento_origen = 'legacy-unknown'
++        from public.quiz_leads_legacy_upgrade_stage s
++       where e.id = s.envio_id
++    $sql$;
++  end if;
++end;
++$$;
++
++alter table public.diagnostico_envios
++  drop constraint if exists diagnostico_envios_completed_v3_check;
++
++alter table public.diagnostico_envios
++  add constraint diagnostico_envios_completed_v3_check
++  check (
++    estado <> 'completed'
++    or (registro_origen = 'legacy-unknown' and consentimiento_origen = 'legacy-unknown')
++    or (
++      registro_origen = 'canonical'
++      and consentimiento_origen = 'canonical'
++      and persona_id is not null
++      and nombre_capturado is not null and btrim(nombre_capturado) <> ''
++      and email_capturado is not null and btrim(email_capturado) <> ''
++      and telefono_e164_capturado is not null
++      and telefono_e164_capturado ~ '^\+[1-9][0-9]{7,14}$'
++      and consentimiento_aceptado is true
++      and consentimiento_version = 'contacto-v1'
++      and consentimiento_at is not null
++      and finished_at is not null
++    )
++  ) not valid;
++
++alter table public.diagnostico_envios
++  drop constraint if exists diagnostico_envios_completed_completo_check;
++
++do $$
++declare
++  v_stage int;
++  v_restored int;
++begin
++  if to_regclass('public.quiz_leads_legacy_upgrade_stage') is not null then
++    execute 'select count(*) from public.quiz_leads_legacy_upgrade_stage' into v_stage;
++    execute $sql$
++      update public.diagnostico_envios e
++         set estado = 'completed',
++             registro_origen = 'legacy-unknown',
++             consentimiento_origen = 'legacy-unknown'
++        from public.quiz_leads_legacy_upgrade_stage s
++       where e.id = s.envio_id and s.estado_original = 'completed'
++    $sql$;
++    get diagnostics v_restored = row_count;
++    if v_restored <> v_stage then
++      raise exception 'quiz_leads/preflight_incompleto: % de % envios restaurados', v_restored, v_stage;
++    end if;
++    execute 'drop table public.quiz_leads_legacy_upgrade_stage';
++  end if;
++end;
++$$;
++
++alter table public.diagnostico_envios
++  validate constraint diagnostico_envios_registro_origen_check;
++alter table public.diagnostico_envios
++  validate constraint diagnostico_envios_consentimiento_origen_check;
++alter table public.diagnostico_envios
++  validate constraint diagnostico_envios_completed_v3_check;
++
++alter table public.diagnostico_envios
++  alter column registro_origen set default 'canonical',
++  alter column consentimiento_origen set default 'canonical',
++  alter column registro_origen set not null,
++  alter column consentimiento_origen set not null;
++
++-- Publicar es irreversible aunque nunca haya habido envios.
++create or replace function public.quiz_versiones_congelada()
++returns trigger
++language plpgsql
++set search_path = public
++as $$
++begin
++  if tg_op = 'DELETE' then
++    if old.publicada_at is null then return old; end if;
++    raise exception 'quiz_versiones/publicada_es_inmutable: % ya fue publicada', old.codigo;
++  end if;
++
++  if old.publicada_at is not null then
++    if new.id is distinct from old.id
++       or new.codigo is distinct from old.codigo
++       or new.funnel is distinct from old.funnel
++       or new.variante is distinct from old.variante
++       or new.version is distinct from old.version
++       or new.definicion is distinct from old.definicion
++       or new.created_at is distinct from old.created_at
++       or new.publicada_at is distinct from old.publicada_at
++       or new.estado not in ('active', 'paused', 'archived') then
++      raise exception 'quiz_versiones/publicada_es_inmutable: % ya fue publicada', old.codigo;
++    end if;
++  elsif new.publicada_at is not null and new.estado not in ('active', 'paused', 'archived') then
++    raise exception 'quiz_versiones/estado_publicado_invalido';
++  elsif new.publicada_at is null and new.estado not in ('draft', 'archived') then
++    raise exception 'quiz_versiones/estado_draft_invalido';
++  end if;
++  return new;
++end;
++$$;
++
++-- Una sola clave de serializacion para todo el ciclo comercial del contacto.
++create or replace function public.quiz_lead_contact_lock_key(p_phone text)
++returns bigint
++language sql
++immutable strict
++set search_path = public
++as $$ select hashtextextended('quiz-leads/contact/v1:' || p_phone, 0) $$;
++
++create or replace function public.quiz_phone_matches_country(p_country text, p_phone text)
++returns boolean
++language sql
++immutable
++set search_path = public
++as $$
++  select p_phone ~ '^\+[1-9][0-9]{7,14}$' and p_phone like case upper(p_country)
++    when 'AR' then '+549%' when 'BO' then '+591%' when 'BR' then '+55%'
++    when 'CA' then '+1%' when 'CL' then '+56%' when 'CO' then '+57%'
++    when 'CR' then '+506%' when 'EC' then '+593%' when 'ES' then '+34%'
++    when 'US' then '+1%' when 'MX' then '+52%' when 'PA' then '+507%'
++    when 'PY' then '+595%' when 'PE' then '+51%' when 'DO' then '+1809%'
++    when 'UY' then '+598%' when 'VE' then '+58%' else '#invalid#' end;
++$$;
++
++-- La implementación reconciliada por 0072 se conserva como helper interno.
++-- El wrapper toma el lock telefónico ANTES de que aquella función busque o
++-- cree la persona, cerrando la carrera completar/vincular/rollback/descarte.
++do $$
++begin
++  if to_regprocedure('public.registrar_diagnostico_v2_internal(jsonb)') is null then
++    alter function public.registrar_diagnostico(jsonb)
++      rename to registrar_diagnostico_v2_internal;
++  end if;
++end;
++$$;
++
++create or replace function public.registrar_diagnostico(p_payload jsonb)
++returns jsonb
++language plpgsql
++security definer
++set search_path = public
++as $$
++declare
++  v_event text;
++  v_phone text;
++  v_country text;
++  v_result jsonb;
++  v_submission_id uuid;
++  v_current_persona uuid;
++  v_target_persona uuid;
++  v_audit_id uuid;
++  v_envio_ids jsonb;
++  v_session_id uuid;
++begin
++  v_event := p_payload->>'event';
++  if v_event = 'completed' then
++    begin
++      v_session_id := (p_payload->>'session_id')::uuid;
++    exception when invalid_text_representation then
++      return public.registrar_diagnostico_v2_internal(p_payload);
++    end;
++    -- La sesión se serializa antes que el contacto. Así dos completed para la
++    -- misma sesión con teléfonos distintos no pueden reconciliar el resultado
++    -- ganador usando el contacto del request perdedor.
++    perform pg_advisory_xact_lock(hashtextextended(
++      'quiz-leads/session/v1:' || v_session_id::text, 0
++    ));
++    -- Un retry ya sellado conserva el snapshot persistido. El contacto mutable
++    -- del retry no puede consolidar ni reasignar la identidad original.
++    if exists (
++      select 1 from public.diagnostico_envios
++       where session_id = v_session_id and estado = 'completed'
++    ) then
++      return public.registrar_diagnostico_v2_internal(p_payload);
++    end if;
++    v_phone := btrim(coalesce(p_payload->'lead'->>'phone',''));
++    v_country := upper(btrim(coalesce(p_payload->'lead'->>'country','')));
++    if v_phone !~ '^\+[1-9][0-9]{7,14}$' or v_country = '' then
++      return public.registrar_diagnostico_v2_internal(p_payload);
++    end if;
++    if not public.quiz_phone_matches_country(v_country,v_phone) then
++      raise exception 'quiz_leads/telefono_pais_incoherente';
++    end if;
++    perform pg_advisory_xact_lock(public.quiz_lead_contact_lock_key(v_phone));
++  end if;
++  v_result := public.registrar_diagnostico_v2_internal(p_payload);
++  if v_event <> 'completed' then return v_result; end if;
++
++  v_submission_id := (v_result->>'submission_id')::uuid;
++  select persona_id into v_current_persona
++    from public.diagnostico_envios where id=v_submission_id;
++
++  -- Si el contacto ya estaba vinculado, el nuevo envio forma parte de ESA
++  -- vinculacion. Se añade al conjunto auditado para que un rollback posterior
++  -- siga siendo exacto, incluso si completar y desvincular compitieron.
++  select a.id,(a.datos->>'cliente_id')::uuid into v_audit_id,v_target_persona
++    from public.auditoria a
++    join public.personas destino on destino.id=(a.datos->>'cliente_id')::uuid
++   where a.entidad='persona' and a.accion='vinculacion'
++     and destino.estado='cliente'
++     and coalesce((a.datos->>'revertido')::boolean,false)=false
++     and exists (
++       select 1
++         from jsonb_array_elements_text(coalesce(a.datos->'envio_ids','[]'::jsonb)) x(id)
++         join public.diagnostico_envios e on e.id=x.id::uuid
++        where e.telefono_e164_capturado=v_phone
++     )
++   order by a.created_at desc,a.id desc limit 1 for update;
++
++  if v_audit_id is not null then
++    update public.diagnostico_envios set persona_id=v_target_persona where id=v_submission_id;
++    select jsonb_agg(id order by id) into v_envio_ids from (
++      select value::uuid id from public.auditoria a,
++        jsonb_array_elements_text(coalesce(a.datos->'envio_ids','[]'::jsonb)) x(value)
++       where a.id=v_audit_id
++      union select v_submission_id
++    ) ids;
++    update public.auditoria
++       set datos=jsonb_set(jsonb_set(datos,'{envio_ids}',v_envio_ids),'{envios_reasignados}',to_jsonb(jsonb_array_length(v_envio_ids)))
++     where id=v_audit_id;
++  else
++    -- Sin vinculacion activa, telefono canonico define una sola identidad lead.
++    select e.persona_id into v_target_persona
++      from public.diagnostico_envios e join public.personas p on p.id=e.persona_id
++     where e.estado='completed' and e.telefono_e164_capturado=v_phone and p.estado='lead'
++     order by e.created_at,e.id limit 1;
++    if v_target_persona is not null and v_target_persona<>v_current_persona then
++      update public.diagnostico_envios set persona_id=v_target_persona where id=v_submission_id;
++    end if;
++  end if;
++
++  if v_target_persona is not null and v_current_persona<>v_target_persona
++     and not exists (select 1 from public.diagnostico_envios where persona_id=v_current_persona) then
++    delete from public.personas where id=v_current_persona and estado='lead' and telefono_e164 is null;
++  end if;
++  return v_result;
++end;
++$$;
++
++-- Defensa final para escrituras directas y para carreras con las RPC antiguas.
++create or replace function public.diagnostico_envios_guard_v3()
++returns trigger
++language plpgsql
++set search_path = public
++as $$
++declare
++  v_phone text;
++  v_persona_id uuid;
++begin
++  if tg_op = 'UPDATE' and old.estado = 'completed' and new is distinct from old then
++    -- Vincular/desvincular cambia exclusivamente el propietario durable del
++    -- snapshot. Ningun evento puede modificar el resto de un completed.
++    v_persona_id := new.persona_id;
++    new.persona_id := old.persona_id;
++    if new is distinct from old then
++      raise exception 'quiz_leads/completed_es_inmutable';
++    end if;
++    new.persona_id := v_persona_id;
++  end if;
++  if tg_op = 'UPDATE' and old.estado = 'dropped' and new.estado <> 'completed' and new is distinct from old then
++    raise exception 'quiz_leads/dropped_es_terminal';
++  end if;
++  if new.estado = 'completed' and (tg_op = 'INSERT' or old.estado <> 'completed') then
++    if new.registro_origen <> 'canonical' or new.consentimiento_origen <> 'canonical' then
++      raise exception 'quiz_leads/procedencia_invalida';
++    end if;
++    if new.telefono_e164_capturado is null
++       or not public.quiz_phone_matches_country(new.pais_capturado, new.telefono_e164_capturado) then
++      raise exception 'quiz_leads/telefono_pais_incoherente';
++    end if;
++    v_phone := new.telefono_e164_capturado;
++    if not pg_try_advisory_xact_lock(public.quiz_lead_contact_lock_key(v_phone)) then
++      raise exception 'quiz_leads/contacto_ocupado';
++    end if;
++    if not exists (
++      select 1 from public.personas p
++       where p.id = new.persona_id and p.estado in ('lead', 'cliente')
++    ) then
++      raise exception 'quiz_leads/persona_invalida_post_lock';
++    end if;
++  elsif tg_op = 'UPDATE' and new.persona_id is distinct from old.persona_id then
++    v_phone := coalesce(old.telefono_e164_capturado, new.telefono_e164_capturado);
++    if v_phone is not null then
++      if not pg_try_advisory_xact_lock(public.quiz_lead_contact_lock_key(v_phone)) then
++        raise exception 'quiz_leads/contacto_ocupado';
++      end if;
++    end if;
++    if not exists (
++      select 1 from public.personas p
++       where p.id = new.persona_id and p.estado in ('lead', 'cliente', 'archivado')
++    ) then
++      raise exception 'quiz_leads/persona_invalida_post_lock';
++    end if;
++  end if;
++
++  if new.last_step_id is not null and not exists (
++    select 1
++      from public.quiz_versiones q,
++           jsonb_array_elements_text(coalesce(q.definicion->'steps', '[]'::jsonb)) with ordinality s(step_id, pos)
++     where q.id = new.quiz_version_id
++       and s.step_id = new.last_step_id
++       and s.pos - 1 = new.last_step_index
++  ) then
++    raise exception 'quiz_leads/paso_invalido';
++  end if;
++  return new;
++end;
++$$;
++
++drop trigger if exists tg_diag_envios_guard_v3 on public.diagnostico_envios;
++create trigger tg_diag_envios_guard_v3
++  before insert or update on public.diagnostico_envios
++  for each row execute function public.diagnostico_envios_guard_v3();
++
++-- Selector estable: solo el programa vigente calculado por el OS.
++create or replace view public.v_clientes_para_vincular
++with (security_invoker = true)
++as
++select p.id, p.nombre, p.email, p.telefono_e164,
++       coalesce(t.nombre, v.tier) as programa
++  from public.personas p
++  join public.v_programa_activo v on v.persona_id = p.id
++  left join public.tiers t on t.id = v.tier
++ where p.estado = 'cliente';
++
++-- Vinculacion: contacto y conjunto exacto se releen despues del lock canonico.
++create or replace function public.vincular_lead_convertido(
++  p_lead_id uuid, p_cliente_id uuid, p_confirmar boolean default false, p_autor_id uuid default null
++)
++returns jsonb
++language plpgsql security definer set search_path = public
++as $$
++declare
++  v_estado text; v_phone text; v_client_phone text; v_ids uuid[]; v_count int;
++begin
++  if p_lead_id is null or p_cliente_id is null then raise exception 'quiz_leads/parametros_faltantes'; end if;
++  if p_lead_id = p_cliente_id then raise exception 'quiz_leads/misma_persona'; end if;
++
++  select e.telefono_e164_capturado into v_phone
++    from public.diagnostico_envios e
++   where e.persona_id = p_lead_id and e.estado = 'completed'
++   order by e.created_at desc, e.id desc limit 1;
++  if v_phone is null then
++    select e.telefono_e164_capturado into v_phone
++      from public.auditoria a
++      cross join lateral jsonb_array_elements_text(coalesce(a.datos->'envio_ids','[]'::jsonb)) x(id)
++      join public.diagnostico_envios e on e.id = x.id::uuid
++     where a.entidad = 'persona' and a.accion = 'vinculacion' and a.entidad_id = p_lead_id
++     order by a.created_at desc, a.id desc limit 1;
++  end if;
++  if v_phone is null then raise exception 'quiz_leads/lead_invalido'; end if;
++  perform pg_advisory_xact_lock(public.quiz_lead_contact_lock_key(v_phone));
++
++  select estado into v_estado from public.personas where id = p_lead_id and telefono_e164 is null for update;
++  if not found then raise exception 'quiz_leads/lead_invalido'; end if;
++  if v_estado = 'archivado' then
++    if exists (
++      select 1 from public.auditoria a where a.entidad='persona' and a.accion='vinculacion'
++       and a.entidad_id=p_lead_id and a.datos->>'cliente_id'=p_cliente_id::text
++       and coalesce((a.datos->>'revertido')::boolean,false)=false
++    ) then return jsonb_build_object('ok',true,'cliente_id',p_cliente_id,'envios_reasignados',0); end if;
++    raise exception 'quiz_leads/lead_vinculado_a_otro_cliente';
++  end if;
++  if v_estado <> 'lead' then raise exception 'quiz_leads/lead_invalido'; end if;
++
++  select telefono_e164 into v_client_phone from public.personas
++   where id=p_cliente_id and estado='cliente' for update;
++  if not found or not exists (select 1 from public.v_programa_activo where persona_id=p_cliente_id) then
++    raise exception 'quiz_leads/cliente_invalido';
++  end if;
++  select coalesce(array_agg(e.id order by e.id), '{}'), count(*) into v_ids, v_count
++    from public.diagnostico_envios e where e.persona_id=p_lead_id;
++  if v_count=0 or not exists (
++    select 1 from public.diagnostico_envios e
++     where e.persona_id=p_lead_id and e.estado='completed' and e.telefono_e164_capturado=v_phone
++  ) then raise exception 'quiz_leads/lead_invalido'; end if;
++  if v_phone is distinct from v_client_phone and p_confirmar is not true then
++    raise exception 'quiz_leads/telefono_no_coincide';
++  end if;
++
++  update public.diagnostico_envios set persona_id=p_cliente_id where id=any(v_ids) and persona_id=p_lead_id;
++  get diagnostics v_count = row_count;
++  if v_count <> cardinality(v_ids) then raise exception 'quiz_leads/conjunto_envios_cambio'; end if;
++  update public.personas set estado='archivado' where id=p_lead_id and estado='lead';
++  if not found then raise exception 'quiz_leads/lead_invalido'; end if;
++  insert into public.auditoria(entidad,entidad_id,accion,autor_id,datos)
++  values ('persona',p_lead_id,'vinculacion',p_autor_id,jsonb_build_object(
++    'cliente_id',p_cliente_id,'envio_ids',to_jsonb(v_ids),'envios_reasignados',v_count,
++    'confirmado',coalesce(p_confirmar,false),'regla','hot-lead-v1'));
++  return jsonb_build_object('ok',true,'cliente_id',p_cliente_id,'envios_reasignados',v_count);
++end;
++$$;
++
++-- Rollback: el contacto se deriva de los UUID auditados, nunca del propietario
++-- actual del envio. Auditoria, persona y propietarios se revalidan post-lock.
++create or replace function public.desvincular_lead(
++  p_cliente_id uuid, p_lead_id uuid default null, p_autor_id uuid default null
++)
++returns jsonb
++language plpgsql security definer set search_path = public
++as $$
++declare
++  v_audit_id uuid; v_lead_id uuid; v_data jsonb; v_phone text;
++  v_ids uuid[]; v_expected int; v_restored int; v_state text;
++  v_restore_persona uuid;
++begin
++  if p_cliente_id is null then raise exception 'quiz_leads/parametros_faltantes'; end if;
++  select a.id,a.entidad_id,a.datos into v_audit_id,v_lead_id,v_data
++    from public.auditoria a
++   where a.entidad='persona' and a.accion='vinculacion'
++     and (p_lead_id is null or a.entidad_id=p_lead_id)
++     and a.datos->>'cliente_id'=p_cliente_id::text
++     and coalesce((a.datos->>'revertido')::boolean,false)=false
++   order by a.created_at desc,a.id desc limit 1;
++  if not found then raise exception 'quiz_leads/nada_que_desvincular'; end if;
++  select array_agg(x.id::uuid order by x.id::uuid) into v_ids
++    from jsonb_array_elements_text(coalesce(v_data->'envio_ids','[]'::jsonb)) x(id);
++  select e.telefono_e164_capturado into v_phone from public.diagnostico_envios e
++   where e.id=any(v_ids) and e.estado='completed'
++   order by e.created_at desc,e.id desc limit 1;
++  if v_phone is null then raise exception 'quiz_leads/rollback_sin_contacto'; end if;
++  perform pg_advisory_xact_lock(public.quiz_lead_contact_lock_key(v_phone));
++
++  select a.datos into v_data from public.auditoria a
++   where a.id=v_audit_id and a.entidad_id=v_lead_id and a.accion='vinculacion'
++     and a.datos->>'cliente_id'=p_cliente_id::text
++     and coalesce((a.datos->>'revertido')::boolean,false)=false for update;
++  if not found then raise exception 'quiz_leads/nada_que_desvincular'; end if;
++  select array_agg(x.id::uuid order by x.id::uuid) into v_ids
++    from jsonb_array_elements_text(coalesce(v_data->'envio_ids','[]'::jsonb)) x(id);
++  select estado into v_state from public.personas where id=v_lead_id for update;
++  if v_state is distinct from 'archivado' then raise exception 'quiz_leads/nada_que_desvincular'; end if;
++  select count(*) into v_expected from public.diagnostico_envios
++   where id=any(v_ids) and persona_id=p_cliente_id;
++  if v_expected <> cardinality(v_ids) then raise exception 'quiz_leads/rollback_incompleto'; end if;
++
++  -- Si hubo una nueva finalización mientras el destino estaba en ex_cliente,
++  -- ya existe otro temporal activo para el contacto. Restaurar sobre él evita
++  -- revivir además el temporal archivado y producir dos leads activos.
++  select p.id into v_restore_persona
++    from public.personas p
++    join public.diagnostico_envios e on e.persona_id=p.id
++   where p.estado='lead' and p.id<>v_lead_id
++     and e.estado='completed' and e.telefono_e164_capturado=v_phone
++   order by e.finished_at,e.id limit 1;
++  v_restore_persona := coalesce(v_restore_persona,v_lead_id);
++
++  update public.diagnostico_envios set persona_id=v_restore_persona where id=any(v_ids) and persona_id=p_cliente_id;
++  get diagnostics v_restored = row_count;
++  if v_restored <> cardinality(v_ids) then raise exception 'quiz_leads/rollback_incompleto'; end if;
++  if v_restore_persona=v_lead_id then
++    update public.personas set estado='lead' where id=v_lead_id and estado='archivado';
++    if not found then raise exception 'quiz_leads/nada_que_desvincular'; end if;
++  end if;
++  update public.auditoria set datos=datos||jsonb_build_object('revertido',true,'revertido_en',now()) where id=v_audit_id;
++  insert into public.auditoria(entidad,entidad_id,accion,autor_id,datos)
++  values ('persona',v_lead_id,'desvinculacion',p_autor_id,jsonb_build_object(
++    'cliente_id',p_cliente_id,'vinculacion_audit_id',v_audit_id,'envio_ids',to_jsonb(v_ids),
++    'envios_esperados',cardinality(v_ids),'envios_restaurados',v_restored,'revertido_de',v_audit_id));
++  return jsonb_build_object('ok',true,'lead_id',v_restore_persona,'envios_restaurados',v_restored);
++end;
++$$;
++
++create or replace function public.descartar_lead(p_lead_id uuid,p_autor_id uuid default null)
++returns jsonb
++language plpgsql security definer set search_path = public
++as $$
++declare v_state text; v_phone text; v_count int;
++begin
++  if p_lead_id is null then raise exception 'quiz_leads/parametros_faltantes'; end if;
++  select telefono_e164_capturado into v_phone from public.diagnostico_envios
++   where persona_id=p_lead_id and estado='completed'
++   order by created_at desc,id desc limit 1;
++  if v_phone is null then raise exception 'quiz_leads/lead_invalido'; end if;
++  perform pg_advisory_xact_lock(public.quiz_lead_contact_lock_key(v_phone));
++  select estado into v_state from public.personas where id=p_lead_id and telefono_e164 is null for update;
++  if not found then raise exception 'quiz_leads/lead_invalido'; end if;
++  if v_state='descartado' then return jsonb_build_object('ok',true,'lead_id',p_lead_id,'estado',v_state); end if;
++  if v_state<>'lead' then raise exception 'quiz_leads/lead_invalido'; end if;
++  select count(*) into v_count from public.diagnostico_envios
++   where persona_id=p_lead_id and telefono_e164_capturado=v_phone;
++  if v_count=0 then raise exception 'quiz_leads/lead_invalido'; end if;
++  update public.personas set estado='descartado' where id=p_lead_id and estado='lead';
++  insert into public.auditoria(entidad,entidad_id,accion,autor_id,datos)
++  values ('persona',p_lead_id,'descarte',p_autor_id,jsonb_build_object('envios',v_count,'motivo','sin_venta_triage'));
++  return jsonb_build_object('ok',true,'lead_id',p_lead_id,'estado','descartado');
++end;
++$$;
++
++-- La auditoria compartida conserva su policy general, pero las acciones de
++-- este modulo ya no contienen telefonos consultables por authenticated.
++update public.auditoria
++   set datos=datos-'telefono_lead'-'telefono_cliente'
++ where entidad='persona' and accion in ('vinculacion','desvinculacion','descarte')
++   and datos ?| array['telefono_lead','telefono_cliente'];
++alter table public.auditoria drop constraint if exists auditoria_quiz_leads_sin_telefono_check;
++alter table public.auditoria add constraint auditoria_quiz_leads_sin_telefono_check
++  check (not (entidad='persona' and accion in ('vinculacion','desvinculacion','descarte')
++    and datos ?| array['telefono_lead','telefono_cliente'])) not valid;
++alter table public.auditoria validate constraint auditoria_quiz_leads_sin_telefono_check;
++create index if not exists idx_auditoria_quiz_vinculacion
++  on public.auditoria(entidad_id,created_at desc,id desc)
++  where entidad='persona' and accion='vinculacion';
++
++-- Reafirmar RLS y ACL del modulo, incluidas las firmas reales.
++alter table public.quiz_versiones enable row level security;
++alter table public.diagnostico_envios enable row level security;
++alter table public.diagnostico_respuestas enable row level security;
++drop policy if exists "auth read quiz_versiones" on public.quiz_versiones;
++drop policy if exists "auth read diagnostico_envios" on public.diagnostico_envios;
++drop policy if exists "auth read diagnostico_respuestas" on public.diagnostico_respuestas;
++
++revoke all on function public.quiz_lead_contact_lock_key(text) from public,anon,authenticated;
++revoke all on function public.quiz_phone_matches_country(text,text) from public,anon,authenticated;
++revoke all on function public.registrar_diagnostico_v2_internal(jsonb) from public,anon,authenticated,service_role;
++revoke all on function public.validar_respuestas_quiz(jsonb,jsonb,boolean) from public,anon,authenticated;
++revoke all on function public.registrar_diagnostico(jsonb) from public,anon,authenticated;
++revoke all on function public.vincular_lead_convertido(uuid,uuid,boolean,uuid) from public,anon,authenticated;
++revoke all on function public.desvincular_lead(uuid,uuid,uuid) from public,anon,authenticated;
++revoke all on function public.descartar_lead(uuid,uuid) from public,anon,authenticated;
++grant execute on function public.registrar_diagnostico(jsonb) to service_role;
++grant execute on function public.vincular_lead_convertido(uuid,uuid,boolean,uuid) to service_role;
++grant execute on function public.desvincular_lead(uuid,uuid,uuid) to service_role;
++grant execute on function public.descartar_lead(uuid,uuid) to service_role;
++
++commit;
+diff --git a/supabase/seed.sql b/supabase/seed.sql
+index 21bc4f2..d88b4d1 100644
+--- a/supabase/seed.sql
++++ b/supabase/seed.sql
+@@ -253,7 +253,7 @@ values
+    'a0000000-0000-4000-8000-000000000011', 1, 'completed',
+    'Nicolás Ferrari', 'lead.caliente@test.local', '+5493585000101', 'AR',
+    true, 'contacto-v1', now() - interval '2 days',
+-   now() - interval '2 days - 12 minutes', now() - interval '2 days' + interval '6 minutes', 'result', 10,
++    now() - interval '2 days - 12 minutes', now() - interval '2 days' + interval '6 minutes', 'result', 11,
+    'instagram', 'organic', 'diagnostico-septiembre',
+    100000, 250000, true, 'hot-lead-v1', 'hot-lead-v1: capital_100k_250k (capital >= 10000 USD)',
+    'diagnostico-v1', '{"hot": true, "sections": [{"title": "Tu situación real"}, {"title": "El desajuste principal"}, {"title": "La señal que no conviene ignorar"}, {"title": "Tu plan de acción"}]}'::jsonb, null),
+@@ -263,7 +263,7 @@ values
+    'a0000000-0000-4000-8000-000000000012', 1, 'completed',
+    'Valeria Ortiz', 'lead.frio@test.local', '+56910000102', 'CL',
+    true, 'contacto-v1', now() - interval '6 days',
+-   now() - interval '6 days', now() - interval '6 days' + interval '9 minutes', 'result', 10,
++    now() - interval '6 days', now() - interval '6 days' + interval '9 minutes', 'result', 11,
+    null, null, null,
+    5000, 10000, false, 'hot-lead-v1', 'hot-lead-v1: capital_lt_10k (capital < 10000 USD)',
+    'diagnostico-v1', '{"hot": false, "sections": []}'::jsonb, null),
+@@ -273,7 +273,7 @@ values
+    'a0000000-0000-4000-8000-000000000013', 1, 'completed',
+    'Martín Ávalos', 'lead.convertido@test.local', '+5493585000999', 'AR',
+    true, 'contacto-v1', now() - interval '30 days',
+-   now() - interval '30 days', now() - interval '30 days' + interval '5 minutes', 'result', 10,
++    now() - interval '30 days', now() - interval '30 days' + interval '5 minutes', 'result', 11,
+    'instagram', 'organic', 'diagnostico-septiembre',
+    25000, 50000, true, 'hot-lead-v1', 'hot-lead-v1: capital_25k_50k (capital >= 10000 USD)',
+    'diagnostico-v1', '{"hot": true, "sections": []}'::jsonb, null),
