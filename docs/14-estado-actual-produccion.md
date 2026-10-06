@@ -6,7 +6,7 @@ Estado actualizado: 06-oct-2026. Rama: `fix/quiz-leads-auditoria-v5`. Ultimo com
 
 - Funnel publico `/quiz`.
 - `POST /api/lead` y tracking/consentimiento/telefono.
-- Persistencia y RPC de la migracion unica `0068_quiz_leads.sql` (estado final consolidado; el historico `0069–0073` se retiro porque nunca llego a produccion).
+- Persistencia y RPC del paquete `0068_quiz_leads.sql` (estado final consolidado) + `0069_funnel_db_role.sql` + `0070_auditoria_lead_del_envio.sql` (historico `0069–0073` retirado, nunca llego a produccion).
 - Modulo privado `/leads`, vinculacion, descarte y rollback.
 
 ## Veredicto
@@ -33,7 +33,7 @@ Estos cambios no cierran por si solos los hallazgos SQL.
 
 | Compuerta | Resultado |
 |---|---|
-| Reset limpio `0001` a `0070` | OK; 69 migraciones aplicadas (0068 módulo + 0069 rol funnel + 0070 lookup RPC) |
+| Reset limpio `0001` a `0070` | OK; **67 migraciones aplicadas** (0068 módulo + 0069 rol funnel + 0070 lookup RPC) |
 | Suite completa con DB obligatoria | **1.379 passed, 0 failed, 0 skipped** (suites RPC, ruta HTTP, carreras de concurrencia incluidas) |
 | TypeScript | OK, limpio |
 | ESLint | 0 errores, 16 warnings preexistentes del OS (ajenos al funnel) |
@@ -41,7 +41,7 @@ Estos cambios no cierran por si solos los hallazgos SQL.
 | Supabase CLI | `2.119.0` via `npx` |
 | Matriz historica | **Ya no aplica** — el historico de migraciones del modulo se consolido; produccion nunca tuvo datos del modulo |
 | Dependencias | `npm audit --omit=dev`: 1 moderada + 1 alta transitivas en PostCSS; el fix propuesto exige Next 16 y queda fuera de alcance |
-| Patch final | 39 archivos (654 KB); `git apply --check` y aplicacion completa sobre baseline limpio del OS (`041d6a6`) OK; validacion contra HEAD central pendiente del acceso al repo central |
+| Patch final | 25 archivos (497 KB); `git apply --check` y aplicacion completa sobre baseline limpio del OS (`041d6a6`) OK; validacion contra HEAD central pendiente del acceso al repo central |
 
 Estos conteos corresponden al checkout actual y datos ficticios locales. No sustituyen las compuertas externas de produccion.
 

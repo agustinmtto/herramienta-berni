@@ -56,7 +56,7 @@ La decisión de negocio D1 (`docs/11`) explica el porqué: el funnel vive como r
 
 | Objeto | Qué es | Veredicto QA |
 |---|---|---|
-| `0068_quiz_leads.sql` (migración única consolidada) | 3 tablas + índices + RPCs (ingesta, vincular, desvincular, descartar) + validador de respuestas + trigger de estados finales + lock canónico + vista del selector + RLS/grants + definición del quiz | ✅ Uno de los pocos objetos grandes pero justificado: todo el comportamiento probado por la suite vive acá, sin compatibilidad histórica |
+| `0068_quiz_leads.sql` (migración principal consolidada) + `0069_funnel_db_role.sql` + `0070_auditoria_lead_del_envio.sql` | 3 tablas + índices + RPCs (ingesta, vincular, desvincular, descartar) + validador de respuestas + trigger de estados finales + lock canónico + vista del selector + RLS/grants + definición del quiz; rol mínimo `funnel`; lookup SQL nativo de la auditoría | ✅ Uno de los pocos objetos grandes pero justificado: todo el comportamiento probado por la suite vive acá, sin compatibilidad histórica |
 | RPC `registrar_diagnostico` | Ingesta transaccional completa | ✅ |
 | RPCs `vincular/desvincular/descartar` | Ciclo comercial post-venta (docs/11 §9) | ✅ |
 | Trigger `diag_envios_guard` | Inmutabilidad de completed + terminalidad de dropped (2 reglas simples) | ✅ (red de seguridad si algún service_role escribe directo) |
@@ -113,16 +113,51 @@ Qué cambió exactamente:- Nueva app `apps/funnel/` (Next minimal): `app/quiz/*`
 - En `apps/inbox` se **retiraron** `/quiz`, `/api/lead`, `lib/quiz/*` y las excepciones del middleware en el funnel: el OS no expone rutas públicas. El módulo `/leads` y sus tests quedan intactos.
 - Compuertas re-corrídas tras la separación: funnel 5 suites / 68 tests (gated con el rol funnel) + inbox 55 suites (RPC service_role + leads) · `tsc`/`eslint`/`build` OK en ambas apps.
 
+## 9. Roles, permisos de /leads y mapa doc ↔ software (trazabilidad)
+
 ## 8. QA E2E del módulo /leads con browser real (06-oct pm, tanda 2)
 
-Recorrida administrativa completa como triaje (login dev `milo`): listado con filtros y contadores, detalle del lead, picker de clientes, vincular con confirmación, rollback (`desvincular`) y descarte.
+Recorrida administrativa completa como triaje (login dev milo): listado con filtros y contadores, detalle del lead, picker de clientes, vincular con confirmación, rollback (desvincular) y descarte.
 
-**Hallazgo y corrección:** el detalle del lead NUNCA cargaba. El lookup de la auditoría usaba el filtro de contención JSON por REST: con `datos.cs={...}` PostgREST responde 400 (PGRST100) y con la sintaxis de punto esta build (`postgrest/16.4`) IGNORA el filtro silenciosamente (devuelve todas las vinculaciones). La pantalla enseña el error controlado (buen diseño de errores honestos) pero era un bug real. **Fix: migración `0070_auditoria_lead_del_envio.sql`** — RPC SQL `auditoria_lead_del_envio(uuid)` con containment nativo `@>` de Postgres, `stable`, ordenado como las demás RPC del ciclo (`created_at desc, id desc`); `getLeadDetalle` la llama y el EXECUTE queda solo a `service_role`.
+**Hallazgo y corrección:** el detalle del lead NUNCA cargaba: el lookup de la auditoría filtraba por contención JSON de PostgREST (datos.cs={...} respondía 400 PGRST100 y con la sintaxis de punto esta build — postgrest/16.4 — IGNORA el filtro silenciosamente). La pantalla mostraba el error controlado (buen diseño) pero era un bug real. **Fix: migración 0070_auditoria_lead_del_envio.sql** — RPC SQL con containment nativo de Postgres, determinística y ordenada como el resto del ciclo; getLeadDetalle la llama y el EXECUTE queda solo a service_role.
 
-**Verificado en vivo con el browser (y cubierto por los RPC de base):**
-- Listado: completados con contacto correcto, abandonos "sin contacto", badges Caliente/Frío/Indeterminado
-- Picker: SOLO clientes con programa vigente (Sofía excluida porque su programa venció — el filtro I7 funciona de verdad)
-- Vincular con teléfonos distintos SIN confirmar → rechazo `telefono_no_coincide` con mensaje claro en UI
-- Vincular CONFIRMADO → lead temporal `archivado`, envío reasignado al cliente, auditoría con `envio_ids` exactos y SIN teléfonos (PII strip real)
-- Desvincular → rollback EXACTO: persona de vuelta a `lead`, envío devuelto al MISMO temporal, auditoría con `revertido_de` (UUID) y conteos `envios_esperados`/`envios_restaurados`
-- Descartar con confirmación → persona `descartado` + auditoría `{envios, motivo:"sin_venta_triage"}` sin PII
+**Verificado en vivo con el browser:**
+- Listado: completados con contacto correcto, abandonos sin contacto, badges Caliente/Frío/Indeterminado
+- Picker: SOLO clientes con programa vigente (Sofía excluida por programa vencido — el filtro I7 funciona de verdad)
+- Vincular con teléfonos distintos SIN confirmar → rechazo telefono_no_coincide con mensaje claro
+- Vincular CONFIRMADO → lead temporal archivado, envío reasignado al cliente, auditoría con envio_ids exactos y SIN teléfonos (PII strip real)
+- Desvincular → rollback EXACTO: persona de vuelta a lead, envío devuelto al MISMO temporal, auditoría con revertido_de (UUID) y conteos exactos
+- Descartar con confirmación → persona descartado + auditoría con motivo sin_venta_triage sin PII
+
+Compuertas tras el fix: inbox 55 suites + funnel 5 suites en verde; tsc/build OK.
+
+## 9. Roles, permisos de /leads y mapa doc ↔ software (trazabilidad)
+
+### Quién puede acceder al módulo /leads (modelo real, verificado)
+
+El acceso NO es por rol ("closer", "admin") sino por **módulo asignado por persona**: `puedeVer(u,'leads')` = `acceso_total=true` **o** `'leads' ∈ team_members.modulos` (`lib/modulos.ts`, el gate corre en la página, el detalle y cada server action — verificado con `milo` ✓ y `paula` ✗ en la QA E2E).
+
+- **Admin / acceso_total** (hoy: Milo, Berni, Alex en el seed) → ven /leads siempre.
+- **Closers/consultores** (o quien el negocio decida) → se les asigna el módulo EXPLÍCITAMENTE; no se hereda de `clientes` ni de ningún rol (decisión D13 de docs/11: el triaje comercial es decisión del negocio, no un accidente).
+- SQL de asignación (el operador lo corre cuando el negocio defina el equipo):
+  ```sql
+  update public.team_members
+     set modulos = coalesce(modulos, '{}') || '{leads}'
+   where username in ('<closers-definidos-por-el-negocio>');
+  ```
+- La pregunta "¿quién del equipo recibe `leads`?" sigue abierta para el negocio (docs/13, información necesaria item 3) — es deliberado, no un pendiente técnico.
+
+### Mapa de trazabilidad (cada pieza del software ↔ dónde está especificada)
+
+| Pieza construida | Donde está en la doc |
+|---|---|
+| Contrato del payload (4 eventos, campos, límites) | `docs/11` §5 · contrato espejo en `apps/funnel/lib/quiz/lead-validate.ts` |
+| RPC `registrar_diagnostico` (ingesta + regla caliente ≥ 10.000) | `docs/11` §7–§8 · SQL: `0068` bloques 7–10 |
+| RPCs `vincular/desvincular/descartar` (ciclo comercial) | `docs/11` §9 · SQL: `0068` bloques 11–13 · UI: `/leads` + `leads-actions.ts` |
+| Rol `funnel` de privilegio mínimo | `docs/00` D2 · SQL: `0069` · app: `apps/funnel/lib/db.ts` |
+| Lookup `auditoria_lead_del_envio` | `docs/19` §8 · SQL: `0070` · caller: `lib/leads.ts` |
+| RLS deny-all + grants `service_role` | `docs/09` Q14 · SQL: `0068` §6/§16 |
+| Tracking "hasta qué pregunta llegó" | `docs/00` flujo 8 · implementado con `last_step_*` + eventos `dropped` |
+| Permisos del módulo `leads` | `docs/11` D13 · código: `lib/modulos.ts` + `lib/guard.ts` (§9 acá) |
+| Fases y compuertas de implementación | `docs/12` (historial) · `docs/14` (evidencia y GO) |
+| Runbook de producción | `docs/18` §1–§7 |

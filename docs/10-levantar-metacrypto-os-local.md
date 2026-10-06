@@ -33,7 +33,8 @@ Desde la **raíz del repo** (`herramienta-berni/`):
 cd metacrypto-os-app
 supabase start
 #    → la primera vez aplica todas las migraciones (65 a la fecha, incluida
-#      la migración única del módulo de leads: `0068_quiz_leads.sql`)
+#      la migración principal `0068_quiz_leads.sql` del módulo de leads + `0069_funnel_db_role.sql`
+#      (rol mínimo de la app funnel) + `0070_auditoria_lead_del_envio.sql` (lookup)
 #    y siembra `supabase/seed.sql` (datos de prueba).
 #    → anota las URLs que imprime (API, Studio, DB). En esta máquina los
 #      puertos viven en 5440x/54410 (rangos 5432x excluidos por Hyper-V).

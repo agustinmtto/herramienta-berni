@@ -22,7 +22,7 @@ Estado actualizado: 28-sep-2026. Base auditada: `79d7f4f27bc5feddf3d9a260ca26b63
 | 10 | Selector de clientes | Cerrado local | Workflow remoto |
 | 11 | Validacion de `/leads` | Cerrado local | Workflow remoto |
 | 12 | Validacion de `/api/lead` | Corregido y validado local | Primera ejecucion del workflow remoto |
-| 13 | Documentacion y transferencia | Cerrado local; patch de 44 archivos aplicado sobre baseline reconstruido | `git apply --check` contra HEAD central |
+| 13 | Documentacion y transferencia | Cerrado local; patch de 25 archivos (0068–0070) aplicado sobre baseline reconstruido | `git apply --check` contra HEAD central |
 
 `Corregido en codigo` no significa cerrado para merge: cada fila requiere su evidencia final de `docs/17`.
 

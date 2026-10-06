@@ -50,7 +50,7 @@ Convención: ✅ implementado y verificado (tests + curl) · ♻️ cubierto por
 | 29 | IDOR/BOLA: intento de manipular session ids por recursos entre leads | ✅ — el endpoint público solo escribe (no expone lecturas); la respuesta nunca devuelve `persona_id`; el módulo `/leads` exige sesión + permiso `leads` (`requireModulo`) en página, detalle y acciones; sesión identificable solo por UUID v4 validado |
 | 30 | SQL / DB injection (todos los campos que llegan a DB) | ✅ — todo va por PostgREST parametrizado y RPC plpgsql con validación cerrada contra la definición publicada; LIKE escapado con `patronLike`; UTMs solo en filtros `eq` con `encodeURIComponent`; cero SQL dinámico con input del cliente |
 
-## Quiz Funnel en el OS (migración única `0068_quiz_leads.sql`, rama `fix/quiz-leads-auditoria-v5`)
+## Quiz Funnel en el OS (migración principal `0068` + `0069` rol funnel + `0070` lookup, rama `fix/quiz-leads-auditoria-v5`)
 
 Ítems nuevos de la integración, revisados al cerrar Fase D (docs/12):
 

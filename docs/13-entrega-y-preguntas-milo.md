@@ -8,7 +8,7 @@ La implementacion local del modulo esta validada con todas las compuertas (suite
 
 ## Informacion necesaria
 
-1. ~~Confirmar la reserva del numero `0073`~~ → obsoleto: el modulo es la migracion unica `0068`.
+1. ~~Confirmar la reserva del numero `0073`~~ → obsoleto: el paquete del modulo es `0068 + 0069 + 0070`.
 2. Dar acceso al HEAD real del repositorio central para validar el patch final. No se certifica compatibilidad contra un SHA externo no disponible.
 3. Confirmar quien recibe el permiso `leads`.
 4. Configurar y evidenciar el rate limit distribuido del funnel en WAF/Upstash/Redis. El limiter versionado es una defensa local por instancia.
@@ -25,7 +25,7 @@ La implementacion local del modulo esta validada con todas las compuertas (suite
 Runbook completo en `docs/18`. Resumen:
 
 1. Probar backup y restauracion.
-2. Aplicar la migracion unica `0068` (convergente, una transaccion): valida antes el esquema con `to_regclass`/`to_regprocedure`.
+2. Aplicar el paquete de migraciones `0068 + 0069 + 0070` (convergentes, una transaccion cada una): valida antes el esquema con `to_regclass`/`to_regprocedure`.
 3. Verificar funciones, constraints, triggers, indices, grants y RLS.
 4. Desplegar el codigo del mismo checkout validado.
 5. Ejecutar smoke de `/quiz`, `/api/lead` y `/leads` con datos ficticios (docs/18 §5).

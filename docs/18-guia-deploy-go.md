@@ -2,7 +2,7 @@
 
 Guía **técnica** del operativo de despliegue: deja el módulo listo para el GO de negocio. Omite deudas de negocio (videos, decisiones pendientes de Berni/Miled). El código ya pasó las compuertas completas en local (suites en verde, `tsc` limpio, `eslint` 0 errores, `next build` OK en ambas apps).
 
-**Estado del SQL:** el módulo usa **dos migraciones**: `metacrypto-os-app/supabase/migrations/0068_quiz_leads.sql` (estado final consolidado del módulo: tablas + RPCs + RLS/grants + definición del quiz) y `0069_funnel_db_role.sql` (rol `funnel` con privilegio mínimo para la app pública). El histórico de reconciliaciones del módulo nunca llegó a producción — ver §1.
+**Estado del SQL:** el paquete del módulo son **tres migraciones**: `metacrypto-os-app/supabase/migrations/0068_quiz_leads.sql` (estado final consolidado del módulo: tablas + RPCs + RLS/grants + definición del quiz), `0069_funnel_db_role.sql` (rol `funnel` con privilegio mínimo para la app pública) y `0070_auditoria_lead_del_envio.sql` (lookup nativo de la auditoría, hallazgo del QA E2E). El histórico de reconciliaciones del módulo nunca llegó a producción — ver §1.
 
 ---
 
@@ -10,7 +10,7 @@ Guía **técnica** del operativo de despliegue: deja el módulo listo para el GO
 
 | Artefacto | Qué es | Dónde deploya |
 |---|---|---|
-| `metacrypto-os-app/supabase/migrations/0068_quiz_leads.sql` + `0069_funnel_db_role.sql` | Módulo de leads (tablas + RPCs + RLS/grants) y rol mínimo `funnel` | Producción Supabase (una vez) |
+| `metacrypto-os-app/supabase/migrations/0068_quiz_leads.sql` + `0069_funnel_db_role.sql` + `0070_auditoria_lead_del_envio.sql` | Módulo de leads (tablas + RPCs + RLS/grants), rol mínimo `funnel` del módulo y lookup nativo de la auditoría | Producción Supabase (una vez) |
 | `metacrypto-os-app/apps/funnel/` | **App pública del funnel**: wizard `/quiz` + `/api/lead` (rol mínimo `funnel`) | Su propia instancia/dominio (ej. `quiz.…`), proyecto Vercel aparte con Root Directory = `apps/funnel` |
 | `metacrypto-os-app/apps/inbox/` (+ patch) | OS del negocio con módulo `/leads` (triage) — **sin rutas públicas del funnel** | Repo/instancia del OS (patch: `docs/15`) |
 
@@ -25,7 +25,7 @@ select to_regclass('public.quiz_versiones'), to_regclass('public.diagnostico_env
        to_regprocedure('public.registrar_diagnostico(jsonb)');
 ```
 
-- **Todo NULL (caso esperado):** falta aplicar `0068` + `0069` (paso 2).
+- **Todo NULL (caso esperado):** falta aplicar `0068` + `0069` + `0070` (paso 2).
 - **Si existe alguna pieza del módulo** (p. ej. una 0068 vieja aplicada a mano): aplicar igual — la migración es **convergente** (`create or replace` + `drop if exists`). Se valida igual con el smoke (§5).
 
 Si produccion ya pasó de `0067`, renombrar los archivos al número libre siguiente (transaccionales independientes; el número no cambia nada más).
@@ -41,6 +41,7 @@ Ambas migraciones entran en **una transacción** cada una (`begin;…commit;`): 
 # 2) aplicación (psql con la connection string de producción)
 psql "$DB_URL" -f supabase/migrations/0068_quiz_leads.sql
 psql "$DB_URL" -f supabase/migrations/0069_funnel_db_role.sql
+psql "$DB_URL" -f supabase/migrations/0070_auditoria_lead_del_envio.sql
 
 # 3) verificación del esquema final
 psql "$DB_URL" -c "
@@ -51,7 +52,7 @@ psql "$DB_URL" -c "
   select rolname from pg_roles where rolname = 'funnel';"
 ```
 
-Esperado: `registrar_diagnostico(jsonb)`, `vincular_lead_convertido(uuid, uuid, boolean, uuid)`, `desvincular_lead(uuid, uuid, uuid)`, `descartar_lead(uuid, uuid)`, `validar_respuestas_quiz(jsonb, jsonb, boolean)`, la vista `v_clientes_para_vincular` y el rol `funnel`.
+Esperado: `registrar_diagnostico(jsonb)`, `vincular_lead_convertido(uuid, uuid, boolean, uuid)`, `desvincular_lead(uuid, uuid, uuid)`, `descartar_lead(uuid, uuid)`, `validar_respuestas_quiz(jsonb, jsonb, boolean)`, `auditoria_lead_del_envio(uuid)`, la vista `v_clientes_para_vincular` y el rol `funnel`.
 
 ## 3. Variables de entorno
 

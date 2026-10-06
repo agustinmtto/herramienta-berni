@@ -22,16 +22,16 @@
 | 16 | ~~**Ámbito de seguridad con integraciones**~~ | Implementado para el módulo de leads: RLS day 1, service_role solo server, IDOR cubierto, SQLi parametrizado — checklist verificado en `docs/09` §Quiz Funnel en el OS | Equipo dev | ✅ Cerrado (Fase D local) |
 | 17 | ~~**Upgrade de Next** para cerrar las vulnerabilidades de prod deps~~ → fusionado con #20 | Cerrar `npm audit --omit=dev` en 0 en ambos repos | Equipo dev | 🟡 Fusionado con #20 (críticas cerradas; queda postcss vía Next 16) |
 | 18 | ~~**Retención de datos de leads**~~ | Sin vencimiento por decisión de negocio; mantener capacidad futura de eliminación/anonimización | Berni / Equipo dev | ✅ Cerrado |
-| 19 | ~~**Número de migración**~~ → **Sustituido (06-oct):** el histórico `0068–0072` (confirmado por Miled en su momento) se **consolidó en la migración única `0068_quiz_leads.sql`** (producción nunca aplicó nada del módulo). El número lo validamos nosotros contra la base del OS — ver `docs/18` §1 | Validación de migraciones | Equipo dev | ✅ Cerrado (consolidación) |
+| 19 | ~~**Número de migración**~~ → **Sustituido (06-oct):** el histórico `0068–0072` (confirmado por Miled en su momento) se **consolidó en la migración principal `0068_quiz_leads.sql`** + `0069` (rol funnel) + `0070` (lookup) (producción nunca aplicó nada del módulo). El número lo validamos nosotros contra la base del OS — ver `docs/18` §1 | Validación de migraciones | Equipo dev | ✅ Cerrado (consolidación) |
 | 20 | **Upgrade de Next del OS (bloqueante de prod)**: ~~1 RCE crítica en `next`~~ **RESUELTO en el PR de leads: lockfile a `15.5.25` — las 2 RCE críticas y las altas de `nanoid`/`sharp` quedaron cerradas**. Queda la alta de `postcss` cuya solución exige Next 16 (cambio mayor, ticket aparte) y las correcciones de seguridad preexistentes del OS (`docs/13` §4) | Cerrar `npm audit --omit=dev` en 0 | Miled / Equipo dev | 🟡 Parcial: críticas cerradas; Next 16 pendiente |
 
 ## Preguntas para Miled (cierre Fase D — bloqueantes de producción)
 
 1. **Hosting del OS**: ¿dónde está desplegado hoy el OS en producción (Vercel, otro)? ¿Qué plan tiene? ¿El host ofrece WAF / rate limiting en el borde?
 2. **Rate limit definitivo**: ¿habilitamos Upstash Redis (requiere cuenta + token del negocio) o confiamos en el rate limiting del host? El endpoint público `/api/lead` hoy usa in-memory 10/min por IP (configurable con `LEAD_RATE_LIMIT_MAX` / `LEAD_RATE_LIMIT_WINDOW_MS`).
-3. ~~**Números de migración**~~: obsoleto — el módulo es la migración única `0068` (o el número libre siguiente en producción, ver `docs/18` §1).
+3. ~~**Números de migración**~~: obsoleto — el módulo deploya con `0068 + 0069 + 0070` (o los números libres siguientes en producción, ver `docs/18` §1).
 4. **Permiso `leads`**: ¿quién del equipo lo recibe (Berni, Miled, closers)? Se asigna por `team_members.modulos`.
-5. **Orden de despliegue**: aplicar la migración única `0068` a producción ANTES de deployar el código (sin eso, PostgREST responde 400 en silencio). Runbook: `docs/18`.
+5. **Orden de despliegue**: aplicar `0068 + 0069 + 0070` a producción ANTES de deployar el código (sin eso, PostgREST responde 400 en silencio). Runbook: `docs/18`.
 6. **Variables de entorno en prod**: no se agregan claves nuevas; verificar que el deploy tenga `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `AUTH_TOKEN` (ya usadas por el OS). Opcionales: `LEAD_RATE_LIMIT_*`.
 7. **Upgrade de Next** (bloqueante #20): las 2 RCE críticas ya quedaron cerradas en este PR (lockfile `15.5.25`). Queda la alta de `postcss` — ¿se aprueba el salto a Next 16 como ticket aparte?
 8. **HTTPS/HSTS**: verificar que el host fuerce HTTPS y configure HSTS al exponer `/quiz`.

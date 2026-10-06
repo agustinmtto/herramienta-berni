@@ -1,6 +1,6 @@
 # 15 - Transferencia del funnel al repositorio del OS
 
-> **Actualización (06-oct, separación D2):** el funnel público es una **app aparte** (`apps/funnel/`) con despliegue propio — NO viaja al repo del OS. El patch `release/funnel-leads.patch` entrega solo el **módulo `/leads` del OS** (triage) + migraciones `0068`/`0069` + tests + workflow. El patch se regenera excluyendo todo lo que está bajo `apps/funnel/` (`docs/18` §7).
+> **Actualización (06-oct, separación D2):** el funnel público es una **app aparte** (`apps/funnel/`) con despliegue propio — NO viaja al repo del OS. El patch `release/funnel-leads.patch` entrega solo el **módulo `/leads` del OS** (triage) + migraciones `0068`/`0069`/`0070` + tests + workflow. El patch se regenera excluyendo todo lo que está bajo `apps/funnel/` (`docs/18` §7).
 
 ## Estado del artefacto
 

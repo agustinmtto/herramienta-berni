@@ -1,6 +1,6 @@
 # 12 — Spec SDD: fases, validación y roadmap de la migración leads
 
-> **Notas de actualización (06-oct-2026):** (1) el histórico de migraciones del módulo (`0068–0072/0073`) se **consolidó en la migración única `0068_quiz_leads.sql`** — las filas históricas de las fases se conservan tal cual como registro; hoy la única migración a aplicar es la 0068 (runbook: `docs/18`). (2) El prototipo standalone de la raíz del repo (su `npm test` 39/39) se **retiró** — toda la suite vive en `apps/inbox` con vitest.
+> **Notas de actualización (06-oct-2026):** (1) el histórico de migraciones del módulo (`0068–0072/0073`) se **consolidó en la migración principal `0068_quiz_leads.sql`** — las filas históricas de las fases se conservan tal cual como registro; a aplicar hoy: `0068 + 0069 (rol funnel) + 0070 (lookup)` (runbook: `docs/18`). (2) El prototipo standalone de la raíz del repo (su `npm test` 39/39) se **retiró** — toda la suite vive en `apps/inbox` con vitest.
 
 Documento de **Spec-Driven Development** para ejecutar la migración del módulo de leads (spec funcional en `docs/11`) en fases con **validación de inicio y fin de cada una**. El repo actual es de desarrollo: nada de lo que hacemos acá impacta producción; el objetivo es que cada fase quede lista para migrar a producción sin retrabajo.
 
@@ -16,7 +16,7 @@ Documento de **Spec-Driven Development** para ejecutar la migración del módulo
 | P2 | **Fases con compuertas** | Cada fase tiene criterios de inicio (precondiciones) y de salida (DoD verificable con comandos). Nada avanza con compuertas pendientes |
 | P3 | **Tests primero** | En el repo del OS: escribir el test, verlo fallar, implementar. Los tests nuevos de cada fase se agregan a su PR |
 | P4 | **Solo desarrollo** | Todo se valida contra Supabase local (Docker, `docs/10`). Producción no se toca hasta Fase D |
-| P5 | **Append-only + aislamiento** | Migraciones nuevas solamente; cero cambios a tablas/RPCs existentes del OS (docs/11 D3/D4). **Excepciones aprobadas y documentadas (docs/11 §9.4): el módulo amplia el CHECK de `personas.estado` con 'descartado' y re-aplica sus propios constraints/grants — hoy todo vive en la migración única `0068`** |
+| P5 | **Append-only + aislamiento** | Migraciones nuevas solamente; cero cambios a tablas/RPCs existentes del OS (docs/11 D3/D4). **Excepciones aprobadas y documentadas (docs/11 §9.4): el módulo amplia el CHECK de `personas.estado` con 'descartado' y re-aplica sus propios constraints/grants — hoy en `0068` (módulo), con `0069` (rol funnel) y `0070` (lookup) como paquete** |
 | P6 | **Trazabilidad** | Cada fase cierra con evidencia: comandos ejecutados y resultado (output clave pegado en el PR) |
 | P7 | **Un tema por PR** | Una fase = una rama = un PR. PRs chicos, review ágil (docs/07 §5) |
 

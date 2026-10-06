@@ -89,7 +89,7 @@ Por funcionalidad/responsabilidad (no por carpetas):
 - [x] Tracking: `session_id` + dropoff por `sendBeacon` (`docs/03` §6)
 - [x] Suite de tests del funnel — vive en `metacrypto-os-app/apps/inbox/` con **vitest** (unit + HTTP + RPC + seguridad + integración gated contra Supabase local)
 - [x] Captura de teléfono obligatoria en contacto + payload/API
-- [x] Migrations: tablas del módulo de leads + flag `hot_lead` — implementadas como la **migración única `0068_quiz_leads.sql`** (estado final consolidado del histórico 0068–0073) en el repo del OS (`metacrypto-os-app/`), con RPC transaccional, RLS y validación de teléfono (ver `docs/11` y `docs/12`)
+- [x] Migrations: tablas del módulo de leads + flag `hot_lead` — implementadas como la **migración principal `0068_quiz_leads.sql`** (estado final consolidado del histórico 0068–0073) + `0069_funnel_db_role.sql` (rol de la app pública) + `0070_auditoria_lead_del_envio.sql`, en el repo del OS (`metacrypto-os-app/`), con RPC transaccional, RLS y validación de teléfono (ver `docs/11` y `docs/12`)
 - [ ] Deploy en Netlify (conectar repo) y merge del PR — el funnel vivirá dentro del OS (`/quiz`), no en Netlify (decisión D1 de `docs/11`); queda el despliegue del OS con Miled
 
 **Salida (parcial):** flujo completo funcionando en local (pantallas wizard → análisis → final única diagnóstico+videos) con lead visible en logs del endpoint.
@@ -114,7 +114,7 @@ Por funcionalidad/responsabilidad (no por carpetas):
 
 ### Fase 4 — Producción y lanzamiento orgánico
 - [ ] Revisión integrada final: todo merged a main, probado en local punta a punta
-- [ ] Aplicar la migración única del módulo (`0068`, o el número libre siguiente — convergente) a producción — a mano por el operador; `supabase db push` está desautorizado en productivo (trampa #5 del CLAUDE.md del OS). Runbook: `docs/18`
+- [ ] Aplicar las migraciones del módulo (`0068 + 0069 + 0070`, o el número libre siguiente — convergentes) a producción — a mano por el operador; `supabase db push` está desautorizado en productivo (trampa #5 del CLAUDE.md del OS). Runbook: `docs/18`
 - [ ] Deploy de la app al hosting del negocio
 - [ ] Smoke test en producción con datos de prueba
 - [ ] Link con UTMs → Berni lanza en Instagram (orgánico primero)
