@@ -4,6 +4,8 @@ Documento autoritativo para implementar la persistencia del Quiz Funnel y el mod
 
 > **Estado:** especificación cerrada, **implementada y validada**, consolidada tras la revisión de arquitectura (06-oct): el histórico de migraciones `0068`–`0072`/`0073` quedó reducido a la **migración única `0068_quiz_leads.sql`** con el estado final de cada corrección (producción nunca aplicó nada del módulo; más abajo las referencias a migraciones intermedias se leen como historia del diseño, no como piezas a aplicar). Detalle operativo: `docs/18`.
 >
+> **Despliegue (D1 → D2, 06-oct pm):** el contrato y las reglas de este documento son idénticos; lo que cambia es DÓNDE corre la parte pública. El wizard + `/api/lead` viven en una **app aparte** (`metacrypto-os-app/apps/funnel/`, instancia y dominio propios) y escriben por el RPC con el rol mínimo `funnel` (`0069`); el módulo privado `/leads` sigue en el OS. La decisión D1 original ("el funnel como ruta pública del OS") queda supervada: motivación de seguridad, ver `docs/00` y `docs/19` §7.
+>
 > Insumos históricos: `docs-obsoletos/03-especificacion-mvp-standalone.md`, `docs/06-pendientes-y-preguntas.md`, `docs/08-roadmap.md`, `docs/09-security.md`, `docs/10-levantar-metacrypto-os-local.md` y `metacrypto-os-app/CLAUDE.md`.
 
 ## 1. Alcance y decisiones cerradas
