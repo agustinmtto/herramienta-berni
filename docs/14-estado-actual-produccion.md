@@ -33,7 +33,7 @@ Estos cambios no cierran por si solos los hallazgos SQL.
 
 | Compuerta | Resultado |
 |---|---|
-| Reset limpio `0001` a `0068` | OK; 65 migraciones aplicadas (el modulo es la 0068 consolidada y unica) |
+| Reset limpio `0001` a `0070` | OK; 69 migraciones aplicadas (0068 módulo + 0069 rol funnel + 0070 lookup RPC) |
 | Suite completa con DB obligatoria | **1.379 passed, 0 failed, 0 skipped** (suites RPC, ruta HTTP, carreras de concurrencia incluidas) |
 | TypeScript | OK, limpio |
 | ESLint | 0 errores, 16 warnings preexistentes del OS (ajenos al funnel) |

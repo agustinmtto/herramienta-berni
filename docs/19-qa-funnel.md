@@ -108,8 +108,21 @@ Motivo: seguridad. El OS tiene tickets de seguridad pendientes y quedabaDB el fu
 
 Motivo: seguridad. El OS tiene tickets de seguridad pendientes y el funnel público operaba dentro de la misma app que el login del equipo — se aísla. Los veredictos QA de §3.1 y §3.2 siguen valiendo tal cual: los archivos se MOVIERON, no se reescribieron.
 
-Qué cambió exactamente:
-- Nueva app `apps/funnel/` (Next minimal): `app/quiz/*`, `app/quiz.css`, `app/api/lead/route.ts` y `lib/quiz/*` (los mismos archivos, veredictos QA de las §3.1/3.2 valen tal cual) + `lib/db.ts` (cliente mínimo con su env propia) + `scripts/mint-funnel-token.mjs`.
+Qué cambió exactamente:- Nueva app `apps/funnel/` (Next minimal): `app/quiz/*`, `app/quiz.css`, `app/api/lead/route.ts` y `lib/quiz/*` (los mismos archivos, veredictos QA de las §3.1/3.2 valen tal cual) + `lib/db.ts` (cliente mínimo con su env propia) + `scripts/mint-funnel-token.mjs`.
 - Nueva migración `0069_funnel_db_role.sql`: rol `funnel` **solo** con EXECUTE de `registrar_diagnostico` + SELECT de la definición publicada. Aislamiento probado con el JWT real: ingesta 200; lectura de envíos/personas 403; RPCs del triage 403.
 - En `apps/inbox` se **retiraron** `/quiz`, `/api/lead`, `lib/quiz/*` y las excepciones del middleware en el funnel: el OS no expone rutas públicas. El módulo `/leads` y sus tests quedan intactos.
 - Compuertas re-corrídas tras la separación: funnel 5 suites / 68 tests (gated con el rol funnel) + inbox 55 suites (RPC service_role + leads) · `tsc`/`eslint`/`build` OK en ambas apps.
+
+## 8. QA E2E del módulo /leads con browser real (06-oct pm, tanda 2)
+
+Recorrida administrativa completa como triaje (login dev `milo`): listado con filtros y contadores, detalle del lead, picker de clientes, vincular con confirmación, rollback (`desvincular`) y descarte.
+
+**Hallazgo y corrección:** el detalle del lead NUNCA cargaba. El lookup de la auditoría usaba el filtro de contención JSON por REST: con `datos.cs={...}` PostgREST responde 400 (PGRST100) y con la sintaxis de punto esta build (`postgrest/16.4`) IGNORA el filtro silenciosamente (devuelve todas las vinculaciones). La pantalla enseña el error controlado (buen diseño de errores honestos) pero era un bug real. **Fix: migración `0070_auditoria_lead_del_envio.sql`** — RPC SQL `auditoria_lead_del_envio(uuid)` con containment nativo `@>` de Postgres, `stable`, ordenado como las demás RPC del ciclo (`created_at desc, id desc`); `getLeadDetalle` la llama y el EXECUTE queda solo a `service_role`.
+
+**Verificado en vivo con el browser (y cubierto por los RPC de base):**
+- Listado: completados con contacto correcto, abandonos "sin contacto", badges Caliente/Frío/Indeterminado
+- Picker: SOLO clientes con programa vigente (Sofía excluida porque su programa venció — el filtro I7 funciona de verdad)
+- Vincular con teléfonos distintos SIN confirmar → rechazo `telefono_no_coincide` con mensaje claro en UI
+- Vincular CONFIRMADO → lead temporal `archivado`, envío reasignado al cliente, auditoría con `envio_ids` exactos y SIN teléfonos (PII strip real)
+- Desvincular → rollback EXACTO: persona de vuelta a `lead`, envío devuelto al MISMO temporal, auditoría con `revertido_de` (UUID) y conteos `envios_esperados`/`envios_restaurados`
+- Descartar con confirmación → persona `descartado` + auditoría `{envios, motivo:"sin_venta_triage"}` sin PII

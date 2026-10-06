@@ -249,9 +249,13 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
 
   // Si este envío ya fue vinculado a un cliente, la auditoría guarda QUÉ lead
   // temporal se movió (evita que el rollback mueva la vinculación equivocada).
-  const vinculaciones = await rest<{ entidad_id: string }[]>(
-    "GET",
-    `auditoria?accion=eq.vinculacion${"&"}datos.cs=${encodeURIComponent(`{"envio_ids":["${id}"]}`)}&select=entidad_id&order=created_at.desc&limit=1`,
+  // El lookup va por RPC SQL (0070): en esta build de PostgREST los filtros
+  // de contención JSON por REST (`datos.cs`) se ignoran silenciosamente y
+  // con `cs=` responde 400 — el detalle se rompía de una u otra forma.
+  const vinculaciones = await rest<{ lead_id: string | null }[]>(
+    "POST",
+    "rpc/auditoria_lead_del_envio",
+    { p_envio_id: id },
   );
   if (vinculaciones.status >= 400) throw new Error(`auditoria_vinculacion_http_${vinculaciones.status}`);
 
@@ -269,7 +273,7 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
     diagnosis_result: diagnosisResult,
     diagnosis_result_size: diagnosisResult ? JSON.stringify(diagnosisResult).length : 0,
     schema_version: fila.schema_version as number,
-    leadVinculadoId: vinculaciones.json?.[0]?.entidad_id ?? null,
+    leadVinculadoId: vinculaciones.json?.[0]?.lead_id ?? null,
   };
 }
 
