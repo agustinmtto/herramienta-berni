@@ -3,8 +3,8 @@
 // listado genere exactamente el filtro de PostgREST esperado.
 
 import { describe, expect, test } from "vitest";
-import { buildLeadsQuery, buildClientesQuery, LEADS_PAGE_SIZE, parseLeadPage, type LeadFilters } from "../../leads";
-import { patronLike } from "../../supabase";
+import { buildLeadsQuery, buildClientesQuery, LEADS_PAGE_SIZE, parseLeadPage, type LeadFilters } from "../leads";
+import { patronLike } from "../supabase";
 
 const base: LeadFilters = {};
 const con = (f: LeadFilters): string => buildLeadsQuery(f);

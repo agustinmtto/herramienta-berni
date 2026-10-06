@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, afterAll, describe, expect, test, vi } from "vitest";
-import { guardedLocalFetch, isLocalSupabaseUrl } from "../quiz/__tests__/local-db-guard";
+import { guardedLocalFetch, isLocalSupabaseUrl } from "./local-db-guard";
 
 // â”€â”€ entorno local â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function loadEnvLocal(): Record<string, string> {

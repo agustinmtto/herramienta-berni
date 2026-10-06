@@ -14,7 +14,9 @@ Lead magnet para el negocio de Berni (Metacrypto Club, cripto): landing con wiza
 
 ## Estructura
 
-- `metacrypto-os-app/` — **acá vive la implementación vigente** (la app del_OS con la copia del repo central + las migraciones; ver su `CLAUDE.md` antes de tocar).
+- `metacrypto-os-app/apps/funnel/` — **app pública del funnel** (separación D2): wizard + `/api/lead`, desplegada en su propia instancia/dominio; escribe por el rol mínimo `funnel`.
+- `metacrypto-os-app/apps/inbox/` — la app del OS del negocio: módulo `/leads` (triage), inbox, crons. Sin rutas públicas del funnel.
+- `metacrypto-os-app/supabase/migrations/` — migraciones aplicables en orden; la `0068` (módulo) y la `0069` (rol `funnel`) son módulo leads.
 - `prototipos/` — referencias históricas de diseño (landings del negocio + frames del prototipo).
 - `docs/` — documentación viva (índice en `docs/README.md`; el doc de lectura del funnel es `docs/19-qa-funnel.md`).
 - ⚙️ Retirado el prototipo standalone de la raíz (06-oct): su lógica vive portada al OS y queda en el git history.

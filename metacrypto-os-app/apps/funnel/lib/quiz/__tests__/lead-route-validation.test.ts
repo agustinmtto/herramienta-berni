@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-vi.mock("@/lib/supabase", () => ({
+vi.mock("@/lib/db", () => ({
   rest: vi.fn(async (_method: string, _path: string, body: { p_payload: Record<string, unknown> }) => ({
     status: 200,
     json: {
@@ -17,7 +17,7 @@ process.env.LEAD_COMPLETED_RATE_LIMIT_MAX = "1";
 process.env.LEAD_RAW_RATE_LIMIT_MAX = "10";
 
 const { POST } = await import("@/app/api/lead/route");
-const { rest } = await import("@/lib/supabase");
+const { rest } = await import("@/lib/db");
 const { resetRateLimiter } = await import("@/lib/quiz/rate-limit");
 
 const sessionId = "00000000-0000-4000-8000-000000000098";

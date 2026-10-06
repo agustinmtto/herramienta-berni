@@ -25,7 +25,7 @@ Herramienta de captación (lead magnet) para el negocio de Berni (Metacrypto Clu
 
 - **Integración por código** con el stack del negocio (Supabase + Next.js, branch + PR). Go High Level fue evaluado y descartado; queda solo como CRM/agendas del negocio.
 - **Sin IA**: clasificación de leads y diagnóstico **determinísticos** por algoritmo (las respuestas son todas de opción múltiple).
-- **El funnel vive dentro del OS del negocio** como ruta pública `/quiz` (no es un deploy aparte — decisión D1 de `docs/11`).
+- **Despliegue del funnel (D1 → D2, 06-oct):** originalmente dentro del OS (`/quiz`); hoy es una **app pública aparte** (`apps/funnel/`, su propia instancia/dominio) que escribe por el RPC `registrar_diagnostico` con el rol mínimo `funnel` (migración `0069`). El OS NO expone rutas del funnel — solo el módulo privado `/leads` para el triaje.
 - Tracking mínimo: la métrica clave es **hasta qué pregunta llega el lead** (si termina el cuestionario o no).
 - **Final del flujo (decidido): pantalla final única** — diagnóstico + sección "recursos" con 3 videos (2 genéricos + 1 destacado según la pregunta 2). Sin pantalla separada de resultado ni de video. Sin contador de preguntas ni índices en el wizard: solo barra de progreso psicológica (avance rápido al inicio y más lento después).
 - **Contacto y CTA**: nombre + email + teléfono al final; CTA a WhatsApp `+54 9 3585 401429` con las respuestas precargadas.
@@ -33,21 +33,23 @@ Herramienta de captación (lead magnet) para el negocio de Berni (Metacrypto Clu
 - **Camino comercial del lead (docs/11 §9)**: post-venta el triaje **vincula** el lead temporal al cliente definitivo (con validación de teléfono y rollback exacto auditado) o lo **descarta** si no hubo venta (`estado='descartado'`).
 - Lead caliente = capital **≥ 10.000 USD** (desde 10.000 inclusive — docs/11 §8) → llamada de triaje.
 
-## Estado actual (06-oct-2026)
+## Estado actual (06-oct-2026, pm)
 
-- Implementación de la integración **completa y validada en local**: correcciones de las auditorías v4/v5 integradas y módulo consolidado tras la revisión anti-sobre-ingeniería.
-- **Migración única del módulo**: `0068_quiz_leads.sql` — estado final consolidado (el histórico `0069–0073` de reconciliaciones se retiró: nunca llegó a producción y la migración es convergente sobre cualquier estado previo del módulo). La validación de migraciones la hacemos nosotros con la carpeta del OS (docs/18 §1).
-- Suite del OS: **1.379 tests en verde (0 omitidos)** · `tsc` limpio · `eslint` 0 errores · `next build` OK.
-- Patch de transferencia **regenerado** (`release/funnel-leads.patch`, 39 archivos incl. `package.json`/lockfile/`eslint.config.mjs`) y verificado con `git apply --check` + aplicación completa sobre el baseline del OS (`041d6a6`).
-- Limpieza aplicada: workflow raíz de CI duplicado eliminado, **prototipo standalone de la raíz retirado** (`app/`, `components/`, `lib/`, `test/` — su lógica vive portada y testeada en el OS; queda en git history + `docs-obsoletos/`), código muerto fuera (honeypot duplicado, `client_context` nunca persistido, `normalizePhoneE164`, maquinaria `legacy-unknown`), `local-db-guard` movido a `__tests__`, trigger subsumido eliminado, un solo esquema de advisory lock por contacto canónico. Informe QA completo: `docs/19-qa-funnel.md`.
-- **Pendiente para el GO**: videos de Berni (URL definitiva) y verificación final del engine determinístico con decisiones. Operativo técnico: `docs/18-guia-deploy-go.md` (backup, migración única, env, rate limit distribuido WAF/Upstash y smoke test). Tickets preexistentes del OS en `docs/13` §4.
+- Implementación de la integración **completa y validada en local**: correcciones de las auditorías v4/v5 integradas, módulo consolidado tras la revisión anti-sobre-ingeniería **y funnel separado en su propia app pública (D2)**.
+- **Dos despliegues, una base** (`docs/00` D2 / `docs/18`): `apps/funnel` (pública: wizard + `/api/lead`, rol mínimo `funnel`) + `apps/inbox` (OS del negocio con módulo `/leads` — sin rutas públicas). El mensaje del funnel entra por el RPC `registrar_diagnostico`; la llave pública no puede leer PII ni ejecutar el triage (aislamiento verificado con 403 reales).
+- **Migraciones del módulo**: `0068_quiz_leads.sql` (estado final consolidado del histórico 0068–0073; convergente) + `0069_funnel_db_role.sql` (rol mínimo). La validación de migraciones la hacemos nosotros con la carpeta del OS (docs/18 §1).
+- Suite: **funnel 5 archivos / 68 tests (gated con el rol funnel) + inbox 55 archivos (RPC + leads incluidos) — todas en verde, 0 omitidos** · `tsc` limpio · `eslint` 0 errores · `next build` OK en ambas apps.
+- Patch de transferencia **regenerado** (`release/funnel-leads.patch`): solo módulo `/leads` + migraciones — la app pública no viaja al repo del OS.
+- Limpieza aplicada: workflow raíz de CI duplicado eliminado, **prototipo standalone de la raíz retirado** (queda en git history + `docs-obsoletos/`), código muerto fuera, un solo esquema de advisory lock por contacto canónico. Informe QA completo: `docs/19-qa-funnel.md`.
+- **Pendiente para el GO**: videos de Berni (URL definitiva) y url del funnel (dominio). Operativo técnico: `docs/18-guia-deploy-go.md` (backup, migraciones 0068+0069, token del rol funnel, env, rate limit distribuido WAF/Upstash, smoke en ambas instancias). Tickets preexistentes del OS en `docs/13` §4.
 
 ## Estructura del repo
 
 ```
-metacrypto-os-app/      # Sistema interno del negocio + Supabase; **acá vive la implementación vigente** (/quiz + /leads). Ver su CLAUDE.md antes de tocarlo
-  apps/inbox/           # La app Next.js del OS: funnel (/quiz, /api/lead), módulo /leads, inbox, crons
-  supabase/migrations/  # 0001…0068 — la 0068 es la migración única del módulo de leads (consolidada); se aplican a mano por el operador, en orden (nunca editar aplicadas)
+metacrypto-os-app/      # Sistema interno del negocio + Supabase; **acá vive la implementación vigente**. Ver su CLAUDE.md antes de tocarlo
+  apps/funnel/          # App PÚBLICA del funnel (separación D2): wizard /quiz + /api/lead, rol mínimo `funnel` — desplegada en su propia instancia
+  apps/inbox/           # La app Next.js del OS: módulo /leads, inbox, crons — SIN rutas públicas del funnel
+  supabase/migrations/  # 0001…0069 — la 0068 es el módulo de leads (consolidada) y la 0069 el rol mínimo del funnel; se aplican a mano por el operador, en orden (nunca editar aplicadas)
 prototipos/
   referencia/landings/  # Landings existentes del negocio = design system a replicar (docs/04)
   frames/               # Capturas del prototipo
@@ -55,7 +57,7 @@ prototipos/
 docs/                   # Documentación VIVA del proyecto (índice: docs/README.md)
 docs-obsoletos/         # Documentación jubilada + fuentes primarias (no usar como spec)
 release/
-  funnel-leads.patch    # Diff del módulo para aplicar sobre el repo del OS (docs/15, docs/18 §7)
+  funnel-leads.patch    # Diff del MÓDULO /leads para aplicar sobre el repo del OS (docs/15, docs/18 §7)
 scripts/
   transcribe.py         # Utilidad: transcribe audios con Whisper → transcripciones .md
 ```

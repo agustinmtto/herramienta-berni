@@ -13,7 +13,8 @@ Durante casi todo el proyecto el repo tenía **dos copias** del mismo funnel:
 | | Qué era | Estado |
 |---|---|---|
 | **Prototipo standalone** (raíz del repo: `app/`, `components/`, `lib/`, `test/`) | Un proyecto Next.js propio e independiente, hecho para validar el flujo ANTES de tener acceso al sistema del negocio. Era el `route.js` lleno de `if` que intentaste leer | **Historico. Retirado el 06-oct-2026** (borrado del repo; ```git history``` lo conserva y `docs-obsoletos/` documenta su jubilación) |
-| **El funnel real** (`metacrypto-os-app/apps/inbox/`) | El mismo funnel portado a TypeScript DENTRO del sistema del negocio (el "OS"): la ruta pública `/quiz` + módulo privado `/leads`, con las mismas preguntas pero integrado a la base real (clientes, programas, auditoría) | **Esto es lo que deploya** |
+| **El funnel real** (`metacrypto-os-app/apps/inbox/`) | El mismo funnel portado a TypeScript DENTRO del sistema del negocio (el "OS"): la ruta pública `/quiz` + módulo privado `/leads`, con las mismas preguntas pero integrado a la base real (clientes, programas, auditoría) | Con la separación D2 (06-oct pm): el funnel público salió de acá y es `apps/funnel/`; en `inbox` quedó el módulo `/leads` |
+| **App pública `apps/funnel/`** (decisión D2) | El wizard + `/api/lead` en una app propia, en su propia instancia/dominio, escribiendo por el rol mínimo `funnel` del Supabase. **Esto es lo que deploya como sitio público** | Vigente |
 
 La decisión de negocio D1 (`docs/11`) explica el porqué: el funnel vive como ruta pública **dentro** del OS del negocio, no como un sitio aparte. El prototipo fue una herramienta para llegar acá; quedarse duplicado solo generaba confusión (como el `route.js` que levantaste) y hacía doble trabajo en CI.
 
@@ -92,9 +93,23 @@ Cada regla cerrada tiene test:
 - ✅ Honeypot, same-origin, body cap (413), content-type (415), errores honestos (400/422/502), rate limit por IP con cuotas separadas (tracking 30/min, completed 5/min), sin PII en logs ni en la auditoría.
 - ⏳ **Dos piezas dependen del hosting al deployar** (ya son del runbook `docs/18` §3/§5): HTTPS/HSTS efectivos y el rate limit distribuido (WAF/Upstash) — el del código es honesto best-effort.
 
+## 7. Actualización posterior del mismo día (separación D2)
+
+Motivo: seguridad. El OS tiene tickets de seguridad pendientes y quedabaDB el funnel público viviendo en la misma app que el login del equipo — se aisla.
+
 ## 6. Qué queda (todo operativo, no de código)
 
 1. Validar el patch contra el HEAD real del repo central (con acceso al repo).
 2. Rate limit distribuido del operador.
 3. Backup/migración/deploy/smoke según `docs/18`.
 4. Deudas de negocio fuera de alcance: videos y URLs definitivas.
+
+## 7. Actualización posterior del mismo día (separación D2)
+
+Motivo: seguridad. El OS tiene tickets de seguridad pendientes y el funnel público operaba dentro de la misma app que el login del equipo — se aísla. Los veredictos QA de §3.1 y §3.2 siguen valiendo tal cual: los archivos se MOVIERON, no se reescribieron.
+
+Qué cambió exactamente:
+- Nueva app `apps/funnel/` (Next minimal): `app/quiz/*`, `app/quiz.css`, `app/api/lead/route.ts` y `lib/quiz/*` (los mismos archivos, veredictos QA de las §3.1/3.2 valen tal cual) + `lib/db.ts` (cliente mínimo con su env propia) + `scripts/mint-funnel-token.mjs`.
+- Nueva migración `0069_funnel_db_role.sql`: rol `funnel` **solo** con EXECUTE de `registrar_diagnostico` + SELECT de la definición publicada. Aislamiento probado con el JWT real: ingesta 200; lectura de envíos/personas 403; RPCs del triage 403.
+- En `apps/inbox` se **retiraron** `/quiz`, `/api/lead`, `lib/quiz/*` y las excepciones del middleware en el funnel: el OS no expone rutas públicas. El módulo `/leads` y sus tests quedan intactos.
+- Compuertas re-corrídas tras la separación: funnel 5 suites / 68 tests (gated con el rol funnel) + inbox 55 suites (RPC service_role + leads) · `tsc`/`eslint`/`build` OK en ambas apps.

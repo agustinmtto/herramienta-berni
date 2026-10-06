@@ -1,14 +1,15 @@
 // POST /api/lead — ingestión del Quiz Funnel (docs/11 Fase B, docs/09).
-// Público por diseño (el funnel es una ruta pública del OS, docs/11 D1), pero
-// endurecido: rate limit por IP, chequeo same-origin, cap de body, honeypot y
-// validación cerrada del contrato antes de llamar al RPC transaccional
-// registrar_diagnostico (migración 0068) con service_role SOLO en servidor.
+// App pública separada del OS (docs/00): no comparte login ni cookies; su
+// única conexión es el RPC transaccional registrar_diagnostico (migración
+// 0068) con la clave del rol mínimo `funnel` (0069) SOLO en servidor.
+// Endurecido: rate limit por IP, chequeo same-origin, cap de body, honeypot
+// y validación cerrada del contrato.
 //
 // Cero PII en logs de producción: solo marca de sesión, evento y conteos.
 // La respuesta nunca expone persona_id (docs/11 §5).
 
 import { NextResponse } from "next/server";
-import { rest } from "@/lib/supabase";
+import { rest } from "@/lib/db";
 import { isRateLimited, RATE_LIMIT_COMPLETED_MAX, RATE_LIMIT_MAX, RATE_LIMIT_RAW_MAX, RATE_LIMIT_WINDOW_MS } from "@/lib/quiz/rate-limit";
 import {
   MAX_BODY_BYTES,

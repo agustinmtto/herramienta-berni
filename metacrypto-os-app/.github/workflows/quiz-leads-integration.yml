@@ -40,7 +40,7 @@ jobs:
         env:
           LEAD_TESTS_REQUIRE_DB: "1"
         run: |
-          npx --no-install vitest run lib/quiz/__tests__/lead-route.test.ts lib/__tests__/quiz-leads-rpc.test.ts --reporter=json --outputFile=/tmp/quiz-leads-integration.json
+          npx --no-install vitest run lib/__tests__/quiz-leads-rpc.test.ts --reporter=json --outputFile=/tmp/quiz-leads-integration.json
           node -e "const r=require('/tmp/quiz-leads-integration.json'); if(r.numPendingTests || r.numTodoTests) process.exit(1)"
       - name: Run complete Inbox suite with zero skips
         working-directory: apps/inbox

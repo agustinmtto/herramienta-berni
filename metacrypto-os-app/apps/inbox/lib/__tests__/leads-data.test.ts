@@ -6,8 +6,8 @@ vi.mock("@/lib/supabase", () => ({
   rest,
 }));
 
-const { getClientesParaVincular, getLeads } = await import("../../leads");
-const { createLatestRequestSequence } = await import("../../latest-request");
+const { getClientesParaVincular, getLeads } = await import("../leads");
+const { createLatestRequestSequence } = await import("../latest-request");
 
 describe("datos server-side de /leads", () => {
   beforeEach(() => rest.mockReset());

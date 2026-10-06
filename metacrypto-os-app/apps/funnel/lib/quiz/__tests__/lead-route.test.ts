@@ -1,8 +1,13 @@
-// Tests de integración de POST /api/lead (docs/11 Fase B): el handler real de
-// Next contra el Supabase LOCAL, igual que quiz-leads-rpc.test.ts. Se saltan
-// solos si la base no está arriba. La ruta se importa directo (route handler =
-// función), sin levantar next dev; "server-only" queda stubbeado en
-// vitest.config.ts para que lib/supabase sea importable desde node.
+// Tests de integración de POST /api/lead (docs/11 Fase B) contra el Supabase
+// LOCAL, igual que la app. Se saltan solos si la base no está arriba.
+// La ruta se importa directo (route handler = función).
+//
+// Con la separación del funnel (docs/00) la app usa el ROL MÍNIMO `funnel`
+// (0069): escribe por el RPC y SOLO lee la definición publicada. Estas
+// pruebas validec el CONTRATO HTTP (200/400/415/413/403, honeypot, rate
+// limit, respuesta RPC validada) sin tocar tablas directamente; la
+// PERSISTENCIA completa la prueba lib/__tests__/quiz-leads-rpc.test.ts del
+// OS (service_role).
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -23,16 +28,16 @@ function loadEnvLocal(): Record<string, string> {
   }
 }
 
-// Las env las lee lib/supabase.ts AL IMPORTAR el módulo: hay que setearlas
-// ANTES del import dinámico de la ruta. El límite propio evita que los otros
-// tests de esta suite (mismo IP de test) agoten el rate limit real.
+// Las env las lee lib/db.ts AL IMPORTAR el módulo: hay que setearlas
+// ANTES del import dinámico de la ruta. El límite propio evita que los
+// otros tests de esta suite (mismo IP de test) agoten el rate limit real.
 const ENV = loadEnvLocal();
-process.env.SUPABASE_URL = process.env.SUPABASE_URL ?? ENV.SUPABASE_URL ?? "";
-process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ENV.SUPABASE_SERVICE_ROLE_KEY ?? "";
+process.env.FUNNEL_DB_URL = process.env.FUNNEL_DB_URL ?? ENV.FUNNEL_DB_URL ?? "";
+process.env.FUNNEL_DB_KEY = process.env.FUNNEL_DB_KEY ?? ENV.FUNNEL_DB_KEY ?? "";
 process.env.LEAD_RATE_LIMIT_MAX = "1000";
 
-const URL_BASE = process.env.SUPABASE_URL;
-const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const URL_BASE = process.env.FUNNEL_DB_URL;
+const KEY = process.env.FUNNEL_DB_KEY;
 
 const { POST } = await import("@/app/api/lead/route");
 const { resetRateLimiter } = await import("@/lib/quiz/rate-limit");
@@ -50,27 +55,24 @@ async function probe(baseUrl: string, key: string, fetchFn: typeof fetch = fetch
   }
 }
 
-// GUARDA ANTI-PRODUCCIÓN (igual que quiz-leads-rpc.test.ts): suites gated,
-// escrituras reales — solo contra el Supabase LOCAL.
+// GUARDA ANTI-PRODUCCIÓN (igual que quiz-leads-rpc.test.ts): suite gated,
+// llamadas reales — solo contra el Supabase LOCAL.
 const esLocal = isLocalSupabaseUrl(URL_BASE);
 if (URL_BASE && KEY && !esLocal) {
-  console.warn(`[lead-route] SUPABASE_URL no es local (${URL_BASE}): los tests de integración NO corren.`);
+  console.warn(`[lead-route] FUNNEL_DB_URL no es local (${URL_BASE}): los tests de integración NO corren.`);
 }
 reachable = await probe(URL_BASE, KEY);
 
 const HOST = "localhost:3000";
-const SESSIONS: string[] = [];
-const EMAILS: string[] = [];
 
-function session(n: number): string {
-  const id = `0000bead-0000-4000-8000-${String(n).padStart(12, "0")}`;
-  SESSIONS.push(id);
-  return id;
+// Sesión/emails ÚNICOS por corrida: el rol funnel no puede borrar filas
+// (y no debe poder), así que no hay limpieza — en local la residua queda
+// como dato de prueba y en CI la base es nueva cada vez.
+function session(): string {
+  return crypto.randomUUID();
 }
 function email(n: number): string {
-  const e = `quiz-route-${n}@test.local`;
-  EMAILS.push(e);
-  return e;
+  return `funnel-route-${Date.now()}-${n}@test.local`;
 }
 
 function call(body: unknown, extraHeaders: Record<string, string> = {}): Promise<Response> {
@@ -84,32 +86,15 @@ function call(body: unknown, extraHeaders: Record<string, string> = {}): Promise
   );
 }
 
-async function cleanup(baseUrl: string = URL_BASE, fetchFn: typeof fetch = fetch): Promise<void> {
-  if (!isLocalSupabaseUrl(baseUrl)) throw new Error("cleanup requires local Supabase");
-  if (SESSIONS.length) {
-    await guardedLocalFetch(baseUrl, `/rest/v1/diagnostico_envios?session_id=in.(${SESSIONS.join(",")})`, {
-      method: "DELETE",
-      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
-    }, fetchFn);
-  }
-  if (EMAILS.length) {
-    await guardedLocalFetch(baseUrl, `/rest/v1/personas?email=in.(${EMAILS.map((e) => `"${e}"`).join(",")})`, {
-      method: "DELETE",
-      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
-    }, fetchFn);
-  }
-}
+const d = reachable || process.env.LEAD_TESTS_REQUIRE_DB === "1" ? describe : describe.skip;
 
 describe("guarda del arnés HTTP", () => {
-  test("una URL externa no ejecuta probes ni cleanup", async () => {
+  test("una URL externa no ejecuta probes ni llamadas", async () => {
     const fetchFn = vi.fn<typeof fetch>();
     expect(await probe("https://example.supabase.co", "test-key", fetchFn)).toBe(false);
-    await expect(cleanup("https://example.supabase.co", fetchFn)).rejects.toThrow(/local/i);
     expect(fetchFn).not.toHaveBeenCalled();
   });
 });
-
-const d = reachable || process.env.LEAD_TESTS_REQUIRE_DB === "1" ? describe : describe.skip;
 
 d("POST /api/lead (integración local, docs/11 Fase B)", () => {
   beforeAll(() => {
@@ -120,15 +105,12 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
     }
     resetRateLimiter();
   });
-  afterAll(async () => {
-    if (reachable && esLocal) await cleanup();
-  });
 
   test("completed válido persiste y responde ok con submission_id", async () => {
     const payload = {
       schema_version: 1,
       quiz_version: "diagnostico-cripto-v1-a",
-      session_id: session(1),
+      session_id: session(),
       event: "completed",
       occurred_at: "2026-09-21T15:40:00.000Z",
       source: { utm_source: "instagram", utm_medium: "organic", utm_campaign: "fase-b", utm_content: null, utm_term: null, referrer: "https://instagram.com/" },
@@ -155,30 +137,20 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
 
     const res = await call(payload);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; status: string; submission_id: string | null; persona_id?: unknown };
-    expect(body.ok).toBe(true);
-    expect(body.status).toBe("completed");
+    const body = (await res.json()) as { ok: boolean; status: string; submission_id: string | null; session_id: string | null; persona_id?: unknown };
+    // Contrato completo de éxito (v3 M-06 + v4 M2): ok + envío COMPLETED con
+    // su id + el session_id devuelto coincide con el enviado.
+    expect(body).toMatchObject({ ok: true, status: "completed" });
     expect(body.submission_id).not.toBeNull();
+    expect(body.session_id).toBe(payload.session_id);
     expect(body.persona_id).toBeUndefined(); // docs/11 §5: nunca exponer persona_id
-
-    // Verificación de persistencia: caliente + contacto capturado
-    const check = await guardedLocalFetch(URL_BASE, `/rest/v1/diagnostico_envios?session_id=eq.${payload.session_id}&select=estado,es_lead_caliente,email_capturado,utm_campaign`, {
-      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
-    });
-    const rows = (await check.json()) as { estado: string; es_lead_caliente: boolean; email_capturado: string; utm_campaign: string }[];
-    expect(rows[0]).toMatchObject({
-      estado: "completed",
-      es_lead_caliente: true, // capital 50k-100k > 10k
-      email_capturado: email(1),
-      utm_campaign: "fase-b",
-    });
   });
 
   test("started sin lead persiste el inicio del recorrido", async () => {
     const res = await call({
       schema_version: 1,
       quiz_version: "diagnostico-cripto-v1-a",
-      session_id: session(2),
+      session_id: session(),
       event: "started",
       progress: { step_id: "start", step_index: 0 },
       source: { utm_source: null, utm_medium: null, utm_campaign: null, utm_content: null, utm_term: null, referrer: null },
@@ -192,7 +164,7 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
     const res = await call({
       schema_version: 1,
       quiz_version: "diagnostico-cripto-v1-a",
-      session_id: session(3),
+      session_id: session(),
       event: "dropped",
       progress: { step_id: "capital", step_index: 4 },
       answers: [
@@ -204,11 +176,11 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
     expect(body.status).toBe("dropped");
   });
 
-  test("honeypot responde 200 falso sin persistir nada", async () => {
+  test("honeypot responde 200 falso sin dar señal", async () => {
     const res = await call({
       schema_version: 1,
       quiz_version: "diagnostico-cripto-v1-a",
-      session_id: session(4),
+      session_id: session(),
       event: "completed",
       progress: { step_id: "result", step_index: 11 },
       lead: {
@@ -223,18 +195,13 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { status: string };
     expect(body.status).toBe("ignored");
-
-    const check = await guardedLocalFetch(URL_BASE, `/rest/v1/diagnostico_envios?session_id=eq.${session(4)}&select=id`, {
-      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
-    });
-    expect(await check.json()).toHaveLength(0);
   });
 
   test("payload inválido: rechazos honestos sin exponer detalles", async () => {
     const base = {
       schema_version: 1,
       quiz_version: "diagnostico-cripto-v1-a",
-      session_id: session(5),
+      session_id: session(),
       event: "started",
       progress: { step_id: "start", step_index: 0 },
     };
@@ -262,7 +229,7 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
       {
         schema_version: 1,
         quiz_version: "diagnostico-cripto-v1-a",
-        session_id: session(6),
+        session_id: session(),
         event: "started",
         progress: { step_id: "start", step_index: 0 },
       },
@@ -309,7 +276,8 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
   test("los tipos del contrato del cliente coinciden con la definición publicada (regresión tipo_incorrecto)", async () => {
     // Regresión del bug real: el cliente mandaba capital como single_choice y
     // la definición publicada dice range → el RPC rechazaba TODO completed.
-    // Este test compara SIEMPRE el cliente contra la definición de la base.
+    // La lectura es del ROL funnel: quiz_versiones es el único dato que puede
+    // leer (contenido público, definición).
     const { buildContractAnswers } = await import("@/lib/quiz/lead-payload");
     const { questions } = await import("@/lib/quiz/question-config");
     const answers = Object.fromEntries(
@@ -333,7 +301,7 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
       {
         schema_version: 1,
         quiz_version: "diagnostico-cripto-v1-a",
-        session_id: session(7),
+        session_id: session(),
         event: "started",
         progress: { step_id: "start", step_index: 0 },
       },
