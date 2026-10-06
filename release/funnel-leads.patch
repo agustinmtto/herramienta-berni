@@ -2490,10 +2490,10 @@ index 0000000..0e35105
 +}
 diff --git a/apps/inbox/lib/leads.ts b/apps/inbox/lib/leads.ts
 new file mode 100644
-index 0000000..b5ff85e
+index 0000000..ecdc0c9
 --- /dev/null
 +++ b/apps/inbox/lib/leads.ts
-@@ -0,0 +1,342 @@
+@@ -0,0 +1,346 @@
 +// Módulo de leads (docs/11 §10): consultas server-only contra PostgREST.
 +//
 +// El listado representa ENVÍOS del quiz (diagnostico_envios), no una tabla
@@ -2745,9 +2745,13 @@ index 0000000..b5ff85e
 +
 +  // Si este envío ya fue vinculado a un cliente, la auditoría guarda QUÉ lead
 +  // temporal se movió (evita que el rollback mueva la vinculación equivocada).
-+  const vinculaciones = await rest<{ entidad_id: string }[]>(
-+    "GET",
-+    `auditoria?accion=eq.vinculacion${"&"}datos.cs=${encodeURIComponent(`{"envio_ids":["${id}"]}`)}&select=entidad_id&order=created_at.desc&limit=1`,
++  // El lookup va por RPC SQL (0070): en esta build de PostgREST los filtros
++  // de contención JSON por REST (`datos.cs`) se ignoran silenciosamente y
++  // con `cs=` responde 400 — el detalle se rompía de una u otra forma.
++  const vinculaciones = await rest<{ lead_id: string | null }[]>(
++    "POST",
++    "rpc/auditoria_lead_del_envio",
++    { p_envio_id: id },
 +  );
 +  if (vinculaciones.status >= 400) throw new Error(`auditoria_vinculacion_http_${vinculaciones.status}`);
 +
@@ -2765,7 +2769,7 @@ index 0000000..b5ff85e
 +    diagnosis_result: diagnosisResult,
 +    diagnosis_result_size: diagnosisResult ? JSON.stringify(diagnosisResult).length : 0,
 +    schema_version: fila.schema_version as number,
-+    leadVinculadoId: vinculaciones.json?.[0]?.entidad_id ?? null,
++    leadVinculadoId: vinculaciones.json?.[0]?.lead_id ?? null,
 +  };
 +}
 +
@@ -10954,6 +10958,45 @@ index 0000000..3023a44
 +-- Cinturón: nada del resto del negocio puede adoptar `funnel`.
 +revoke funnel from authenticated;
 +revoke funnel from service_role;
++
++commit;
+diff --git a/supabase/migrations/0070_auditoria_lead_del_envio.sql b/supabase/migrations/0070_auditoria_lead_del_envio.sql
+new file mode 100644
+index 0000000..0a4f9c1
+--- /dev/null
++++ b/supabase/migrations/0070_auditoria_lead_del_envio.sql
+@@ -0,0 +1,33 @@
++-- ============================================================
++-- 0070 — RPC de lookup de vinculación por envío (hallazgo del QA E2E)
++--
++-- El módulo /leads identificaba "qué lead temporal se movió a qué cliente"
++-- filtrando auditoria.con datos `datos.cs={...}` (PostgREST). En esta build
++-- (postgrest/16.4) el operador de contención se IGNORA silenciosamente
++-- (devuelve todas las vinculaciones) y con `cs=` responde 400 — el detalle
++-- del lead se rompía de una u otra forma. El look-up pasa a una RPC SQL con
++-- containment NATIVO de Postgres `@>`, determinístico y ordenado como el
++-- resto del ciclo comercial (created_at desc, id desc).
++-- ============================================================
++begin;
++
++create or replace function public.auditoria_lead_del_envio(p_envio_id uuid)
++returns jsonb
++language sql
++stable
++set search_path = public
++as $$
++  select jsonb_build_object('lead_id', a.entidad_id)
++    from auditoria a
++   where a.entidad = 'persona'
++     and a.accion = 'vinculacion'
++     and a.datos @> jsonb_build_object('envio_ids', jsonb_build_array(p_envio_id))
++     and coalesce((a.datos->>'revertido')::boolean, false) = false
++   order by a.created_at desc, a.id desc
++   limit 1;
++$$;
++
++revoke all on function public.auditoria_lead_del_envio(uuid) from public, anon, authenticated;
++grant execute on function public.auditoria_lead_del_envio(uuid) to service_role;
 +
 +commit;
 diff --git a/supabase/seed.sql b/supabase/seed.sql
