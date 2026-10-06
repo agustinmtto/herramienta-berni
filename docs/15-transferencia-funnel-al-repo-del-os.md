@@ -4,7 +4,7 @@
 
 `release/funnel-leads.patch` es el diff del módulo de leads sobre el baseline del OS (`041d6a6`): 44 archivos (app `/quiz` + `/api/lead` + módulo `/leads`, libs del quiz, tests, **migración única `0068_quiz_leads.sql`**, workflow CI, `package.json`/lockfile/`eslint.config.mjs` y seed ficticio mínimo). Quedan excluidos los archivos de infra local del OS que el repo central ya tiene (`CLAUDE.md`, `apps/inbox/lib/persona.ts`, `scripts/dev.sh`, `supabase/.gitignore`, `supabase/config.toml`, migraciones `0053`/`0066`).
 
-Trabajador de validación sobre el patch: solo archivos del módulo, sin datos reales, sin credenciales y sin cambios generales del OS. El histórico de migraciones `0069–0073` se retiró: consolidado en la 0068 (ver `docs/18` §1).
+Trabajo de validación sobre el patch: solo archivos del módulo, sin datos reales, sin credenciales y sin cambios generales del OS. El histórico de migraciones `0069–0073` se retiró: consolidado en la 0068 (ver `docs/18` §1).
 
 El artefacto se considera transferible solo cuando:
 

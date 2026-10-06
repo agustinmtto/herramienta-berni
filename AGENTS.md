@@ -37,31 +37,30 @@ Herramienta de captación (lead magnet) para el negocio de Berni (Metacrypto Clu
 
 - Implementación de la integración **completa y validada en local**: correcciones de las auditorías v4/v5 integradas y módulo consolidado tras la revisión anti-sobre-ingeniería.
 - **Migración única del módulo**: `0068_quiz_leads.sql` — estado final consolidado (el histórico `0069–0073` de reconciliaciones se retiró: nunca llegó a producción y la migración es convergente sobre cualquier estado previo del módulo). La validación de migraciones la hacemos nosotros con la carpeta del OS (docs/18 §1).
-- Suite del OS: **1.379 tests en verde (0 omitidos)** · `tsc` limpio · `eslint` 0 errores · `next build` OK · standalone raíz 39/39.
-- Patch de transferencia **regenerado** (`release/funnel-leads.patch`, 44 archivos incl. `package.json`/lockfile/`eslint.config.mjs`) y verificado con `git apply --check` sobre el baseline del OS.
-- Limpieza aplicada: workflow raíz de CI duplicado eliminado, código muerto fuera (honeypot duplicado, `client_context` nunca persistido, `normalizePhoneE164`, maquinaria `legacy-unknown`), `local-db-guard` movido a `__tests__`, trigger de 0068 subsumido eliminado, un solo esquema de advisory lock por contacto canónico.
+- Suite del OS: **1.379 tests en verde (0 omitidos)** · `tsc` limpio · `eslint` 0 errores · `next build` OK.
+- Patch de transferencia **regenerado** (`release/funnel-leads.patch`, 39 archivos incl. `package.json`/lockfile/`eslint.config.mjs`) y verificado con `git apply --check` + aplicación completa sobre el baseline del OS (`041d6a6`).
+- Limpieza aplicada: workflow raíz de CI duplicado eliminado, **prototipo standalone de la raíz retirado** (`app/`, `components/`, `lib/`, `test/` — su lógica vive portada y testeada en el OS; queda en git history + `docs-obsoletos/`), código muerto fuera (honeypot duplicado, `client_context` nunca persistido, `normalizePhoneE164`, maquinaria `legacy-unknown`), `local-db-guard` movido a `__tests__`, trigger subsumido eliminado, un solo esquema de advisory lock por contacto canónico. Informe QA completo: `docs/19-qa-funnel.md`.
 - **Pendiente para el GO**: videos de Berni (URL definitiva) y verificación final del engine determinístico con decisiones. Operativo técnico: `docs/18-guia-deploy-go.md` (backup, migración única, env, rate limit distribuido WAF/Upstash y smoke test). Tickets preexistentes del OS en `docs/13` §4.
 
 ## Estructura del repo
 
 ```
-app/                    # App Next.js del MVP standalone (App Router) — histórico, referencia
-components/flow.jsx     # Máquina de estados del flujo completo del prototipo
-components/diagnosis-document.jsx # Documento HTML fijo usado para generar el PDF
-lib/                    # Del standalone: question-config.js, engine.js, pdf.js, whatsapp.js
-test/                   # Suite node:test del standalone (unit + integración + seguridad)
-prototipos/
-  index.html            # Prototipo original (referencia histórica; desechable como código)
-  referencia/landings/  # Landings existentes del negocio = design system a replicar (docs/04)
-  frames/               # Capturas del prototipo
-docs/                   # Documentación VIVA del proyecto (índice: docs/README.md)
-docs-obsoletos/         # Documentación jubilada + fuentes primarias (no usar como spec)
 metacrypto-os-app/      # Sistema interno del negocio + Supabase; **acá vive la implementación vigente** (/quiz + /leads). Ver su CLAUDE.md antes de tocarlo
   apps/inbox/           # La app Next.js del OS: funnel (/quiz, /api/lead), módulo /leads, inbox, crons
-  supabase/migrations/  # 0001…0071 — se aplican a mano por el operador, en orden (nunca editar aplicadas)
+  supabase/migrations/  # 0001…0068 — la 0068 es la migración única del módulo de leads (consolidada); se aplican a mano por el operador, en orden (nunca editar aplicadas)
+prototipos/
+  referencia/landings/  # Landings existentes del negocio = design system a replicar (docs/04)
+  frames/               # Capturas del prototipo
+  index.html            # Prototipo original (referencia histórica; desechable como código)
+docs/                   # Documentación VIVA del proyecto (índice: docs/README.md)
+docs-obsoletos/         # Documentación jubilada + fuentes primarias (no usar como spec)
+release/
+  funnel-leads.patch    # Diff del módulo para aplicar sobre el repo del OS (docs/15, docs/18 §7)
 scripts/
   transcribe.py         # Utilidad: transcribe audios con Whisper → transcripciones .md
 ```
+
+> Retirado (06-oct-2026): el prototipo standalone de la raíz (`app/`, `components/`, `lib/`, `test/`, `package.json`/lockfile, `next.config.mjs`, `middleware.js`) y su workflow de CI. El mapa completo de archivos vivos con su rol está en `docs/19-qa-funnel.md`.
 
 ## Convenciones
 
@@ -69,5 +68,5 @@ scripts/
 - Design system fijo (colores/tipografía): ver `docs/04-design-system.md` — no inventar colores nuevos.
 - El prototipo `prototipos/index.html` es desechable; el producto real está definido en `docs/11` y vive en `metacrypto-os-app/`.
 - Todo config-driven: las preguntas, los videos y la CTA viven en el question-config del funnel; cambiar contenido no debe requerir tocar código de componentes.
-- Tests: `npx vitest run` (OS) y `npm test` (raíz) deben pasar antes de abrir un PR que toque lógica o el endpoint. `npm run lint` es compuerta (0 errores). Los suites gated de integración SOLO corren contra Supabase local (guarda anti-producción).
+- Tests: `npx vitest run` en `metacrypto-os-app/apps/inbox` (y el workflow de CI del módulo) deben pasar antes de abrir un PR que toque lógica o el endpoint; los suites gated de integración SOLO corren contra Supabase local (guarda anti-producción). `npm run lint` es compuerta (0 errores). El `npm test` raíz es historia del prototipo retirado.
 - Los `.txt` de auditorías externas quedan fuera del repo (trabajo en vuelo, no documentación).

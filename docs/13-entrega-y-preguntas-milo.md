@@ -1,16 +1,14 @@
 # 13 - Entrega del modulo quiz/leads
 
-Estado actualizado: 28-sep-2026. Spec tecnica vigente: `docs/17-spec-correcciones-auditoria-v5-quiz-leads.md`.
+Estado actualizado: 06-oct-2026. Spec tecnica vigente: `docs/17`. Runbook de despliegue: `docs/18`.
 
 ## Estado
 
-La implementacion local del modulo esta lista para auditoria independiente pre-deploy. No se declara lista para merge ni produccion hasta validar el patch contra el HEAD central, ejecutar el workflow remoto y completar las compuertas operativas externas.
-
-La rama de correccion parte de `origin/main` en `79d7f4f27bc5feddf3d9a260ca26b634d3f22db8`. Las migraciones publicadas del modulo son `0068` a `0072` y no se editan.
+La implementacion local del modulo esta validada con todas las compuertas (suite completa con DB, TypeScript, ESLint, builds) y el modulo consolidado tras la revision anti-sobre-ingenieria: **una sola migracion `0068_quiz_leads.sql`** con el estado final (el historico `0068–0073` de reconciliaciones se retiro; produccion nunca aplico nada del modulo y la validacion de migraciones la hacemos nosotros con la carpeta del OS, `docs/18` §1).
 
 ## Informacion necesaria
 
-1. Confirmar con el operador que `0073`, libre en todas las referencias disponibles despues de `git fetch --prune origin`, sigue reservado globalmente antes del PR.
+1. ~~Confirmar la reserva del numero `0073`~~ → obsoleto: el modulo es la migracion unica `0068`.
 2. Dar acceso al HEAD real del repositorio central para validar el patch final. No se certifica compatibilidad contra un SHA externo no disponible.
 3. Confirmar quien recibe el permiso `leads`.
 4. Configurar y evidenciar el rate limit distribuido del funnel en WAF/Upstash/Redis. El limiter versionado es una defensa local por instancia.
@@ -20,16 +18,17 @@ La rama de correccion parte de `origin/main` en `79d7f4f27bc5feddf3d9a260ca26b63
 
 - Una version publicada no se despublica ni elimina aunque no tenga envios. Solo transiciona entre `active`, `paused` y `archived`.
 - El funnel solicita telefono movil. Para Argentina, si un numero nacional valido omite `9`/`15`, se asume movil y se canoniza como `+549...`.
-- Un registro historico sin evidencia de consentimiento se muestra como `sin registro/revisar`; no se inventa aceptacion.
+- ~~`sin registro/revisar` para registros sin evidencia~~ → obsoleto con la consolidacion: toda finalizacion nueva deja consentimiento canonico completo (`contacto-v1`), defendido por CHECK de la base.
 
 ## Orden de despliegue
 
+Runbook completo en `docs/18`. Resumen:
+
 1. Probar backup y restauracion.
-2. Ejecutar el preflight historico y guardar conteos sin PII.
-3. Aplicar `0068 -> 0069 -> 0070 -> 0071 -> 0072 -> 0073`.
-4. Verificar funciones, constraints, triggers, indices, grants, RLS y firmas RPC.
-5. Desplegar el codigo del mismo checkout validado.
-6. Ejecutar smoke de `/quiz`, `/api/lead` y `/leads` con datos ficticios.
+2. Aplicar la migracion unica `0068` (convergente, una transaccion): valida antes el esquema con `to_regclass`/`to_regprocedure`.
+3. Verificar funciones, constraints, triggers, indices, grants y RLS.
+4. Desplegar el codigo del mismo checkout validado.
+5. Ejecutar smoke de `/quiz`, `/api/lead` y `/leads` con datos ficticios (docs/18 §5).
 
 No se hace push directo a `main`: la transferencia usa rama y pull request. No se ejecutan pruebas destructivas contra produccion o URLs externas.
 

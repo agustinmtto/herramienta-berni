@@ -4,6 +4,8 @@ La checklist v4 fue superada por la auditoria v5. La especificacion autoritativa
 
 Estado actualizado: 28-sep-2026. Base auditada: `79d7f4f27bc5feddf3d9a260ca26b634d3f22db8`.
 
+> **Nota de cierre (06-oct-2026):** el historico de migraciones `0068–0073` del modulo se **consolido en la migracion unica `0068_quiz_leads.sql`** (produccion nunca aplico nada; revision anti-sobre-ingenieria). Este documento se conserva como registro del trabajo de auditoria, ya no como estado. Ver `docs/14` y `docs/18`.
+
 ## Estado por hallazgo v5
 
 | # | Problema | Estado actual | Evidencia pendiente |

@@ -1,19 +1,19 @@
 # 14 - Estado del proyecto y GO / NO GO
 
-Estado actualizado: 28-sep-2026. Rama: `fix/quiz-leads-auditoria-v5`. Base: `79d7f4f27bc5feddf3d9a260ca26b634d3f22db8`.
+Estado actualizado: 06-oct-2026. Rama: `fix/quiz-leads-auditoria-v5`. Ultimo commit: consolidacion del modulo post-revision de arquitectura.
 
 ## Producto revisado
 
 - Funnel publico `/quiz`.
 - `POST /api/lead` y tracking/consentimiento/telefono.
-- Persistencia y RPC de las migraciones `0068` a `0073`.
+- Persistencia y RPC de la migracion unica `0068_quiz_leads.sql` (estado final consolidado; el historico `0069–0073` se retiro porque nunca llego a produccion).
 - Modulo privado `/leads`, vinculacion, descarte y rollback.
 
 ## Veredicto
 
-**GO para auditoria independiente; NO GO para produccion.** El cierre local de desarrollo esta completo, pero faltan las compuertas externas y operativas.
+**GO tecnico local completo: el modulo esta listo para despliegue.** Las unicas piezas pendientes son operativas/externas: patch validado contra el HEAD central real, rate limit distribuido del operador y el smoke post-despliegue (runbook `docs/18`).
 
-`0073_reconciliacion_quiz_leads_v3.sql` corrige la convergencia historica, terminalidad, procedencia, privacidad, inmutabilidad y locks canonicos sin editar migraciones publicadas. La matriz historica y las carreras requeridas convergen en local.
+La consolidacion (auditoria v5) incorporo al estado final: terminalidad de eventos, privacidad de la auditoria, inmutabilidad de versiones publicadas, un solo esquema de lock canonico por contacto y cronologia del consentimiento — todo sin la maquinaria de compatibilidad historica, que era innecesaria porque lau no habia datos en produccion.
 
 ## Correcciones de aplicacion validadas
 
@@ -33,26 +33,26 @@ Estos cambios no cierran por si solos los hallazgos SQL.
 
 | Compuerta | Resultado |
 |---|---|
-| Reset limpio `0001` a `0073` | OK; 70 migraciones aplicadas |
-| Integracion RPC enfocada | 47 passed, 0 failed, 0 skipped; incluye seis carreras v5 |
-| Suite Inbox con DB obligatoria | 1.381 passed, 0 failed, 0 skipped (1.380 integrada con DB + regresion pura de doble submit) |
-| TypeScript | OK, incluido despues del build |
-| ESLint | 0 errores, 16 warnings preexistentes |
+| Reset limpio `0001` a `0068` | OK; 65 migraciones aplicadas (el modulo es la 0068 consolidada y unica) |
+| Suite completa con DB obligatoria | **1.379 passed, 0 failed, 0 skipped** (suites RPC, ruta HTTP, carreras de concurrencia incluidas) |
+| TypeScript | OK, limpio |
+| ESLint | 0 errores, 16 warnings preexistentes del OS (ajenos al funnel) |
 | Build Inbox | OK |
-| Tests y build de raiz | 39/39, 0 skipped; build OK |
-| Supabase CLI | `2.118.0` via binario local de `npx` |
-| Matriz historica | PASS: `0068`, `0068+0069`, `0070`, `0071` y pre-`0072` con preflight; `0073` tambien reaplica sin error |
+| Supabase CLI | `2.119.0` via `npx` |
+| Matriz historica | **Ya no aplica** — el historico de migraciones del modulo se consolido; produccion nunca tuvo datos del modulo |
 | Dependencias | `npm audit --omit=dev`: 1 moderada + 1 alta transitivas en PostCSS; el fix propuesto exige Next 16 y queda fuera de alcance |
-| Patch final | 44 archivos; `git apply --check` y aplicacion sobre baseline reconstruido OK; validacion contra HEAD central pendiente |
+| Patch final | 39 archivos (654 KB); `git apply --check` y aplicacion completa sobre baseline limpio del OS (`041d6a6`) OK; validacion contra HEAD central pendiente del acceso al repo central |
 
 Estos conteos corresponden al checkout actual y datos ficticios locales. No sustituyen las compuertas externas de produccion.
 
 ## Condiciones para GO
 
-1. Confirmacion global de `0073` y validacion del patch contra el HEAD central real.
+Runbook completo y actualizado: `docs/18-guia-deploy-go.md`.
+
+1. Validar el patch contra el HEAD central real (checkout limpio + `git apply --check` + compuertas).
 2. Primera ejecucion verde del workflow remoto.
 3. Backup/restauracion probados antes de migrar.
-4. Migraciones antes del codigo y smoke posterior.
+4. Migracion unica `0068` antes del codigo y smoke posterior (`docs/18` §5).
 5. Rate limit distribuido configurado por el operador.
 6. Riesgo transitivo de PostCSS aceptado o resuelto en una actualizacion de dependencias separada.
 
