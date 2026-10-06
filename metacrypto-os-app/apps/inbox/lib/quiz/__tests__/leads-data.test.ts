@@ -6,7 +6,7 @@ vi.mock("@/lib/supabase", () => ({
   rest,
 }));
 
-const { esConsentimientoLegacySinRegistro, getClientesParaVincular, getLeads } = await import("../../leads");
+const { getClientesParaVincular, getLeads } = await import("../../leads");
 const { createLatestRequestSequence } = await import("../../latest-request");
 
 describe("datos server-side de /leads", () => {
@@ -43,12 +43,6 @@ describe("datos server-side de /leads", () => {
       clientes: [{ id: "cliente-51", nombre: "Cliente 51", email: null, telefono_e164: null, programa: "Programa activo" }],
       hayMas: false,
     });
-  });
-
-  test("la UI distingue legado sin evidencia de consentimiento", () => {
-    expect(esConsentimientoLegacySinRegistro("legacy-sin-registro")).toBe(true);
-    expect(esConsentimientoLegacySinRegistro("contacto-v1")).toBe(false);
-    expect(esConsentimientoLegacySinRegistro("contacto-v1", "legacy-unknown")).toBe(true);
   });
 
   test("una búsqueda nueva invalida respuestas anteriores antes de iniciar otro efecto", () => {

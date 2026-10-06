@@ -2,14 +2,15 @@
 
 ## Estado del artefacto
 
-`release/funnel-leads.patch` se regenera desde la base auditada con las correcciones v5 y `0073`. Queda como artefacto candidato: no debe desplegarse hasta pasar `git apply --check` y todas las compuertas contra el HEAD central real.
+`release/funnel-leads.patch` es el diff del módulo de leads sobre el baseline del OS (`041d6a6`): 44 archivos (app `/quiz` + `/api/lead` + módulo `/leads`, libs del quiz, tests, **migración única `0068_quiz_leads.sql`**, workflow CI, `package.json`/lockfile/`eslint.config.mjs` y seed ficticio mínimo). Quedan excluidos los archivos de infra local del OS que el repo central ya tiene (`CLAUDE.md`, `apps/inbox/lib/persona.ts`, `scripts/dev.sh`, `supabase/.gitignore`, `supabase/config.toml`, migraciones `0053`/`0066`).
+
+Trabajador de validación sobre el patch: solo archivos del módulo, sin datos reales, sin credenciales y sin cambios generales del OS. El histórico de migraciones `0069–0073` se retiró: consolidado en la 0068 (ver `docs/18` §1).
 
 El artefacto se considera transferible solo cuando:
 
-1. el operador confirme globalmente `0073`;
-2. pase `git apply --check` contra el HEAD central;
-3. pase el workflow remoto sin omitidos;
-4. el diff integrado sea revisado.
+1. pase `git apply --check` contra el HEAD central (verificado contra el baseline del OS en este repo: ✓);
+2. pase el workflow remoto sin omitidos;
+3. el diff integrado sea revisado.
 
 ## Procedimiento de transferencia
 
@@ -19,25 +20,13 @@ cd metacrypto-os
 git fetch --prune origin
 git switch main
 git pull --ff-only
-git switch -c fix/quiz-leads-auditoria-v5
+git switch -c feature/quiz-leads
 
 git apply --check ../herramienta-berni/release/funnel-leads.patch
 git apply ../herramienta-berni/release/funnel-leads.patch
 ```
 
 No se hace commit, push, merge o PR hasta revisar el diff y ejecutar las compuertas. Nunca se recomienda push directo a `main`.
-
-## Contenido obligatorio del patch final
-
-- `/quiz`, `/api/lead`, tracking, consentimiento, telefono y rate limit.
-- `/leads`, selector y acciones de vinculacion/descarte/rollback.
-- Tests unitarios, HTTP, RPC, concurrencia y upgrade historico.
-- Migraciones `0068` a `0073`.
-- Workflow de integracion del modulo.
-- `package.json`, lockfile y configuracion indispensables para reproducir el checkout.
-- El seed ficticio minimo necesario para que el reset respete el catalogo vigente.
-
-No se incluyen datos reales, basura local, credenciales ni cambios generales del OS.
 
 ## Validacion en checkout limpio
 
@@ -49,22 +38,18 @@ supabase db reset
 
 cd apps/inbox
 npm ci
-LEAD_TESTS_REQUIRE_DB=1 npm run test:integration
-LEAD_TESTS_REQUIRE_DB=1 npm test
+LEAD_TESTS_REQUIRE_DB=1 npx vitest run
 npm run typecheck
 npm run lint
 npm run build
 ```
 
-Ademas se ejecuta la matriz historica definida en `docs/17`. Un `db reset` limpio no sustituye upgrades con datos.
-
 ## Orden de produccion
 
-1. Backup y restauracion probada.
-2. Preflight de datos historicos.
-3. Migraciones `0068 -> 0073`.
-4. Verificacion de catalogo y RPC.
-5. Deploy de codigo.
-6. Smoke del modulo.
+Resumido del runbook completo: `docs/18`.
 
-No se certifica compatibilidad con el repositorio central hasta repetir este procedimiento contra su HEAD real.
+1. Backup y restauracion probada.
+2. Migracion unica `0068` (convergente, una transaccion).
+3. Verificacion de catalogo y RPC.
+4. Deploy de codigo.
+5. Smoke del modulo (docs/18 §5).

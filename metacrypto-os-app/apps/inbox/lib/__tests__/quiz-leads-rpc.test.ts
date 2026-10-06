@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, afterAll, describe, expect, test, vi } from "vitest";
-import { guardedLocalFetch, isLocalSupabaseUrl } from "../quiz/local-db-guard";
+import { guardedLocalFetch, isLocalSupabaseUrl } from "../quiz/__tests__/local-db-guard";
 
 // â”€â”€ entorno local â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function loadEnvLocal(): Record<string, string> {
@@ -993,13 +993,7 @@ d("quiz leads RPC (integraciÃ³n local, docs/11)", () => {
     expect(await rest("GET", "diagnostico_respuestas", `envio_id=eq.${before.id}&select=question_id,answer_id,answer_text`)).toEqual(answersBefore);
   });
 
-  test("0073 marca nuevas finalizaciones como canonical y rechaza país/prefijo incoherente", async () => {
-    const s = session(96);
-    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: email(96), capital: "capital_10k_25k" }) });
-    const e = await envio(s);
-    expect(e.registro_origen).toBe("canonical");
-    expect(e.consentimiento_origen).toBe("canonical");
-
+  test("rechaza país/prefijo incoherente en el RPC", async () => {
     const bad = completedPayload({ sessionId: session(97), email: email(97), capital: "capital_10k_25k" }) as Record<string, any>;
     bad.lead.country = "ES";
     const rejected = await rpc("registrar_diagnostico", { p_payload: bad });

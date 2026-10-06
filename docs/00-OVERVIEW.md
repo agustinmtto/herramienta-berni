@@ -43,17 +43,17 @@ Herramienta de captación de leads (lead magnet / quiz funnel): una landing con 
 - **Fathom** — grabación/análisis de llamadas de venta
 - Meta (Instagram) para el lanzamiento orgánico
 
-## Estado actual (22-sep-2026)
+## Estado actual (06-oct-2026)
 
-**La herramienta vive dentro del OS del negocio** (`metacrypto-os-app/`, ruta pública `/quiz` + módulo privado `/leads`). Rama de trabajo: `feature/leads-a-migracion-rpc`, implementación completa y validada:
+**La herramienta vive dentro del OS del negocio** (`metacrypto-os-app/`, ruta pública `/quiz` + módulo privado `/leads`). Rama: `fix/quiz-leads-auditoria-v5`, implementación completa y validada:
 
-- ✅ **Fases 0–C cerradas y Fase D cierre local** (ver `docs/12` §6): migraciones `0068`/`0069`/`0070`/`0071` (la 0071 es de reconciliación: garantiza el estado final sobre cualquier base), RPC transaccional, vinculación post-venta con validación de teléfono, rollback estricto auditado, descarte del lead sin venta, funnel portado con el contrato versionado, endpoint endurecido, módulo `/leads` completo
-- ✅ Correcciones de las tres auditorías externas integradas: capital sellado desde la definición publicada, consentimiento canónico (`contacto-v1`), versiones del quiz inmutables al publicar, lock canónico de contacto, rollback estricto sin éxito parcial, RLS cerrada (policies genéricas eliminadas, grants solo `service_role`), tracking con IDs canónicos, rotación de sesión, cross-check país/prefijo
-- ✅ Seguridad del funnel: rate limit, same-origin, honeypot, body cap (413 temprano), Content-Type (415), errores honestos, logs sin PII, headers de seguridad globales (nosniff/HSTS/etc.), Next actualizado (fuera las 2 RCE críticas)
-- ✅ Suite del OS: **1.329 tests en verde (0 omitidos)** · `tsc` limpio · `eslint` compuerta (0 errores) · build OK · prototipo standalone 39/39
-- 🟡 **Pendiente externo (Miled + negocio)**: confirmar números de migración `0068-0071`, permiso `leads`, `KAPSO_WEBHOOK_SECRET` en prod, hosting/rate limit/WAF definitivo, orden de despliegue (`0068 → 0069 → 0070 → 0071 → código → smoke test`). Todo listado con las frases exactas en `docs/13`
+- ✅ **Módulo consolidado**: el histórico de migraciones `0068–0073` (auditorías v3/v4/v5 — nunca llegó a producción) quedó consolidado en **una sola migración final** `0068_quiz_leads.sql` — tablas + RPCs + RLS/grants + definitiva del quiz, sin maquinaria de compatibilidad histórica ni código muerto (verificado con `supabase db reset` desde cero contra Supabase local)
+- ✅ Correcciones de auditorías integradas en el estado final: capital sellado desde la definición publicada, consentimiento canónico (`contacto-v1`), versiones del quiz inmutables al publicar, lock canónico de contacto ÚNICO para todo el ciclo comercial, rollback estricto sin éxito parcial, RLS cerrada (sin policies, grants solo `service_role`), tracking con IDs canónicos, coherencia país/prefijo del teléfono en el RPC
+- ✅ Seguridad del funnel: rate limit (best-effort por instancia; el distribuido es del operador), same-origin, honeypot, body cap (413 temprano), Content-Type (415), errores honestos, logs sin PII, auditorías del módulo sin teléfonos, headers de seguridad globales
+- ✅ Compuertas en verde del commit actual: `tsc` limpio · `eslint` 0 errores · `next build` OK · standalone raíz 39/39
+- 🟡 **Pendiente para el GO**: videos de Berni (URL definitiva) + verificación final del engine con decisiones + operativo en producción según `docs/18` (backup, migración única, env, rate limit distribuido WAF/Upstash, smoke test)
 - 🎫 **Tickets del OS** (preexistentes, ajenos a nuestro módulo — `docs/13` §4): webhook fail-closed, SSRF de media, autorización por módulo en las APIs del inbox, revocación de sesión, rate limit del login, CSP/frames, alta de `postcss` (exige Next 16)
-- ❌ Ya no aplica: deploy del funnel en Netlify (decisión D1 de `docs/11` — el funnel va dentro del OS)
+- ❌ Ya no aplica: deploy del funnel en Netlify (decisión D1 de `docs/11`); la transferencia viaja por `release/funnel-leads.patch` (regenerado, 44 archivos, verificado con `git apply --check` contra el baseline del OS)
 
 ## Mapa de esta documentación
 

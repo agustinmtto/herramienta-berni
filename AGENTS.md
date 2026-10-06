@@ -33,13 +33,14 @@ Herramienta de captación (lead magnet) para el negocio de Berni (Metacrypto Clu
 - **Camino comercial del lead (docs/11 §9)**: post-venta el triaje **vincula** el lead temporal al cliente definitivo (con validación de teléfono y rollback exacto auditado) o lo **descarta** si no hubo venta (`estado='descartado'`).
 - Lead caliente = capital **≥ 10.000 USD** (desde 10.000 inclusive — docs/11 §8) → llamada de triaje.
 
-## Estado actual (23-sep-2026)
+## Estado actual (06-oct-2026)
 
-- Implementación de la integración **completa y validada en local**, incluidas las correcciones de la **auditoría v4** (2 críticos + 11 importantes + 3 medias del módulo cerrados — detalle en `docs/16`).
-- Migraciones del módulo: `0068` (esquema + RPC), `0069` (teléfono/auditoría/rollback), `0070` (descarte), `0071` (reconciliación), `0072` (reconciliación v2 — inmutabilidad, consentimiento, concurrencia, tracking). **Números confirmados por Miled.**
-- Suite del OS: **1.343 tests en verde (0 omitidos)** · `tsc` limpio · `eslint` 0 errores · `next build` OK.
-- Patch de transferencia **regenerado** (`release/funnel-leads.patch`, 36 archivos incl. `package.json`/lockfile/`eslint.config.mjs`) y verificado con `git apply --check` sobre un clone fresco del repo de Miled.
-- **Pendiente para el GO**: videos de Berni (URL definitiva) y verificación final del engine determinístico con decisiones. Operativo de Miled: aplicar `0068–0072` en producción, env, backup, rate limit distribuido (WAF/Upstash) y smoke test. Tickets preexistentes del OS en `docs/13` §4.
+- Implementación de la integración **completa y validada en local**: correcciones de las auditorías v4/v5 integradas y módulo consolidado tras la revisión anti-sobre-ingeniería.
+- **Migración única del módulo**: `0068_quiz_leads.sql` — estado final consolidado (el histórico `0069–0073` de reconciliaciones se retiró: nunca llegó a producción y la migración es convergente sobre cualquier estado previo del módulo). La validación de migraciones la hacemos nosotros con la carpeta del OS (docs/18 §1).
+- Suite del OS: **1.379 tests en verde (0 omitidos)** · `tsc` limpio · `eslint` 0 errores · `next build` OK · standalone raíz 39/39.
+- Patch de transferencia **regenerado** (`release/funnel-leads.patch`, 44 archivos incl. `package.json`/lockfile/`eslint.config.mjs`) y verificado con `git apply --check` sobre el baseline del OS.
+- Limpieza aplicada: workflow raíz de CI duplicado eliminado, código muerto fuera (honeypot duplicado, `client_context` nunca persistido, `normalizePhoneE164`, maquinaria `legacy-unknown`), `local-db-guard` movido a `__tests__`, trigger de 0068 subsumido eliminado, un solo esquema de advisory lock por contacto canónico.
+- **Pendiente para el GO**: videos de Berni (URL definitiva) y verificación final del engine determinístico con decisiones. Operativo técnico: `docs/18-guia-deploy-go.md` (backup, migración única, env, rate limit distribuido WAF/Upstash y smoke test). Tickets preexistentes del OS en `docs/13` §4.
 
 ## Estructura del repo
 

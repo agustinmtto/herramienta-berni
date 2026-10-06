@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
-import { guardedLocalFetch, isLocalSupabaseUrl } from "@/lib/quiz/local-db-guard";
+import { guardedLocalFetch, isLocalSupabaseUrl } from "@/lib/quiz/__tests__/local-db-guard";
 
 function loadEnvLocal(): Record<string, string> {
   try {
@@ -151,7 +151,6 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
         { question_id: "rules", type: "single_choice", question_text: "reglas", order: 8, answer_id: "rules_clear_system", answer_text: "claras", value: null, answered_at: "2026-09-21T15:39:00.000Z" },
       ],
       diagnosis: { version: "diagnostico-v1", result: { hot: true, sections: [] } },
-      client_context: { locale: "es-AR", timezone: "America/Argentina/Cordoba" },
     };
 
     const res = await call(payload);
@@ -210,9 +209,16 @@ d("POST /api/lead (integración local, docs/11 Fase B)", () => {
       schema_version: 1,
       quiz_version: "diagnostico-cripto-v1-a",
       session_id: session(4),
-      event: "started",
-      progress: { step_id: "start", step_index: 0 },
-      website: "http://bot.com",
+      event: "completed",
+      progress: { step_id: "result", step_index: 11 },
+      lead: {
+        name: "Bot de prueba ruta",
+        email: email(4),
+        phone: "+5493585000001",
+        country: "AR",
+        website: "http://bot.com", // el humano nunca rellena este campo
+        consent: { accepted: true, version: "contacto-v1", accepted_at: "2026-09-21T15:39:40.000Z" },
+      },
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { status: string };

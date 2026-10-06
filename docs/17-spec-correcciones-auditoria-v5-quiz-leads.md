@@ -6,6 +6,8 @@ Base original: `origin/main` en `79d7f4f27bc5feddf3d9a260ca26b634d3f22db8`. Punt
 
 Esta especificacion complementa `docs/11` y `docs/12`. En caso de conflicto sobre las correcciones de la auditoria v5, este documento prevalece. Las migraciones `0068` a `0072` son inmutables.
 
+> **Reconciliación consolidada (06-oct-2026):** las migraciones `0068–0073` del histórico (con el aparato de compatibilidad para instalaciones que nunca existieron: staging/preflight, taxonomía `legacy-unknown`, doble familia de locks y columnas `*_origen`) se consolidaron en la migración única final `0068_quiz_leads.sql`, que es **convergente** (limpia cualquier estado previo del módulo). La "matriz histórica" del §10 y el preflight del §5.1 ya no aplican: no hubo datos en producción. Este documento conserva el detalle semántico de cada corrección — el comportamiento no cambia.
+
 ## 1. Problema
 
 La auditoria v5 demostro defectos reproducibles en upgrades historicos, seguridad del arnes de tests, orden de eventos, locks de rollback, inmutabilidad, telefonos argentinos, CI, rate limit, evidencia de consentimiento, selector de clientes y validaciones HTTP/UI. Un reset limpio o una suite verde con tests omitidos no demuestra compatibilidad historica ni seguridad operativa.

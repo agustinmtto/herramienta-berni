@@ -18,7 +18,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EVENTS = new Set(["started", "progress", "dropped", "completed"]);
 const ISO_TS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
-const E164_RE = /^\+[1-9][0-9]{7,14}$/;
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -31,13 +30,6 @@ const optStr = (v: unknown, max: number): boolean =>
 
 // Teléfono → E.164. El navegador manda "+<prefijo><número>" compuesto por el
 // selector de país; acá se re-normaliza sin confiar en su formato (docs/09).
-export function normalizePhoneE164(raw: string): string | null {
-  if (!/^[+\d\s().-]+$/.test(String(raw ?? "").trim())) return null;
-  let digits = String(raw ?? "").replace(/[^\d+]/g, "");
-  if (!digits.startsWith("+")) digits = `+${digits}`;
-  return E164_RE.test(digits) ? digits : null;
-}
-
 export function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
 }
@@ -143,10 +135,8 @@ function validateDiagnosis(diagnosis: unknown): string | null {
 export function validateLeadContract(input: unknown): ValidationOk | ValidationError {
   if (!isObj(input)) return { ok: false, reason: "not_an_object" };
   for (const key of Object.keys(input)) {
-    if (!["schema_version", "quiz_version", "session_id", "event", "occurred_at", "source", "progress", "lead", "answers", "diagnosis", "client_context", "website"].includes(key)) return { ok: false, reason: "unexpected_field" };
+    if (!["schema_version", "quiz_version", "session_id", "event", "occurred_at", "source", "progress", "lead", "answers", "diagnosis"].includes(key)) return { ok: false, reason: "unexpected_field" };
   }
-  if (input.website !== undefined && typeof input.website !== "string") return { ok: false, reason: "bad_honeypot" };
-  if (typeof input.website === "string" && input.website.trim() !== "") return { ok: false, reason: "honeypot" };
   if (input.schema_version !== 1) return { ok: false, reason: "bad_schema_version" };
   if (!isStr(input.quiz_version, 64)) return { ok: false, reason: "bad_quiz_version" };
   if (!isStr(input.session_id, 36) || !UUID_RE.test(input.session_id)) return { ok: false, reason: "bad_session_id" };
@@ -186,7 +176,6 @@ export function validateLeadContract(input: unknown): ValidationOk | ValidationE
 
   // Normalización server-side antes del RPC
   const payload: Record<string, unknown> = { ...input };
-  delete payload.website;
   if (lead) {
     const { website: _website, ...safeLead } = lead;
     payload.lead = {

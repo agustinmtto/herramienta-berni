@@ -17,7 +17,7 @@ import { buildDiagnosis } from "../engine";
 import { buildWhatsAppMessage, buildWhatsAppUrl } from "../whatsapp";
 import { isRateLimited, resetRateLimiter, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } from "../rate-limit";
 import { composePhone, buildContractAnswers, buildQuizPayload } from "../lead-payload";
-import { normalizePhoneE164, utf8ByteLength, validateLeadContract, mapRpcError, validateLeadRpcResult } from "../lead-validate";
+import { utf8ByteLength, validateLeadContract, mapRpcError, validateLeadRpcResult } from "../lead-validate";
 
 // ── config ───────────────────────────────────────────────────────────────────
 describe("config", () => {
@@ -367,13 +367,18 @@ describe("lead-validate", () => {
   });
 
   test("honeypot: website rellenado devuelve honeypot (la ruta responde 200 falso)", () => {
-    expect(validateLeadContract({ ...validCompleted, website: "http://spam" })).toMatchObject({ ok: false, reason: "honeypot" });
+    expect(validateLeadContract({
+      ...validCompleted,
+      lead: { ...(validCompleted.lead as object), website: "http://spam" },
+    })).toMatchObject({ ok: false, reason: "honeypot" });
   });
 
   test("honeypot: tipos malformados se rechazan y el string vacío sigue siendo humano", () => {
-    expect(validateLeadContract({ ...validCompleted, website: "" }).ok).toBe(true);
+    expect(validateLeadContract({
+      ...validCompleted,
+      lead: { ...(validCompleted.lead as object), website: "" },
+    }).ok).toBe(true);
     for (const website of [{}, [], 1, true, null]) {
-      expect(validateLeadContract({ ...validCompleted, website })).toMatchObject({ ok: false, reason: "bad_honeypot" });
       expect(validateLeadContract({
         ...validCompleted,
         lead: { ...(validCompleted.lead as object), website },
@@ -395,13 +400,6 @@ describe("lead-validate", () => {
       session_id: "00000000-0000-4000-8000-000000000097",
       submission_id: "00000000-0000-4000-8000-000000000099",
     }, validCompleted.session_id, "completed")).toBe(false);
-  });
-
-  test("normalizePhoneE164 exige E.164 realista", () => {
-    expect(normalizePhoneE164("+54 9 3585 000000")).toBe("+5493585000000");
-    expect(normalizePhoneE164("5493585000000")).toBe("+5493585000000");
-    expect(normalizePhoneE164("12345")).toBeNull();
-    expect(normalizePhoneE164("")).toBeNull();
   });
 
   test("cada pregunta visible tiene un paso canónico sin esperar efectos de React", () => {

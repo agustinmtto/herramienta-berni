@@ -239,10 +239,6 @@ export function buildQuizPayload(args: BuildPayloadArgs): Record<string, unknown
       },
     };
     if (args.diagnosisSnapshot) payload.diagnosis = args.diagnosisSnapshot;
-    payload.client_context = {
-      locale: typeof navigator !== "undefined" ? navigator.language : "es-AR",
-      timezone: typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : null,
-    };
   }
 
   return payload;

@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { guardedLocalFetch, isLocalSupabaseUrl } from "../local-db-guard";
+import { guardedLocalFetch, isLocalSupabaseUrl } from "./local-db-guard";
 
 describe("guarda destructiva de Supabase local", () => {
   test("acepta únicamente hosts loopback", () => {

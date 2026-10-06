@@ -209,8 +209,6 @@ export interface LeadDetalle extends LeadRow {
   consentimiento_aceptado: boolean | null;
   consentimiento_version: string | null;
   consentimiento_at: string | null;
-  consentimiento_origen: "canonical" | "legacy-unknown" | null;
-  registro_origen: "canonical" | "legacy-unknown" | null;
   started_at: string | null;
   utm_term: string | null;
   referrer: string | null;
@@ -230,7 +228,7 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
         "id", "session_id", "estado", "schema_version", "created_at", "started_at", "finished_at",
         "dropped_at", "last_activity_at", "last_step_id", "last_step_index",
         "nombre_capturado", "email_capturado", "telefono_e164_capturado", "pais_capturado",
-        "consentimiento_aceptado", "consentimiento_version", "consentimiento_at", "consentimiento_origen", "registro_origen",
+        "consentimiento_aceptado", "consentimiento_version", "consentimiento_at",
         "capital_min_usd", "capital_max_usd", "es_lead_caliente", "qualification_rule_version",
         "motivo_calificacion", "diagnosis_version", "diagnosis_result",
         "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "referrer",
@@ -265,8 +263,6 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
     consentimiento_aceptado: fila.consentimiento_aceptado as boolean | null,
     consentimiento_version: fila.consentimiento_version as string | null,
     consentimiento_at: fila.consentimiento_at as string | null,
-    consentimiento_origen: fila.consentimiento_origen as LeadDetalle["consentimiento_origen"],
-    registro_origen: fila.registro_origen as LeadDetalle["registro_origen"],
     started_at: fila.started_at as string | null,
     utm_term: fila.utm_term as string | null,
     referrer: fila.referrer as string | null,
@@ -312,10 +308,6 @@ export function buildClientesQuery(q?: string, page = 1): string {
   }
   if (safePage > 1) parts.push(`offset=${(safePage - 1) * CLIENTES_PAGE_SIZE}`);
   return parts.join("&");
-}
-
-export function esConsentimientoLegacySinRegistro(version: string | null, origen?: string | null): boolean {
-  return origen === "legacy-unknown" || version === "legacy-sin-registro";
 }
 
 export async function getClientesParaVincular(q?: string, page = 1): Promise<{ clientes: ClienteParaVincular[]; hayMas: boolean }> {

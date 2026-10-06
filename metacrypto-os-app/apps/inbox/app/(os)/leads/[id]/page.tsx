@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireModulo } from "@/lib/guard";
 import { puedeVer } from "@/lib/modulos";
-import { esConsentimientoLegacySinRegistro, getLeadDetalle, getClientesParaVincular } from "@/lib/leads";
+import { getLeadDetalle, getClientesParaVincular } from "@/lib/leads";
 import { dateEs, fullTime } from "@/lib/format";
 import VincularLead from "@/components/VincularLead";
 
@@ -94,9 +94,7 @@ export default async function LeadDetallePage({ params }: { params: Promise<{ id
             <dt>País</dt><dd>{lead.pais_capturado || "—"}</dd>
             <dt>Consentimiento</dt>
             <dd>
-              {esConsentimientoLegacySinRegistro(lead.consentimiento_version, lead.consentimiento_origen) ? (
-                <>Sin registro verificable · revisar</>
-              ) : lead.consentimiento_aceptado === true ? (
+              {lead.consentimiento_aceptado === true ? (
                 <>Sí · <code>{lead.consentimiento_version}</code> · {lead.consentimiento_at ? dateEs(lead.consentimiento_at) : "—"}</>
               ) : lead.estado === "completed" ? "FALTA (envío completado sin consentimiento)" : "No llegó (sin completar)"}
             </dd>
