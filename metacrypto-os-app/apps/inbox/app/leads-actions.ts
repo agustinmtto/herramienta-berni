@@ -5,7 +5,7 @@
 // ventas existente crea al cliente, y desde /leads alguien con permiso
 // `leads` conecta los diagnósticos del lead temporal con ese cliente.
 //
-// Validación de teléfono + rollback viven en el RPC (migración 0069,
+// Validación de teléfono + rollback viven en el RPC (migración única 0068,
 // docs/11 §9.1–9.3); acá solo se exige sesión con permiso, se pasa el
 // flag de confirmación explícita y se revalida.
 //

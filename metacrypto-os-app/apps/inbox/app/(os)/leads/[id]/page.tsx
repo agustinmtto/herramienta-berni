@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireModulo } from "@/lib/guard";
 import { puedeVer } from "@/lib/modulos";
-import { esConsentimientoLegacySinRegistro, getLeadDetalle, getClientesParaVincular } from "@/lib/leads";
+import { getLeadDetalle, getClientesParaVincular } from "@/lib/leads";
 import { dateEs, fullTime } from "@/lib/format";
 import VincularLead from "@/components/VincularLead";
 
@@ -46,7 +46,10 @@ export default async function LeadDetallePage({ params }: { params: Promise<{ id
   const lead = await getLeadDetalle(id);
   if (!lead) notFound();
 
-  const { clientes, hayMas: hayMasClientes } = await getClientesParaVincular();
+  const picker = lead.persona_id && lead.persona_estado === "lead"
+    ? await getClientesParaVincular()
+    : { clientes: [], hayMas: false };
+  const { clientes, hayMas: hayMasClientes } = picker;
   const diagJson = lead.diagnosis_result ? JSON.stringify(lead.diagnosis_result, null, 2) : null;
 
   return (
@@ -91,9 +94,7 @@ export default async function LeadDetallePage({ params }: { params: Promise<{ id
             <dt>País</dt><dd>{lead.pais_capturado || "—"}</dd>
             <dt>Consentimiento</dt>
             <dd>
-              {esConsentimientoLegacySinRegistro(lead.consentimiento_version) ? (
-                <>Sin registro verificable · revisar</>
-              ) : lead.consentimiento_aceptado === true ? (
+              {lead.consentimiento_aceptado === true ? (
                 <>Sí · <code>{lead.consentimiento_version}</code> · {lead.consentimiento_at ? dateEs(lead.consentimiento_at) : "—"}</>
               ) : lead.estado === "completed" ? "FALTA (envío completado sin consentimiento)" : "No llegó (sin completar)"}
             </dd>

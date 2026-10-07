@@ -18,20 +18,20 @@
 | 12 | **PDF personalizado por email (producción)**: existen el documento y generador base, sin descarga visible; falta la versión dinámica, Resend del negocio + pixel de apertura | Entrega definitiva del diagnóstico | Miled / Equipo dev | Pendiente — depende de Fase 0 (accesos) |
 | 13 | ~~**Teléfono + CTA WhatsApp**~~: teléfono obligatorio y mensaje con respuestas; el botón PDF transitorio fue retirado | Entrega transitoria solicitada para el MVP | Equipo dev | ✅ Cerrado |
 | 14 | **Hosting final** para producción: Vercel Pro (confirmado por Miled 23-sep) | Define rate limiting real (Upstash/WAF del host, reemplazando el in-memory best-effort de `lib/rate-limit.js`) y configuración de headers/HSTS | Agustín / Miled | 🟡 Parcial: Vercel Pro confirmado; WAF/rate limit por confirmar |
-| 15 | **Rate limiting "real"** (Upstash/Redis o WAF del hosting) reemplazando el in-memory | Anti-abuso del endpoint público | Equipo dev | Pendiente de #14 — call site en `lib/rate-limit.js` ya aislado |
+| 15 | **Rate limiting "real"** (Upstash/Redis o WAF del hosting) reemplazando el in-memory | Anti-abuso del endpoint público | Equipo dev | Pendiente de #14 — call site en `apps/inbox/lib/quiz/rate-limit.ts` ya aislado |
 | 16 | ~~**Ámbito de seguridad con integraciones**~~ | Implementado para el módulo de leads: RLS day 1, service_role solo server, IDOR cubierto, SQLi parametrizado — checklist verificado en `docs/09` §Quiz Funnel en el OS | Equipo dev | ✅ Cerrado (Fase D local) |
 | 17 | ~~**Upgrade de Next** para cerrar las vulnerabilidades de prod deps~~ → fusionado con #20 | Cerrar `npm audit --omit=dev` en 0 en ambos repos | Equipo dev | 🟡 Fusionado con #20 (críticas cerradas; queda postcss vía Next 16) |
 | 18 | ~~**Retención de datos de leads**~~ | Sin vencimiento por decisión de negocio; mantener capacidad futura de eliminación/anonimización | Berni / Equipo dev | ✅ Cerrado |
-| 19 | ~~**Número de migración**~~ | Asignados y **confirmados por Miled**: `0068_quiz_leads.sql`, `0069_vinculacion_validacion_rollback.sql`, `0070_descarte_leads.sql`, `0071_reconciliacion_leads.sql` y `0072_reconciliacion_leads_v2.sql` | Miled | ✅ Confirmado |
+| 19 | ~~**Número de migración**~~ → **Sustituido (06-oct):** el histórico `0068–0072` (confirmado por Miled en su momento) se **consolidó en la migración principal `0068_quiz_leads.sql`** + `0069` (rol funnel) + `0070` (lookup) (producción nunca aplicó nada del módulo). El número lo validamos nosotros contra la base del OS — ver `docs/18` §1 | Validación de migraciones | Equipo dev | ✅ Cerrado (consolidación) |
 | 20 | **Upgrade de Next del OS (bloqueante de prod)**: ~~1 RCE crítica en `next`~~ **RESUELTO en el PR de leads: lockfile a `15.5.25` — las 2 RCE críticas y las altas de `nanoid`/`sharp` quedaron cerradas**. Queda la alta de `postcss` cuya solución exige Next 16 (cambio mayor, ticket aparte) y las correcciones de seguridad preexistentes del OS (`docs/13` §4) | Cerrar `npm audit --omit=dev` en 0 | Miled / Equipo dev | 🟡 Parcial: críticas cerradas; Next 16 pendiente |
 
 ## Preguntas para Miled (cierre Fase D — bloqueantes de producción)
 
 1. **Hosting del OS**: ¿dónde está desplegado hoy el OS en producción (Vercel, otro)? ¿Qué plan tiene? ¿El host ofrece WAF / rate limiting en el borde?
 2. **Rate limit definitivo**: ¿habilitamos Upstash Redis (requiere cuenta + token del negocio) o confiamos en el rate limiting del host? El endpoint público `/api/lead` hoy usa in-memory 10/min por IP (configurable con `LEAD_RATE_LIMIT_MAX` / `LEAD_RATE_LIMIT_WINDOW_MS`).
-3. **Números de migración**: confirmar que `0068` y `0069` no fueron reclamados por otra rama antes del release.
+3. ~~**Números de migración**~~: obsoleto — el módulo deploya con `0068 + 0069 + 0070` (o los números libres siguientes en producción, ver `docs/18` §1).
 4. **Permiso `leads`**: ¿quién del equipo lo recibe (Berni, Miled, closers)? Se asigna por `team_members.modulos`.
-5. **Orden de despliegue**: aplicar `0068` + `0069` a producción ANTES de deployar el código (sin eso, PostgREST responde 400 en silencio).
+5. **Orden de despliegue**: aplicar `0068 + 0069 + 0070` a producción ANTES de deployar el código (sin eso, PostgREST responde 400 en silencio). Runbook: `docs/18`.
 6. **Variables de entorno en prod**: no se agregan claves nuevas; verificar que el deploy tenga `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` y `AUTH_TOKEN` (ya usadas por el OS). Opcionales: `LEAD_RATE_LIMIT_*`.
 7. **Upgrade de Next** (bloqueante #20): las 2 RCE críticas ya quedaron cerradas en este PR (lockfile `15.5.25`). Queda la alta de `postcss` — ¿se aprueba el salto a Next 16 como ticket aparte?
 8. **HTTPS/HSTS**: verificar que el host fuerce HTTPS y configure HSTS al exponer `/quiz`.

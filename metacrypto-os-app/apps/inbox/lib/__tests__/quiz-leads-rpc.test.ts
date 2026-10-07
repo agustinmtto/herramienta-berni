@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, afterAll, describe, expect, test, vi } from "vitest";
-import { guardedLocalFetch, isLocalSupabaseUrl } from "../quiz/local-db-guard";
+import { guardedLocalFetch, isLocalSupabaseUrl } from "./local-db-guard";
 
 // â”€â”€ entorno local â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function loadEnvLocal(): Record<string, string> {
@@ -132,6 +132,7 @@ function respuestasCompletas(capitalAnswerId: string) {
 }
 
 function completedPayload(opts: { sessionId: string; email: string; capital: string; diagnosis?: boolean }) {
+  const phoneSuffix = String(Number(/(\d+)@/.exec(opts.email)?.[1] ?? 1)).padStart(6, "0");
   return payload({
     session_id: opts.sessionId,
     event: "completed",
@@ -141,7 +142,7 @@ function completedPayload(opts: { sessionId: string; email: string; capital: str
     lead: {
       name: "Lead de prueba RPC",
       email: opts.email,
-      phone: "+5493585000001",
+      phone: `+5493585${phoneSuffix}`,
       country: "AR",
       consent: { accepted: true, version: "contacto-v1", accepted_at: "2026-09-21T10:07:30Z" },
     },
@@ -152,17 +153,57 @@ function completedPayload(opts: { sessionId: string; email: string; capital: str
 
 async function limpiar(baseUrl: string = URL_BASE) {
   if (!isLocalSupabaseUrl(baseUrl)) throw new Error("cleanup requires local Supabase");
-  if (SESSIONS.length) {
-    await rest("DELETE", "diagnostico_envios", `session_id=in.(${SESSIONS.join(",")})`);
+  const reservedSessions = Array.from({ length: 120 }, (_, index) =>
+    `0000c0de-0000-4000-8000-${String(index + 1).padStart(12, "0")}`);
+  await rest("DELETE", "diagnostico_envios", `session_id=in.(${reservedSessions.join(",")})`);
+
+  // Un proceso terminado antes del afterAll no deja sus arrays en memoria. Los
+  // prefijos reservados permiten limpiar esos residuos al iniciar la siguiente
+  // corrida sin abarcar otras fixtures @test.local del OS.
+  const prefixes = [
+    "quiz-rpc-", "quiz-cliente-", "cliente-", "clientemismo-", "rollback-",
+    "descarto-", "estricto-", "estricto2-", "revd-", "vinc-a-", "vinc-b-",
+    "multi-a-", "multi-b-",
+  ];
+  const predicate = `or=(${prefixes.map((prefix) => `email.like.${prefix}*`).join(",")})`;
+  const stalePeople = await rest("GET", "personas", `${predicate}&select=id`);
+  const staleIds = (stalePeople.body as { id: string }[]).map((person) => person.id);
+  if (staleIds.length) {
+    await rest("DELETE", "programas", `persona_id=in.(${staleIds.join(",")})`);
+    await rest("DELETE", "personas", `id=in.(${staleIds.join(",")})`);
   }
-  // la versiÃ³n de prueba se elimina despuÃ©s de sus envÃ­os (FK de quiz_version_id)
-  await rest("DELETE", "quiz_versiones", `codigo=eq.${MC_VERSION}`);
+  // Las versiones publicadas son irreversibles desde 0073. La fixture se
+  // reutiliza entre corridas locales y el reset de Supabase la elimina.
   if (PROGRAMA_IDS.length) {
     await rest("DELETE", "programas", `id=in.(${PROGRAMA_IDS.join(",")})`);
   }
   if (EMAILS.length) {
     await rest("DELETE", "personas", `email=in.(${EMAILS.map((e) => `"${e}"`).join(",")})`);
   }
+}
+
+async function crearCliente(n: number, phone: string) {
+  const clienteEmail = `quiz-cliente-${n}@test.local`;
+  EMAILS.push(clienteEmail);
+  const cliente = await rest("POST", "personas", "select=id", {
+    estado: "cliente", nombre: `Cliente ${n}`, email: clienteEmail,
+    telefono_e164: phone, divisa_preferida: "USD",
+  });
+  const clienteId = cliente.body[0].id as string;
+  const programa = await rest("POST", "programas", "select=id", {
+    persona_id: clienteId, tier: "3000", motivo: "nueva_venta",
+    fecha_inicio: "2026-09-01", monto: 3000, divisa: "EUR",
+  });
+  PROGRAMA_IDS.push(programa.body[0].id);
+  return clienteId;
+}
+
+async function activeLeadIdsForPhone(phone: string): Promise<string[]> {
+  const rows = await rest("GET", "diagnostico_envios", `telefono_e164_capturado=eq.${encodeURIComponent(phone)}&select=persona_id`);
+  const ids = [...new Set((rows.body as { persona_id: string | null }[]).map((row) => row.persona_id).filter(Boolean))] as string[];
+  if (!ids.length) return [];
+  const personas = await rest("GET", "personas", `id=in.(${ids.join(",")})&estado=eq.lead&select=id`);
+  return (personas.body as { id: string }[]).map((row) => row.id);
 }
 
 describe("guarda del arnés RPC", () => {
@@ -183,6 +224,8 @@ describe("guarda del arnés RPC", () => {
 // Clona la definiciÃ³n vigente, le agrega una pregunta multiple_choice y la
 // publica como versiÃ³n de pruebas (estado active, mismo funnel).
 async function crearVersionMultiChoice() {
+  const existing = await rest("GET", "quiz_versiones", `codigo=eq.${MC_VERSION}&select=id`);
+  if (existing.body?.length) return;
   const src = await rest("GET", "quiz_versiones", `codigo=eq.${QUIZ}&select=funnel,definicion`);
   const def = src.body[0].definicion;
   def.questions.push({
@@ -403,7 +446,8 @@ d("quiz leads RPC (integraciÃ³n local, docs/11)", () => {
     const audit = await rest("GET", "auditoria", `entidad=eq.persona&accion=eq.vinculacion&entidad_id=eq.${leadId}&select=datos&order=created_at.desc&limit=1`);
     expect(audit.body[0].datos.envios_reasignados).toBeGreaterThanOrEqual(1);
     expect(audit.body[0].datos.confirmado).toBe(true);
-    expect(audit.body[0].datos.telefono_lead).toBe("+5493585000001");
+    expect(audit.body[0].datos.telefono_lead).toBeUndefined();
+    expect(audit.body[0].datos.telefono_cliente).toBeUndefined();
 
     // idempotente: repetir no rompe ni duplica
     const v2 = await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clienteId, p_confirmar: true });
@@ -537,13 +581,13 @@ d("quiz leads RPC (integraciÃ³n local, docs/11)", () => {
 
   test("(B6) multiple_choice vacÃ­a o con ids repetidos â†’ rechazada", async () => {
     const s1 = session(57);
-    const vacia = payload({ quiz_version: MC_VERSION, session_id: s1, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "extras", step_index: 8 },
+    const vacia = payload({ quiz_version: MC_VERSION, session_id: s1, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "start", step_index: 0 },
       answers: [{ question_id: "extras", type: "multiple_choice", question_text: "extras", order: 1, answer_id: null, answer_text: "", value: { ids: [] }, answered_at: null }] });
     const rVacia = await rpc("registrar_diagnostico", { p_payload: vacia });
     expect(rVacia.body.message).toContain("seleccion_vacia");
 
     const s2 = session(58);
-    const repetida = payload({ quiz_version: MC_VERSION, session_id: s2, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "extras", step_index: 8 },
+    const repetida = payload({ quiz_version: MC_VERSION, session_id: s2, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "start", step_index: 0 },
       answers: [{ question_id: "extras", type: "multiple_choice", question_text: "extras", order: 1, answer_id: null, answer_text: "", value: { ids: ["mc_a", "mc_a"] }, answered_at: null }] });
     const rRepetida = await rpc("registrar_diagnostico", { p_payload: repetida });
     expect(rRepetida.body.message).toContain("respuestas_duplicadas");
@@ -713,6 +757,38 @@ d("quiz leads RPC (integraciÃ³n local, docs/11)", () => {
     expect(rHelper.status).toBeGreaterThanOrEqual(400);
   });
 
+  test("(H-08) un usuario Auth real no obtiene teléfonos del funnel desde auditoría", async () => {
+    const authEmail = `quiz-auth-${Date.now()}@test.local`;
+    const password = "Quiz-test-2026!";
+    const created = await guardedLocalFetch(URL_BASE, "/auth/v1/admin/users", {
+      method: "POST",
+      headers: HDRS,
+      body: JSON.stringify({ email: authEmail, password, email_confirm: true }),
+    });
+    expect(created.status).toBeLessThan(300);
+    const user = await created.json() as { id: string };
+    try {
+      const login = await guardedLocalFetch(URL_BASE, "/auth/v1/token?grant_type=password", {
+        method: "POST",
+        headers: { apikey: ANON, "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authEmail, password }),
+      });
+      expect(login.status).toBe(200);
+      const { access_token: token } = await login.json() as { access_token: string };
+      const headers = { apikey: ANON, Authorization: `Bearer ${token}` };
+      const envios = await guardedLocalFetch(URL_BASE, "/rest/v1/diagnostico_envios?select=id,telefono_e164_capturado", { headers });
+      expect(envios.status).toBe(200);
+      expect(await envios.json()).toEqual([]);
+      const audit = await guardedLocalFetch(URL_BASE, "/rest/v1/auditoria?select=datos", { headers });
+      expect(audit.status).toBe(200);
+      const serialized = JSON.stringify(await audit.json());
+      expect(serialized).not.toContain("telefono_lead");
+      expect(serialized).not.toContain("telefono_cliente");
+    } finally {
+      await guardedLocalFetch(URL_BASE, `/auth/v1/admin/users/${user.id}`, { method: "DELETE", headers: HDRS });
+    }
+  }, 15_000);
+
   test("(H-04) la definiciÃ³n de una versiÃ³n PUBLICADA es inmutable", async () => {
     const r = await rest("GET", "quiz_versiones", `codigo=eq.${QUIZ}&select=id`);
     const id = r.body[0].id;
@@ -724,6 +800,30 @@ d("quiz leads RPC (integraciÃ³n local, docs/11)", () => {
     expect(pausa.status).toBeLessThan(300);
     const reactiva = await rest("PATCH", "quiz_versiones", `id=eq.${id}`, { estado: "active" });
     expect(reactiva.status).toBe(200);
+  });
+
+  test("(H-04) publicar es irreversible y un draft nunca publicado sí se elimina", async () => {
+    const current = await rest("GET", "quiz_versiones", `codigo=eq.${QUIZ}&select=id,created_at,publicada_at`);
+    const version = current.body[0];
+    for (const patch of [
+      { created_at: "2020-01-01T00:00:00Z" },
+      { publicada_at: null },
+      { publicada_at: "2030-01-01T00:00:00Z" },
+      { estado: "draft" },
+    ]) {
+      expect((await rest("PATCH", "quiz_versiones", `id=eq.${version.id}`, patch)).status).toBeGreaterThanOrEqual(400);
+    }
+    expect((await rest("DELETE", "quiz_versiones", `id=eq.${version.id}`)).status).toBeGreaterThanOrEqual(400);
+
+    const draftCode = `quiz-draft-${Date.now()}`;
+    const draft = await rest("POST", "quiz_versiones", "select=id", {
+      codigo: draftCode, funnel: "diagnostico-cripto", variante: "test", version: 999,
+      estado: "draft", definicion: { steps: ["start"], questions: [] },
+    });
+    expect(draft.status).toBe(201);
+    const removed = await rest("DELETE", "quiz_versiones", `id=eq.${draft.body[0].id}`);
+    expect(removed.status).toBeLessThan(300);
+    expect(removed.body).toHaveLength(1);
   });
 
   test("(H-05) consentimiento de versiÃ³n distinta de 'contacto-v1' â†’ contacto_incompleto", async () => {
@@ -825,6 +925,82 @@ d("quiz leads RPC (integraciÃ³n local, docs/11)", () => {
     expect(e.last_step_index).toBe(2);
   });
 
+  test("0073 un retry completed no puede reasignarse con otro teléfono", async () => {
+    const s = session(108);
+    const original = completedPayload({ sessionId: s, email: email(108), capital: "capital_10k_25k" });
+    expect((await rpc("registrar_diagnostico", { p_payload: original })).status).toBe(200);
+    const before = await envio(s);
+    const retry = structuredClone(original) as Record<string, any>;
+    retry.lead.phone = "+5493585000109";
+    expect((await rpc("registrar_diagnostico", { p_payload: retry })).status).toBe(200);
+    expect((await envio(s)).persona_id).toBe(before.persona_id);
+    expect((await envio(s)).telefono_e164_capturado).toBe(before.telefono_e164_capturado);
+  });
+
+  test("0073 dos completed simultáneos de la misma sesión no mezclan teléfonos", async () => {
+    const s = session(111);
+    const first = completedPayload({ sessionId: s, email: email(111), capital: "capital_10k_25k" }) as Record<string, any>;
+    const second = structuredClone(first) as Record<string, any>;
+    second.lead.phone = "+5493585000112";
+    const results = await Promise.all([
+      rpc("registrar_diagnostico", { p_payload: first }),
+      rpc("registrar_diagnostico", { p_payload: second }),
+    ]);
+    expect(results.every((result) => result.status === 200)).toBe(true);
+    const stored = await envio(s);
+    expect([first.lead.phone, second.lead.phone]).toContain(stored.telefono_e164_capturado);
+    expect(await activeLeadIdsForPhone(stored.telefono_e164_capturado)).toEqual([stored.persona_id]);
+  });
+
+  test("0073 una vinculación hacia ex_cliente no bloquea una finalización futura", async () => {
+    const mail = email(109);
+    const first = session(109);
+    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: first, email: mail, capital: "capital_10k_25k" }) });
+    const before = await envio(first);
+    const leadId = before.persona_id as string;
+    const clientId = await crearCliente(109, "+5491100010109");
+    await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clientId, p_confirmar: true });
+    expect((await rest("PATCH", "personas", `id=eq.${clientId}`, { estado: "ex_cliente" })).status).toBeLessThan(300);
+
+    const second = session(110);
+    expect((await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: second, email: mail, capital: "capital_10k_25k" }) })).status).toBe(200);
+    const after = await envio(second);
+    expect(after.persona_id).not.toBe(clientId);
+    expect((await rest("GET", "personas", `id=eq.${after.persona_id}&select=estado`)).body[0].estado).toBe("lead");
+    expect((await rpc("desvincular_lead", { p_cliente_id: clientId, p_lead_id: leadId })).status).toBe(200);
+    expect((await envio(first)).persona_id).toBe(after.persona_id);
+    expect(await activeLeadIdsForPhone(before.telefono_e164_capturado)).toEqual([after.persona_id]);
+  });
+
+  test("I6: progress tardío no altera paso, actividad ni respuestas del primer dropped", async () => {
+    const s = session(95);
+    await rpc("registrar_diagnostico", { p_payload: payload({ session_id: s, event: "started", progress: { step_id: "start", step_index: 0 }, answers: [] }) });
+    const answer = respuestasCompletas("capital_10k_25k")[0];
+    await rpc("registrar_diagnostico", { p_payload: payload({ session_id: s, event: "dropped", progress: { step_id: "challenge", step_index: 2 }, answers: [answer] }) });
+    const before = await envio(s);
+    const answersBefore = await rest("GET", "diagnostico_respuestas", `envio_id=eq.${before.id}&select=question_id,answer_id,answer_text`);
+
+    const late = await rpc("registrar_diagnostico", { p_payload: payload({
+      session_id: s, event: "progress", progress: { step_id: "situation", step_index: 1 },
+      answers: [{ ...answer, answer_id: "exposure_none", answer_text: "Fuera" }],
+    }) });
+    expect(late.status).toBeGreaterThanOrEqual(400);
+    expect(late.body.message).toContain("dropped_es_terminal");
+    const after = await envio(s);
+    expect(after.last_step_id).toBe("challenge");
+    expect(after.last_step_index).toBe(2);
+    expect(after.last_activity_at).toBe(before.last_activity_at);
+    expect(await rest("GET", "diagnostico_respuestas", `envio_id=eq.${before.id}&select=question_id,answer_id,answer_text`)).toEqual(answersBefore);
+  });
+
+  test("rechaza país/prefijo incoherente en el RPC", async () => {
+    const bad = completedPayload({ sessionId: session(97), email: email(97), capital: "capital_10k_25k" }) as Record<string, any>;
+    bad.lead.country = "ES";
+    const rejected = await rpc("registrar_diagnostico", { p_payload: bad });
+    expect(rejected.status).toBeGreaterThanOrEqual(400);
+    expect(rejected.body.message).toContain("telefono_pais_incoherente");
+  });
+
   test("I1: consentimiento anterior al inicio del recorrido se rechaza", async () => {
     const s = session(91);
     await rpc("registrar_diagnostico", { p_payload: payload({ session_id: s, event: "started", occurred_at: "2026-09-21T09:00:00Z", progress: { step_id: "start", step_index: 0 } }) });
@@ -875,8 +1051,92 @@ d("quiz leads RPC (integraciÃ³n local, docs/11)", () => {
     expect(e).not.toBeNull();
     expect(e.quiz_version_id).not.toBeNull();
   });
+
+  test("0073 concurrencia completar/vincular conserva un conjunto exacto", async () => {
+    const mail = email(100);
+    const first = session(100);
+    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: first, email: mail, capital: "capital_10k_25k" }) });
+    const before = await envio(first);
+    const leadId = before.persona_id as string;
+    const clientId = await crearCliente(100, "+5491100010100");
+    const second = session(101);
+    const [completed, linked] = await Promise.all([
+      rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: second, email: mail, capital: "capital_10k_25k" }) }),
+      rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clientId, p_confirmar: true }),
+    ]);
+    expect(completed.status).toBe(200);
+    expect(linked.status).toBe(200);
+    expect((await envio(first)).persona_id).toBe(clientId);
+    expect((await envio(second)).persona_id).toBe(clientId);
+    expect(await activeLeadIdsForPhone(before.telefono_e164_capturado)).toEqual([]);
+  });
+
+  test("0073 concurrencia completar/desvincular no deja dos leads temporales", async () => {
+    const mail = email(102);
+    const first = session(102);
+    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: first, email: mail, capital: "capital_10k_25k" }) });
+    const before = await envio(first);
+    const leadId = before.persona_id as string;
+    const clientId = await crearCliente(102, "+5491100010102");
+    await rpc("vincular_lead_convertido", { p_lead_id: leadId, p_cliente_id: clientId, p_confirmar: true });
+    const second = session(103);
+    const [completed, unlinked] = await Promise.all([
+      rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: second, email: mail, capital: "capital_10k_25k" }) }),
+      rpc("desvincular_lead", { p_cliente_id: clientId, p_lead_id: leadId }),
+    ]);
+    expect(completed.status).toBe(200);
+    expect(unlinked.status).toBe(200);
+    expect((await envio(first)).persona_id).toBe(leadId);
+    expect((await envio(second)).persona_id).toBe(leadId);
+    expect(await activeLeadIdsForPhone(before.telefono_e164_capturado)).toEqual([leadId]);
+  });
+
+  test("0073 concurrencia completar/descartar conserva como máximo un lead activo", async () => {
+    const mail = email(104);
+    const first = session(104);
+    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: first, email: mail, capital: "capital_10k_25k" }) });
+    const before = await envio(first);
+    const second = session(105);
+    const [completed, discarded] = await Promise.all([
+      rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: second, email: mail, capital: "capital_10k_25k" }) }),
+      rpc("descartar_lead", { p_lead_id: before.persona_id }),
+    ]);
+    expect(completed.status).toBe(200);
+    expect(discarded.status).toBe(200);
+    expect((await activeLeadIdsForPhone(before.telefono_e164_capturado)).length).toBeLessThanOrEqual(1);
+  });
+
+  test("0073 concurrencia vincular/descartar aplica exactamente una operación", async () => {
+    const mail = email(106);
+    const s = session(106);
+    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: mail, capital: "capital_10k_25k" }) });
+    const e = await envio(s);
+    const clientId = await crearCliente(106, "+5491100010106");
+    const results = await Promise.all([
+      rpc("vincular_lead_convertido", { p_lead_id: e.persona_id, p_cliente_id: clientId, p_confirmar: true }),
+      rpc("descartar_lead", { p_lead_id: e.persona_id }),
+    ]);
+    expect(results.filter((result) => result.status === 200)).toHaveLength(1);
+    expect(results.filter((result) => result.status >= 400)).toHaveLength(1);
+  });
+
+  test("0073 dos rollbacks simultáneos restauran una sola vez y sin parcial", async () => {
+    const mail = email(107);
+    const s = session(107);
+    await rpc("registrar_diagnostico", { p_payload: completedPayload({ sessionId: s, email: mail, capital: "capital_10k_25k" }) });
+    const e = await envio(s);
+    const clientId = await crearCliente(107, "+5491100010107");
+    await rpc("vincular_lead_convertido", { p_lead_id: e.persona_id, p_cliente_id: clientId, p_confirmar: true });
+    const results = await Promise.all([
+      rpc("desvincular_lead", { p_cliente_id: clientId, p_lead_id: e.persona_id }),
+      rpc("desvincular_lead", { p_cliente_id: clientId, p_lead_id: e.persona_id }),
+    ]);
+    expect(results.filter((result) => result.status === 200)).toHaveLength(1);
+    expect(results.filter((result) => result.status >= 400)).toHaveLength(1);
+    expect((await envio(s)).persona_id).toBe(e.persona_id);
+  });
 });
 
 // mapa auxiliar para el test de concurrencia
 const sessionIds: Record<number, string> = {};
-for (let n = 1; n <= 99; n++) sessionIds[n] = `0000c0de-0000-4000-8000-${String(n).padStart(12, "0")}`;
+for (let n = 1; n <= 120; n++) sessionIds[n] = `0000c0de-0000-4000-8000-${String(n).padStart(12, "0")}`;

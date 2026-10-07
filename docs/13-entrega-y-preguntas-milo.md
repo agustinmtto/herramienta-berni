@@ -1,16 +1,14 @@
 # 13 - Entrega del modulo quiz/leads
 
-Estado actualizado: 24-sep-2026. Spec tecnica vigente: `docs/17-spec-correcciones-auditoria-v5-quiz-leads.md`.
+Estado actualizado: 06-oct-2026. Spec tecnica vigente: `docs/17`. Runbook de despliegue: `docs/18`.
 
 ## Estado
 
-El modulo no esta listo para PR, merge ni deploy. Las correcciones de aplicacion y el esquema limpio actual ya se validaron con Supabase local, pero persisten defectos de upgrade historico, tracking server-side, locks e inmutabilidad que requieren una nueva migracion append-only y su matriz historica.
-
-La rama de correccion parte de `origin/main` en `79d7f4f27bc5feddf3d9a260ca26b634d3f22db8`. Las migraciones publicadas del modulo son `0068` a `0072` y no se editan.
+La implementacion local del modulo esta validada con todas las compuertas (suite completa con DB, TypeScript, ESLint, builds) y el modulo consolidado tras la revision anti-sobre-ingenieria: **una sola migracion `0068_quiz_leads.sql`** con el estado final (el historico `0068–0073` de reconciliaciones se retiro; produccion nunca aplico nada del modulo y la validacion de migraciones la hacemos nosotros con la carpeta del OS, `docs/18` §1).
 
 ## Informacion necesaria
 
-1. Reservar globalmente el numero de la nueva migracion posterior a `0072`. El checkout y las ramas remotas disponibles no permiten confirmar que `0073` este libre.
+1. ~~Confirmar la reserva del numero `0073`~~ → obsoleto: el paquete del modulo es `0068 + 0069 + 0070`.
 2. Dar acceso al HEAD real del repositorio central para validar el patch final. No se certifica compatibilidad contra un SHA externo no disponible.
 3. Confirmar quien recibe el permiso `leads`.
 4. Configurar y evidenciar el rate limit distribuido del funnel en WAF/Upstash/Redis. El limiter versionado es una defensa local por instancia.
@@ -20,16 +18,17 @@ La rama de correccion parte de `origin/main` en `79d7f4f27bc5feddf3d9a260ca26b63
 
 - Una version publicada no se despublica ni elimina aunque no tenga envios. Solo transiciona entre `active`, `paused` y `archived`.
 - El funnel solicita telefono movil. Para Argentina, si un numero nacional valido omite `9`/`15`, se asume movil y se canoniza como `+549...`.
-- Un registro historico sin evidencia de consentimiento se muestra como `sin registro/revisar`; no se inventa aceptacion.
+- ~~`sin registro/revisar` para registros sin evidencia~~ → obsoleto con la consolidacion: toda finalizacion nueva deja consentimiento canonico completo (`contacto-v1`), defendido por CHECK de la base.
 
 ## Orden de despliegue
 
+Runbook completo en `docs/18`. Resumen:
+
 1. Probar backup y restauracion.
-2. Ejecutar el preflight historico y guardar conteos sin PII.
-3. Aplicar `0068 -> 0069 -> 0070 -> 0071 -> 0072 -> <nueva reconciliacion>`.
-4. Verificar funciones, constraints, triggers, indices, grants, RLS y firmas RPC.
-5. Desplegar el codigo del mismo checkout validado.
-6. Ejecutar smoke de `/quiz`, `/api/lead` y `/leads` con datos ficticios.
+2. Aplicar el paquete de migraciones `0068 + 0069 + 0070` (convergentes, una transaccion cada una): valida antes el esquema con `to_regclass`/`to_regprocedure`.
+3. Verificar funciones, constraints, triggers, indices, grants y RLS.
+4. Desplegar el codigo del mismo checkout validado.
+5. Ejecutar smoke de `/quiz`, `/api/lead` y `/leads` con datos ficticios (docs/18 §5).
 
 No se hace push directo a `main`: la transferencia usa rama y pull request. No se ejecutan pruebas destructivas contra produccion o URLs externas.
 
@@ -38,6 +37,6 @@ No se hace push directo a `main`: la transferencia usa rama y pull request. No s
 - Instalacion limpia y cinco rutas de upgrade historico, incluida una con strings vacios.
 - Suites RPC y `/api/lead` con `LEAD_TESTS_REQUIRE_DB=1` y cero omitidos.
 - Suite completa, TypeScript, ESLint, builds y tests de raiz.
-- Patch regenerado al final y `git apply --check` sobre checkout limpio.
+- Patch regenerado al final; queda pendiente `git apply --check` contra el HEAD central real.
 
-La evidencia intermedia reproducible esta en `docs/14`. Los conteos de cierre y archivos del patch se publican solo despues de la migracion y la matriz final; los valores historicos `1.343 tests` y `36 archivos` describen el SHA auditado, no esta rama en curso.
+La evidencia reproducible y los conteos de cierre estan en `docs/14`. La validacion local no reemplaza backup/restauracion, infraestructura distribuida ni smoke de produccion.

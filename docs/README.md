@@ -13,11 +13,13 @@ Esta carpeta es la **fuente de verdad del proyecto**: la metodología es spec-dr
 | [`08-roadmap.md`](08-roadmap.md) | Modelo de trabajo (Supabase local + Docker, migraciones, PRs) y fases con estado real | Al planear/implementar |
 | [`09-security.md`](09-security.md) | Checklist de seguridad pre-producción: qué está cerrado y qué no | Al tocar `/api/lead`, headers, rate limiting, o antes de un deploy |
 | [`10-levantar-metacrypto-os-local.md`](10-levantar-metacrypto-os-local.md) | Guía paso a paso para levantar el OS + Supabase local (Docker) | Antes de trabajar en `metacrypto-os-app/` o con la integración |
-| [`11-migracion-modulo-leads.md`](11-migracion-modulo-leads.md) | **Spec funcional autoritativa** del módulo de leads: contrato, identidad, vinculaciones, reglas fijas | Antes de tocar migraciones 0068-0071, RPCs o el endpoint de leads |
+| [`11-migracion-modulo-leads.md`](11-migracion-modulo-leads.md) | **Spec funcional autoritativa** del módulo de leads: contrato, identidad, vinculaciones, reglas fijas | Antes de tocar las migraciones `0068–0070`, RPCs o el endpoint de leads |
 | [`12-spec-sdd-fases-migracion-leads.md`](12-spec-sdd-fases-migracion-leads.md) | Spec SDD: fases con criterios verificables y estado actual de cada una | Al ejecutar cualquier fase |
 | [`13-entrega-y-preguntas-milo.md`](13-entrega-y-preguntas-milo.md) | Entrega del módulo: qué quedó corregido, qué falta y qué pedirle al negocio | Al preparar el PR/deploy |
 | [`14-estado-actual-produccion.md`](14-estado-actual-produccion.md) | Auditoría de readiness (GO/NO GO): checklist de producción contrastado contra el código real | Antes de mandar tráfico real o hacer el primer deploy |
 | [`15-transferencia-funnel-al-repo-del-os.md`](15-transferencia-funnel-al-repo-del-os.md) | Cómo llevar el funnel al repo del OS (Miled) con el patch listo en `release/` | Al migrar el funnel al repo del negocio |
+| [`18-guia-deploy-go.md`](18-guia-deploy-go.md) | Guía técnica de deploy: migraciones 0068–0070, env, compuertas y smoke del GO | Al preparar el despliegue a producción |
+| [`19-qa-funnel.md`](19-qa-funnel.md) | Informe QA del funnel: inventario archivo por archivo (qué se usa, qué no), veredictos y cómo funciona todo en simple | Para entender el proyecto y antes del GO |
 | [`16-to-do-auditoria-v4.md`](16-to-do-auditoria-v4.md) | To-do accionable para el GO derivado de la auditoría v4 (2 críticos + 11 importantes + 3 medias + externos) | Al planear el cierre pre-producción |
 
 ## Qué NO está acá (y por qué)

@@ -2,7 +2,9 @@
 
 Documento autoritativo para implementar la persistencia del Quiz Funnel y el modulo `/leads` dentro de MetaCrypto OS. El alcance se limita al dominio nuevo de leads: no se modifica la estructura ni el comportamiento de las tablas existentes.
 
-> **Estado:** especificación cerrada, **implementada y validada** (fases 0–C + cierre local de D + cierre de la auditoría v4, `docs/12` §6). Migraciones asignadas y **confirmadas por Miled**: `0068_quiz_leads.sql` (esquema + RPC de ingesta), `0069_vinculacion_validacion_rollback.sql` (validación de teléfono, auditoría y rollback), `0070_descarte_leads.sql` (descarte del lead sin venta, §9.4), `0071_reconciliacion_leads.sql` (reconciliación append-only) y `0072_reconciliacion_leads_v2.sql` (reconciliación v2 — cierre auditoría v4: inmutabilidad sin evasión, consentimiento acotado y honesto, concurrencia, tracking).
+> **Estado:** especificación cerrada, **implementada y validada**, consolidada tras la revisión de arquitectura (06-oct): el histórico de migraciones `0068`–`0072`/`0073` quedó reducido a la **migración principal `0068_quiz_leads.sql`** con el estado final de cada corrección (producción nunca aplicó nada del módulo; más abajo las referencias a migraciones intermedias se leen como historia del diseño, no como piezas a aplicar). A ella se sumaron, en la misma iteración, `0069_funnel_db_role.sql` (rol `funnel` de la app pública separada, decisión D2) y `0070_auditoria_lead_del_envio.sql` (lookup nativo de la auditoría, hallazgo del QA E2E). Paquete a aplicar: **0068 + 0069 + 0070**. Detalle operativo: `docs/18`.
+>
+> **Despliegue (D1 → D2, 06-oct pm):** el contrato y las reglas de este documento son idénticos; lo que cambia es DÓNDE corre la parte pública. El wizard + `/api/lead` viven en una **app aparte** (`metacrypto-os-app/apps/funnel/`, instancia y dominio propios) y escriben por el RPC con el rol mínimo `funnel` (`0069`); el módulo privado `/leads` sigue en el OS. La decisión D1 original ("el funnel como ruta pública del OS") queda supervada: motivación de seguridad, ver `docs/00` y `docs/19` §7.
 >
 > Insumos históricos: `docs-obsoletos/03-especificacion-mvp-standalone.md`, `docs/06-pendientes-y-preguntas.md`, `docs/08-roadmap.md`, `docs/09-security.md`, `docs/10-levantar-metacrypto-os-local.md` y `metacrypto-os-app/CLAUDE.md`.
 
@@ -469,7 +471,7 @@ siempre: `descartar_lead(p_lead_id, p_autor_id)`.
 
 - Solo aplica a personas `lead` creadas y referenciadas por este modulo (telefono_e164 NULL
   y con al menos un envio propio). Re-descartar un lead ya descartado responde OK (idempotente).
-- Cambia la persona a `estado='descartado'` (la migracion 0070 amplia el CHECK de
+- Cambia la persona a `estado='descartado'` (la migración principal `0068` amplia el CHECK de
   `personas.estado` — es el unico cambio sobre el esquema preexistente del OS y es
   append-only: nunca se edita 0001/0039).
 - Escribe auditoria (entidad `persona`, accion `descarte`) con autor y envios del lead.

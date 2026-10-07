@@ -45,12 +45,12 @@ Convención: ✅ implementado y verificado (tests + curl) · ♻️ cubierto por
 
 | # | Ítem | Estado |
 |---|---|---|
-| 27 | RLS: lead no puede leer datos de otro lead | ✅ (2026-09-21) — `quiz_versiones`, `diagnostico_envios`, `diagnostico_respuestas` con RLS habilitado y SOLO política SELECT para `authenticated`. Sin políticas de escritura: todo entra por RPC con service_role. El funnel público no lee la base desde el navegador |
+| 27 | RLS: lead no puede leer datos de otro lead | ✅ (2026-09-21, endurecido 0071/v5) — `quiz_versiones`, `diagnostico_envios`, `diagnostico_respuestas` con RLS habilitado y SIN policies (denegado por defecto, ni lectura ni escritura directa). Todo entra por RPC con service_role desde el servidor. El funnel público no lee la base desde el navegador |
 | 28 | Service Role Key solo en servidor (nunca client-side ni logs) | ✅ — `lib/supabase.ts` (`server-only`) se usa solo en `app/api/lead/route.ts` y server actions; grep de client components limpio; sin `NEXT_PUBLIC_*` en el módulo; `.env.local` gitignoreado |
 | 29 | IDOR/BOLA: intento de manipular session ids por recursos entre leads | ✅ — el endpoint público solo escribe (no expone lecturas); la respuesta nunca devuelve `persona_id`; el módulo `/leads` exige sesión + permiso `leads` (`requireModulo`) en página, detalle y acciones; sesión identificable solo por UUID v4 validado |
 | 30 | SQL / DB injection (todos los campos que llegan a DB) | ✅ — todo va por PostgREST parametrizado y RPC plpgsql con validación cerrada contra la definición publicada; LIKE escapado con `patronLike`; UTMs solo en filtros `eq` con `encodeURIComponent`; cero SQL dinámico con input del cliente |
 
-## Quiz Funnel en el OS (migraciones 0068–0071, rama `feature/leads-a-migracion-rpc`)
+## Quiz Funnel en el OS (migración principal `0068` + `0069` rol funnel + `0070` lookup, rama `fix/quiz-leads-auditoria-v5`)
 
 Ítems nuevos de la integración, revisados al cerrar Fase D (docs/12):
 
@@ -69,9 +69,9 @@ Convención: ✅ implementado y verificado (tests + curl) · ♻️ cubierto por
 | Q11 | npm audit del OS | 🟡 ~~next: 1 crítica RCE + 3 high~~ **Las 2 RCE críticas quedaron cerradas** (lockfile a `15.5.25` en el PR) y las altas de `nanoid`/`sharp` fuera con `overrides`. Queda 1 alta (`postcss`) que exige Next 16 — ticket aparte, `docs/06` #20 |
 | Q12 | HTTPS-only | ⏳ responsabilidad del hosting al deployar (ítem 33) |
 | Q13 | Retención | ✅ decisión de negocio (docs/11 D14): sin vencimiento; capacidad de borrado puntual disponible vía SQL/RPC si se exige |
-| Q14 | RLS/ACL del funnel | ✅ (0071, auditoría v3 H-08): policies SELECT genéricas eliminadas — anon/authenticated NO leen nada del PII del funnel; `EXECUTE` de helpers y RPCs solo `service_role`. Probado dinámicamente (`quiz-leads-rpc.test.ts` `(H-08)`) |
+| Q14 | RLS/ACL del funnel | ✅ (auditoría v3 H-08 y v5): policies SELECT genéricas eliminadas — anon/authenticated NO leen nada del PII del funnel; `EXECUTE` de helpers y RPCs solo `service_role`. Probado dinámicamente (`quiz-leads-rpc.test.ts` `(H-08)`) |
 | Q15 | Inmutabilidad de versiones publicadas | ✅ (v3 H-04) trigger `quiz_versiones_congelada`: la definición publicada no se edita ni se borra con historial; solo transiciones de estado |
-| Q16 | Consentimiento canónico | ✅ (v3 H-05) solo `contacto-v1`, fecha no futura y coherente con el inicio del recorrido (tolerancia 24 h) |
+| Q16 | Consentimiento canónico | ✅ (v3 H-05, acotado en v4 I1) solo `contacto-v1`, fecha no futura, no anterior al inicio y no posterior a la finalización (tolerancia 5 min) |
 | Q17 | Locks canónicos + rollback estricto | ✅ (v3 H-06/H-07) vincular/desvincular/descartar comparten el lock de contacto con la ingesta; el rollback exige la lista completa de envíos o aborta sin mutar (`rollback_incompleto`) |
 | Q18 | Guarda anti-producción en tests | ✅ (clasif. #12) los suites gated solo corren contra `127.0.0.1`/`localhost` — `SUPABASE_URL` externo los salta con aviso |
 
@@ -85,7 +85,7 @@ Convención: ✅ implementado y verificado (tests + curl) · ♻️ cubierto por
 
 ## Verificación (luz verde as necessary)
 
-- Tests: `npm test` → 39/39 en verde (unit + integración + seguridad).
+- Tests: suite del OS `apps/inbox` con vitest (`npx vitest run`, 1.379 tests, cero omitidos contra Supabase local). ~~`npm test` raíz 39/39~~ retirado con el prototipo standalone (06-oct).
 - Config-based rate limit en integración: el servidor de test se arranca con `LEAD_RATE_LIMIT_MAX=1000` para no interferir en tests múltiples; la lógica del limiter se cubre en unit (`test/security.test.mjs`).
 - Curl directo contra `next start` (prod build sin `NODE_ENV=development`): 405 en métodos no permitidos, 400/413/415/422 con payloads hostiles, 403 con `Origin` mismatch, 429 al exceder rate limit, headers de seguridad presentes en `/`, honeypot → 200 genérico, log de prod **sin PII**.
 

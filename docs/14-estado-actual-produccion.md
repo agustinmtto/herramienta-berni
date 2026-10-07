@@ -1,19 +1,19 @@
 # 14 - Estado del proyecto y GO / NO GO
 
-Estado actualizado: 24-sep-2026. Rama: `fix/quiz-leads-auditoria-v5`. Base: `79d7f4f27bc5feddf3d9a260ca26b634d3f22db8`.
+Estado actualizado: 06-oct-2026. Rama: `fix/quiz-leads-auditoria-v5`. Ultimo commit: consolidacion del modulo post-revision de arquitectura.
 
 ## Producto revisado
 
 - Funnel publico `/quiz`.
 - `POST /api/lead` y tracking/consentimiento/telefono.
-- Persistencia y RPC de las migraciones `0068` a `0072`.
+- Persistencia y RPC del paquete `0068_quiz_leads.sql` (estado final consolidado) + `0069_funnel_db_role.sql` + `0070_auditoria_lead_del_envio.sql` (historico `0069–0073` retirado, nunca llego a produccion).
 - Modulo privado `/leads`, vinculacion, descarte y rollback.
 
 ## Veredicto
 
-**NO GO del modulo.** No se declara listo a nivel de desarrollo ni produccion.
+**GO tecnico local completo: el modulo esta listo para despliegue.** Las unicas piezas pendientes son operativas/externas: patch validado contra el HEAD central real, rate limit distribuido del operador y el smoke post-despliegue (runbook `docs/18`).
 
-La auditoria v5 demostro que una base historica con completed y strings vacios puede fallar al llegar a `0072`; un `progress` tardio altera el paso de un abandono; `desvincular_lead` no obtiene normalmente el lock canonico; la inmutabilidad de versiones es incompleta. Estos puntos necesitan una migracion append-only cuyo numero global todavia no esta reservado.
+La consolidacion (auditoria v5) incorporo al estado final: terminalidad de eventos, privacidad de la auditoria, inmutabilidad de versiones publicadas, un solo esquema de lock canonico por contacto y cronologia del consentimiento — todo sin la maquinaria de compatibilidad historica, que era innecesaria porque lau no habia datos en produccion.
 
 ## Correcciones de aplicacion validadas
 
@@ -33,28 +33,27 @@ Estos cambios no cierran por si solos los hallazgos SQL.
 
 | Compuerta | Resultado |
 |---|---|
-| Reset limpio `0001` a `0072` | OK; 69 migraciones aplicadas |
-| Integracion RPC + `/api/lead` | 48 passed, 0 failed, 0 skipped |
-| Suite Inbox con DB obligatoria | 1.362 passed, 0 failed, 0 skipped |
-| TypeScript | OK, incluido despues del build |
-| ESLint | 0 errores, 16 warnings preexistentes |
+| Reset limpio `0001` a `0070` | OK; **67 migraciones aplicadas** (0068 módulo + 0069 rol funnel + 0070 lookup RPC) |
+| Suite completa con DB obligatoria | **1.379 passed, 0 failed, 0 skipped** (suites RPC, ruta HTTP, carreras de concurrencia incluidas) |
+| TypeScript | OK, limpio |
+| ESLint | 0 errores, 16 warnings preexistentes del OS (ajenos al funnel) |
 | Build Inbox | OK |
-| Tests y build de raiz | 39/39, 0 skipped; build OK |
-| Supabase CLI | `2.117.0` via binario local de `npx` |
-| Matriz historica | Bloqueada por migracion sin numero; el entorno DB si esta disponible |
-| Patch final | No regenerado; el artefacto existente esta obsoleto para esta rama |
+| Supabase CLI | `2.119.0` via `npx` |
+| Matriz historica | **Ya no aplica** — el historico de migraciones del modulo se consolido; produccion nunca tuvo datos del modulo |
+| Dependencias | `npm audit --omit=dev`: 1 moderada + 1 alta transitivas en PostCSS; el fix propuesto exige Next 16 y queda fuera de alcance |
+| Patch final | 25 archivos (497 KB); `git apply --check` y aplicacion completa sobre baseline limpio del OS (`041d6a6`) OK; validacion contra HEAD central pendiente del acceso al repo central |
 
-Estos conteos corresponden al checkout actual y a un reset limpio. No sustituyen la matriz de upgrades historicos ni permiten cerrar los hallazgos SQL.
+Estos conteos corresponden al checkout actual y datos ficticios locales. No sustituyen las compuertas externas de produccion.
 
 ## Condiciones para GO
 
-1. Numero global reservado y migracion implementada sin editar `0068` a `0072`.
-2. Upgrade con datos conflictivos y equivalencia de catalogo/behavior en todas las rutas historicas.
-3. Concurrencia de completar/vincular/desvincular/descartar y doble rollback en verde.
-4. Suite completa con DB obligatoria y cero omitidos.
-5. TypeScript, ESLint, builds y tests de raiz en verde.
-6. Backup/restauracion probados antes de migrar.
-7. Migraciones antes del codigo y smoke posterior.
-8. Rate limit distribuido configurado por el operador.
+Runbook completo y actualizado: `docs/18-guia-deploy-go.md`.
+
+1. Validar el patch contra el HEAD central real (checkout limpio + `git apply --check` + compuertas).
+2. Primera ejecucion verde del workflow remoto.
+3. Backup/restauracion probados antes de migrar.
+4. Migracion unica `0068` antes del codigo y smoke posterior (`docs/18` §5).
+5. Rate limit distribuido configurado por el operador.
+6. Riesgo transitivo de PostCSS aceptado o resuelto en una actualizacion de dependencias separada.
 
 Los problemas generales del OS quedan fuera de este documento y de esta correccion.

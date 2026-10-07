@@ -125,12 +125,17 @@ export function buildLeadsQuery(f: LeadFilters): string {
   if (desde) parts.push(`created_at=gte.${desde}T00:00:00Z`);
   // L-01 (auditoría v3): el hasta con 23:59:59Z se comía el último segundo
   // fraccionario — excluye con < medianoche del día siguiente.
-  if (hasta) {
+  if (hasta === "9999-12-31") {
+    parts.push("created_at=lt.10000-01-01T00:00:00.000Z");
+  } else if (hasta) {
     const d = new Date(`${hasta}T00:00:00Z`);
     d.setUTCDate(d.getUTCDate() + 1);
     parts.push(`created_at=lt.${d.toISOString().slice(0, 10)}T00:00:00Z`);
   }
-  if (f.paso) parts.push(`last_step_id=eq.${encodeURIComponent(f.paso)}`);
+  if (f.paso) {
+    parts.push("estado=eq.dropped");
+    parts.push(`last_step_id=eq.${encodeURIComponent(f.paso)}`);
+  }
   if (f.utm_source) parts.push(`utm_source=eq.${encodeURIComponent(f.utm_source)}`);
   if (f.utm_medium) parts.push(`utm_medium=eq.${encodeURIComponent(f.utm_medium)}`);
   if (f.utm_campaign) parts.push(`utm_campaign=eq.${encodeURIComponent(f.utm_campaign)}`);
@@ -244,9 +249,13 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
 
   // Si este envío ya fue vinculado a un cliente, la auditoría guarda QUÉ lead
   // temporal se movió (evita que el rollback mueva la vinculación equivocada).
-  const vinculaciones = await rest<{ entidad_id: string }[]>(
-    "GET",
-    `auditoria?accion=eq.vinculacion${"&"}datos.cs=${encodeURIComponent(`{"envio_ids":["${id}"]}`)}&select=entidad_id&order=created_at.desc&limit=1`,
+  // El lookup va por RPC SQL (0070): en esta build de PostgREST los filtros
+  // de contención JSON por REST (`datos.cs`) se ignoran silenciosamente y
+  // con `cs=` responde 400 — el detalle se rompía de una u otra forma.
+  const vinculaciones = await rest<{ lead_id: string | null }[]>(
+    "POST",
+    "rpc/auditoria_lead_del_envio",
+    { p_envio_id: id },
   );
   if (vinculaciones.status >= 400) throw new Error(`auditoria_vinculacion_http_${vinculaciones.status}`);
 
@@ -264,7 +273,7 @@ export async function getLeadDetalle(id: string): Promise<LeadDetalle | null> {
     diagnosis_result: diagnosisResult,
     diagnosis_result_size: diagnosisResult ? JSON.stringify(diagnosisResult).length : 0,
     schema_version: fila.schema_version as number,
-    leadVinculadoId: vinculaciones.json?.[0]?.entidad_id ?? null,
+    leadVinculadoId: vinculaciones.json?.[0]?.lead_id ?? null,
   };
 }
 
@@ -292,8 +301,8 @@ export const CLIENTES_PAGE_SIZE = 50;
 export function buildClientesQuery(q?: string, page = 1): string {
   const safePage = parseLeadPage(page);
   const parts = [
-    "personas?estado=eq.cliente",
-    "select=id,nombre,email,telefono_e164,programas!inner(tier,tiers(nombre))",
+    "v_clientes_para_vincular?",
+    "select=id,nombre,email,telefono_e164,programa",
     "order=nombre.asc,id.asc",
     `limit=${CLIENTES_PAGE_SIZE + 1}`,
   ];
@@ -305,10 +314,6 @@ export function buildClientesQuery(q?: string, page = 1): string {
   return parts.join("&");
 }
 
-export function esConsentimientoLegacySinRegistro(version: string | null): boolean {
-  return version === "legacy-sin-registro";
-}
-
 export async function getClientesParaVincular(q?: string, page = 1): Promise<{ clientes: ClienteParaVincular[]; hayMas: boolean }> {
   const r = await rest<
     {
@@ -316,7 +321,7 @@ export async function getClientesParaVincular(q?: string, page = 1): Promise<{ c
       nombre: string;
       email: string | null;
       telefono_e164: string | null;
-      programas: { tier: string; tiers: { nombre: string } | null }[];
+      programa: string | null;
     }[]
   >("GET", buildClientesQuery(q, page));
   if (r.status >= 400) throw new Error(`clientes_para_vincular_http_${r.status}`);
@@ -326,7 +331,7 @@ export async function getClientesParaVincular(q?: string, page = 1): Promise<{ c
     nombre: c.nombre,
     email: c.email,
     telefono_e164: c.telefono_e164,
-    programa: c.programas?.[0]?.tiers?.nombre ?? c.programas?.[0]?.tier ?? null,
+    programa: c.programa,
   })), hayMas: rows.length > CLIENTES_PAGE_SIZE };
 }
 

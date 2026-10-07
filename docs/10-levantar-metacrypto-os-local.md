@@ -32,11 +32,12 @@ Desde la **raíz del repo** (`herramienta-berni/`):
 # 1) Levantar la base (descarga imágenes de Docker la primera vez, ~2-5 min)
 cd metacrypto-os-app
 supabase start
-#    → la primera vez aplica todas las migraciones (69 a la fecha, incluyendo
-#      `0068_quiz_leads`, `0069_vinculacion_validacion_rollback`, `0070_descarte_leads` y
-#      `0071_reconciliacion_leads`) automáticamente
-#      y siembra `supabase/seed.sql` (datos de prueba).
-#    → anota las URLs que imprime (API :54321, Studio :54323, DB :54322).
+#    → la primera vez aplica todas las migraciones (65 a la fecha, incluida
+#      la migración principal `0068_quiz_leads.sql` del módulo de leads + `0069_funnel_db_role.sql`
+#      (rol mínimo de la app funnel) + `0070_auditoria_lead_del_envio.sql` (lookup)
+#    y siembra `supabase/seed.sql` (datos de prueba).
+#    → anota las URLs que imprime (API, Studio, DB). En esta máquina los
+#      puertos viven en 5440x/54410 (rangos 5432x excluidos por Hyper-V).
 
 # 2) Configurar las credenciales de la app
 cd apps/inbox
